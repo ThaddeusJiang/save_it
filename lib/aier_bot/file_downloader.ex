@@ -6,6 +6,7 @@ defmodule AierBot.FileDownloader do
       {:ok, %Tesla.Env{status: 200, body: body}} ->
         File.write("./downloads/#{file_path}", body)
         IO.puts("File downloaded successfully.")
+        body
 
       {:ok, %Tesla.Env{status: status}} ->
         IO.puts("Failed to download file. Status: #{status}")

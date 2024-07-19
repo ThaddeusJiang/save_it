@@ -34,14 +34,15 @@ defmodule AierBot.Bot do
     end
   end
 
-  def handle({:text, text, _msg}, context) do
+  def handle({:text, text, %{chat: chat}}, context) do
     # TODO: repeat
     # request download API
-    data = CobaltClient.json(text)
+    file_content = CobaltClient.json(text)
 
-    IO.inspect(data)
+    {:ok, message} = ExGram.send_document(chat.id, {:file_content, file_content, "video.mp4"})
+    IO.inspect(message)
 
-    answer(context, "#{data}")
+    answer(context, "done")
     # case AierApi.create_memo(text) do
     #   {:ok, response} -> create_memo_success(response, context)
     #   {:error, error} -> answer(context, "Error: #{inspect(error)}")
