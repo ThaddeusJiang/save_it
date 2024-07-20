@@ -1,5 +1,4 @@
 defmodule AierBot.CobaltClient do
-  alias AierBot.FileDownloader
   use Tesla
 
   plug(Tesla.Middleware.BaseUrl, "https://api.cobalt.tools")
@@ -19,8 +18,7 @@ defmodule AierBot.CobaltClient do
         #   "url" => "https://video.twimg.com/amplify_video/1814202798097268736/vid/avc1/720x1192/HAD9zyJn1xoP4oRN.mp4?tag=16"
         # }
         %{"url" => url} = response.body
-        file_content = FileDownloader.download(url, "video.mp4")
-        file_content
+        url
 
       # TODO send photo to telegram
 

@@ -3,6 +3,8 @@ defmodule AierBot.Bot do
   alias AierBot.AierApi
   alias AierBot.OpenaiApi
 
+  alias AierBot.FileDownloader
+
   @bot :aier_bot
 
   use ExGram.Bot,
@@ -37,9 +39,11 @@ defmodule AierBot.Bot do
   def handle({:text, text, %{chat: chat}}, context) do
     # TODO: repeat
     # request download API
-    file_content = CobaltClient.json(text)
+    url = CobaltClient.json(text)
+    {file_name, file_content} = FileDownloader.download(url)
 
-    {:ok, message} = ExGram.send_document(chat.id, {:file_content, file_content, "video.mp4"})
+
+    {:ok, message} = ExGram.send_document(chat.id, {:file_content, file_content, file_name})
     IO.inspect(message)
 
     answer(context, "done")

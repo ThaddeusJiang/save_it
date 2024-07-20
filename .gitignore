@@ -25,5 +25,5 @@ aier_bot-*.tar
 # Temporary files, for example, from tests.
 /tmp/
 .DS_Store
-downloads
-dev.sh
+.local
+run.sh
