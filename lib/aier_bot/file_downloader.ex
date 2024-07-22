@@ -1,10 +1,29 @@
 defmodule AierBot.FileDownloader do
   use Tesla
 
+  # youtube video download url: "https://olly.imput.net/api/stream?id=WpsLJCeQ24MBD_xM_3uwu&exp=1721625834931&sig=4UvjCvFD57jU7yrLdwmzRmfsPgPb8KhFIE1DwmnOj14&sec=C1Hty_eEXvswFhzdrDfDZ4cmkSUDgex1aV6mzDSK0dc&iv=ozku3rLJzeV_rVRSzWVlFw"
+  def download("https://olly.imput.net/api/stream" <> _ = url) do
+    IO.inspect(url, label: "Download URL")
+
+    case get(url) do
+      {:ok, %Tesla.Env{status: 200, body: body}} ->
+        file_name = gen_desc_filename() <> ".mp4"
+        File.write("./.local/storage/#{file_name}", body)
+        {:ok, file_name, body}
+
+      {:ok, %Tesla.Env{status: status}} ->
+        IO.puts("Failed to download file. Status: #{status}")
+        {:error, "Failed to download file"}
+
+      {:error, reason} ->
+        IO.puts("Failed to download file. Reason: #{inspect(reason)}")
+        {:error, "Failed to download file"}
+    end
+  end
+
   def download(url) do
     IO.inspect(url, label: "Download URL")
 
-    # TODO: support youtube video download,
     case get(url) do
       {:ok, %Tesla.Env{status: 200, body: body, headers: headers}} ->
         ext =
