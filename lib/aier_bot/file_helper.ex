@@ -1,15 +1,16 @@
 defmodule AierBot.FileHelper do
+  require Logger
   use Tesla
 
   def download(url) do
     cond do
-      String.contains?(url, "/api/stream") -> download_streaming(url)
+      String.contains?(url, "/api/stream") -> download_stream(url)
       true -> download_file(url)
     end
   end
 
-  defp download_streaming(url) do
-    IO.inspect(url, label: "Download URL")
+  defp download_stream(url) do
+    Logger.info("Start downloading stream", url: url)
 
     case get(url) do
       {:ok, %Tesla.Env{status: 200, body: body}} ->
@@ -17,17 +18,15 @@ defmodule AierBot.FileHelper do
         {:ok, file_name, body}
 
       {:ok, %Tesla.Env{status: status}} ->
-        IO.puts("Failed to download file. Status: #{status}")
-        {:error, "Failed to download file"}
+        {:error, "Status: #{status}"}
 
       {:error, reason} ->
-        IO.puts("Failed to download file. Reason: #{inspect(reason)}")
-        {:error, "Failed to download file"}
+        {:error, "Reason: #{inspect(reason)}"}
     end
   end
 
   defp download_file(url) do
-    IO.inspect(url, label: "Download URL")
+    Logger.info("Start downloading file", url: url)
 
     case get(url) do
       {:ok, %Tesla.Env{status: 200, body: body, headers: headers}} ->
@@ -42,12 +41,10 @@ defmodule AierBot.FileHelper do
         {:ok, file_name, body}
 
       {:ok, %Tesla.Env{status: status}} ->
-        IO.puts("Failed to download file. Status: #{status}")
-        {:error, "Failed to download file"}
+        {:error, "Status: #{status}"}
 
       {:error, reason} ->
-        IO.puts("Failed to download file. Reason: #{inspect(reason)}")
-        {:error, "Failed to download file"}
+        {:error, "Reason #{inspect(reason)}"}
     end
   end
 
@@ -58,14 +55,14 @@ defmodule AierBot.FileHelper do
       :ok ->
         case File.write(Path.join([dir, file_name]), file_content) do
           :ok ->
-            IO.puts("File written successfully.")
+            Logger.info("File written successfully", file_name: file_name)
 
           {:error, reason} ->
-            IO.puts("Failed to write file: #{reason}")
+            Logger.error("Error: failed to write file, reason: #{reason}")
         end
 
       {:error, reason} ->
-        IO.puts("Failed to create directory: #{reason}")
+        Logger.error("Error: failed to create directory, reason: #{reason}")
     end
   end
 

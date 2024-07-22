@@ -1,4 +1,6 @@
 defmodule AierBot.CobaltClient do
+  require Logger
+
   use Tesla
 
   plug(Tesla.Middleware.BaseUrl, "https://api.cobalt.tools")
@@ -20,7 +22,7 @@ defmodule AierBot.CobaltClient do
   def get_download_url(text) do
     # https://www.instagram.com/p/C9pr7NDPAyd/?igsh=azBiNHJ0ZXd3bTFh => https://www.instagram.com/p/C9pr7NDPAyd/
     url = String.split(text, "?") |> hd()
-    # IO.inspect(pure_url)
+
     case post("api/json", %{url: url}) do
       {:ok, response} ->
         #
@@ -35,14 +37,12 @@ defmodule AierBot.CobaltClient do
             # TODO: handle multiple urls
             {:ok, Enum.at(picker_items, 0)["url"]}
 
-          # url
           %{"status" => "error", "text" => error_msg} ->
-            IO.puts("Error: #{error_msg}")
-
+            Logger.warning("http error: #{error_msg}")
             {:error, error_msg}
 
           _ ->
-            IO.inspect(response.body)
+            Logger.warning("Unknown error")
             {:error, "Unknown error"}
         end
 

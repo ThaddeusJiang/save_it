@@ -37,10 +37,14 @@ defmodule AierBot.Bot do
 
       case CobaltClient.get_download_url(url) do
         {:ok, download_url} ->
-          {:ok, file_name, file_content} = FileHelper.download(download_url)
+          case FileHelper.download(download_url) do
+            {:ok, file_name, file_content} ->
+              {:ok, _} = bot_send_file(chat.id, file_name, file_content, url)
+              FileHelper.write_into_file(chat.id, file_name, file_content)
 
-          {:ok, _} = bot_send_file(chat.id, file_name, file_content, url)
-          FileHelper.write_into_file(chat.id, file_name, file_content)
+            {:error, error} ->
+              ExGram.send_message(chat.id, "Failed to download file. #{inspect(error)}")
+          end
 
         {:error, error} ->
           ExGram.send_message(chat.id, "Failed to download file. Reason: #{inspect(error)}")
@@ -58,8 +62,6 @@ defmodule AierBot.Bot do
 
   # TODO: 额外参数可以使用 options 来传递
   defp bot_send_file(chat_id, file_name, file_content, _original_url) do
-    IO.inspect(file_name)
-
     cond do
       String.ends_with?(file_name, ".png") ->
         ExGram.send_photo(
@@ -102,17 +104,5 @@ defmodule AierBot.Bot do
           # caption: "Image from URL: #{original_url}"
         )
     end
-  end
-
-  def create_memo_success(_, context) do
-    answer(context, "Memo saved!")
-  end
-
-  def image_generation_success(%{data: images}, chat_id) do
-    [first | _] = images
-
-    res = ExGram.send_photo(chat_id, {:file_content, first, "image.png"}, bot: @bot)
-
-    IO.inspect(res)
   end
 end

@@ -1,5 +1,11 @@
 # Todos
 
+DevOps
+
+- [ ] ssh & scp skip password, setup token to ssh and scp
+
+features
+
 - [ ] list all ins response
   - [ ] image
   - [ ] images
@@ -10,7 +16,7 @@
 
 big task
 
-- [x] download ins videos and images
+- [x] download ins videos and _images_
   - [ ] download multiple files in one task
 - [ ] make it fast and with UI progress bar
 
