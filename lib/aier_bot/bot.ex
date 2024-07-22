@@ -10,14 +10,13 @@ defmodule AierBot.Bot do
 
   command("start")
   command("help", description: "Print the bot's help")
-  command("image", description: "Generate image from text")
 
   middleware(ExGram.Middleware.IgnoreUsername)
 
   def bot(), do: @bot
 
   def handle({:command, :start, _msg}, context) do
-    answer(context, "Hi!")
+    answer(context, "Hi! I'm a bot that can download images and videos, just give me a link.")
   end
 
   def handle({:command, :help, _msg}, context) do

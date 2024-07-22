@@ -1,8 +1,14 @@
 defmodule AierBot.FileHelper do
   use Tesla
 
-  # youtube video download url: "https://olly.imput.net/api/stream?id=WpsLJCeQ24MBD_xM_3uwu&exp=1721625834931&sig=4UvjCvFD57jU7yrLdwmzRmfsPgPb8KhFIE1DwmnOj14&sec=C1Hty_eEXvswFhzdrDfDZ4cmkSUDgex1aV6mzDSK0dc&iv=ozku3rLJzeV_rVRSzWVlFw"
-  def download("https://olly.imput.net/api/stream" <> _ = url) do
+  def download(url) do
+    cond do
+      String.contains?(url, "/api/stream") -> download_streaming(url)
+      true -> download_file(url)
+    end
+  end
+
+  defp download_streaming(url) do
     IO.inspect(url, label: "Download URL")
 
     case get(url) do
@@ -20,7 +26,7 @@ defmodule AierBot.FileHelper do
     end
   end
 
-  def download(url) do
+  defp download_file(url) do
     IO.inspect(url, label: "Download URL")
 
     case get(url) do

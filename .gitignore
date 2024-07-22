@@ -26,4 +26,7 @@ aier_bot-*.tar
 /tmp/
 .DS_Store
 .local
+dev.sh
+start.sh
 run.sh
+nohup.out
