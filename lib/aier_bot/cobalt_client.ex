@@ -10,7 +10,42 @@ defmodule AierBot.CobaltClient do
 
   plug(Tesla.Middleware.JSON)
 
-  def json(url) do
+  @doc """
+
+  ## Examples
+    get_download_url("https://www.instagram.com/p/C9pr7NDPAyd/?igsh=azBiNHJ0ZXd3bTFh") #=>
+
+  """
+  def get_download_url("https://www.instagram.com/" <> _ = text) do
+    # https://www.instagram.com/p/C9pr7NDPAyd/?igsh=azBiNHJ0ZXd3bTFh => https://www.instagram.com/p/C9pr7NDPAyd/
+    url = String.split(text, "?") |> hd()
+    # IO.inspect(pure_url)
+    case post("api/json", %{url: url}) do
+      {:ok, response} ->
+        #
+        case response.body do
+          %{"url" => url} ->
+            url
+
+          %{"status" => "picker", "picker" => picker_items} ->
+            # [%{"url" => url}] = picker_items
+            # error:  you attempted to apply a function named :first on [],  If you are using Kernel.apply/3, make sure the module is an atom. If you are using the dot syntax, such as module.function(), make sure the left-hand side of the dot is an atom representing a module
+            # picker_items.first()["url"]
+            Enum.at(picker_items, 0)["url"]
+
+          # url
+          _ ->
+            IO.inspect(response.body)
+            nil
+        end
+
+      {:error, error} ->
+        error
+    end
+  end
+
+  # TODO: get_download_urls for multiple urls
+  def get_download_url(url) do
     case post("api/json", %{url: url}) do
       {:ok, response} ->
         # %{

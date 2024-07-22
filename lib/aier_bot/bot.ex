@@ -1,11 +1,8 @@
 defmodule AierBot.Bot do
   alias AierBot.CobaltClient
-  alias AierBot.AierApi
-  alias AierBot.OpenaiApi
-
   alias AierBot.FileDownloader
 
-  @bot :aier_bot
+  @bot :save_it_bot
 
   use ExGram.Bot,
     name: @bot,
@@ -27,30 +24,34 @@ defmodule AierBot.Bot do
     answer(context, "Here is your help:")
   end
 
-  def handle({:command, :image, message}, context) do
-    %{text: prompt, chat: %{id: chat_id}} = message
-
-    case OpenaiApi.image_generation(prompt) do
-      {:ok, response} -> image_generation_success(response, chat_id)
-      {:error, error} -> answer(context, "Error: #{inspect(error)}")
-    end
-  end
-
-  def handle({:text, text, %{chat: chat}}, context) do
-    # TODO: repeat
-    # request download API
-    url = CobaltClient.json(text)
+  def handle({:text, text, %{chat: chat}}, _context) do
+    url = CobaltClient.get_download_url(text)
     {file_name, file_content} = FileDownloader.download(url)
 
+    {:ok, _} = bot_send_file(chat.id, file_name, file_content)
+  end
 
-    {:ok, message} = ExGram.send_document(chat.id, {:file_content, file_content, file_name})
-    IO.inspect(message)
+  defp bot_send_file(chat_id, file_name, file_content) do
+    IO.inspect(file_name)
 
-    answer(context, "done")
-    # case AierApi.create_memo(text) do
-    #   {:ok, response} -> create_memo_success(response, context)
-    #   {:error, error} -> answer(context, "Error: #{inspect(error)}")
-    # end
+    cond do
+      String.ends_with?(file_name, ".png") ->
+        ExGram.send_photo(chat_id, {:file_content, file_content, file_name})
+
+      String.ends_with?(file_name, ".jpg") ->
+        ExGram.send_photo(chat_id, {:file_content, file_content, file_name})
+
+      String.ends_with?(file_name, ".jpeg") ->
+        ExGram.send_photo(chat_id, {:file_content, file_content, file_name})
+
+      String.ends_with?(file_name, ".mp4") ->
+        # {:file_content, iodata() | Enum.t(), String.t()}
+        # MEMO: 注意：参数是 {:file_content, file_content, file_name} ，3 个元素的 tuple
+        ExGram.send_video(chat_id, {:file_content, file_content, file_name})
+
+      true ->
+        ExGram.send_document(chat_id, {:file_content, file_content, file_name})
+    end
   end
 
   def create_memo_success(_, context) do
