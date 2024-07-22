@@ -1,3 +1,9 @@
+## FIXME: download youtube big video
+
+![error log: download youtube big video](./error_log_download_youtube_big_video.png)
+
+![log: stream date](./error_log_streaming_data.png)
+
 ## FIXME: bug: 无法发送 20 分钟的长视频
 
 ![bug log: 无法发送 20 分钟的长视频](./bug_log_发送20分钟长视频.png)

@@ -40,7 +40,7 @@ defmodule AierBot.Bot do
         {:ok, download_url} ->
           {:ok, file_name, file_content} = FileDownloader.download(download_url)
 
-          {:ok, _} = bot_send_file(chat.id, file_name, file_content)
+          {:ok, _} = bot_send_file(chat.id, file_name, file_content, url)
 
         {:error, error} ->
           ExGram.send_message(chat.id, "Failed to download file. Reason: #{inspect(error)}")
@@ -56,26 +56,51 @@ defmodule AierBot.Bot do
     Enum.map(matches, fn [url] -> url end)
   end
 
-  defp bot_send_file(chat_id, file_name, file_content) do
+  # TODO: 额外参数可以使用 options 来传递
+  defp bot_send_file(chat_id, file_name, file_content, _original_url) do
     IO.inspect(file_name)
 
     cond do
       String.ends_with?(file_name, ".png") ->
-        ExGram.send_photo(chat_id, {:file_content, file_content, file_name})
+        ExGram.send_photo(
+          chat_id,
+          {:file_content, file_content, file_name}
+          # TODO: original_url 作为 caption 收益不高，AI generated searchable caption 会更好
+          # original_text
+          # AI generated searchable caption
+          # and some other metadata
+          # caption: "Image from URL: #{original_url}"
+        )
 
       String.ends_with?(file_name, ".jpg") ->
-        ExGram.send_photo(chat_id, {:file_content, file_content, file_name})
+        ExGram.send_photo(
+          chat_id,
+          {:file_content, file_content, file_name}
+          # caption: "Image from URL: #{original_url}"
+        )
 
       String.ends_with?(file_name, ".jpeg") ->
-        ExGram.send_photo(chat_id, {:file_content, file_content, file_name})
+        ExGram.send_photo(
+          chat_id,
+          {:file_content, file_content, file_name}
+          # caption: "Image from URL: #{original_url}"
+        )
 
       String.ends_with?(file_name, ".mp4") ->
         # {:file_content, iodata() | Enum.t(), String.t()}
         # MEMO: 注意：参数是 {:file_content, file_content, file_name} ，3 个元素的 tuple
-        ExGram.send_video(chat_id, {:file_content, file_content, file_name})
+        ExGram.send_video(
+          chat_id,
+          {:file_content, file_content, file_name}
+          # caption: "Image from URL: #{original_url}"
+        )
 
       true ->
-        ExGram.send_document(chat_id, {:file_content, file_content, file_name})
+        ExGram.send_document(
+          chat_id,
+          {:file_content, file_content, file_name}
+          # caption: "Image from URL: #{original_url}"
+        )
     end
   end
 
