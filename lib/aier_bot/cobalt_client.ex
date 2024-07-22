@@ -38,12 +38,12 @@ defmodule AierBot.CobaltClient do
             {:ok, Enum.at(picker_items, 0)["url"]}
 
           %{"status" => "error", "text" => error_msg} ->
-            Logger.warning("http error: #{error_msg}")
+            Logger.warning("response.body is status error, text: #{inspect(response.body)}")
             {:error, error_msg}
 
           _ ->
-            Logger.warning("Unknown error")
-            {:error, "Unknown error"}
+            Logger.warning("response.body: #{inspect(response.body)}")
+            {:error, "Unknown response body"}
         end
 
       {:error, error} ->

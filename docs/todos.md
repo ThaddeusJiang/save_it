@@ -4,6 +4,14 @@ DevOps
 
 - [ ] ssh & scp skip password, setup token to ssh and scp
 
+small refactor:
+
+- [x] logger 自带前缀，不需要额外加了
+
+```
+21:42:39.299 [info] File written successfully
+```
+
 features
 
 - [ ] list all ins response
