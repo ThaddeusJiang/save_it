@@ -24,11 +24,36 @@ defmodule AierBot.Bot do
     answer(context, "Here is your help:")
   end
 
+  # def handle({:text, text, message}, context) do
   def handle({:text, text, %{chat: chat}}, _context) do
-    url = CobaltClient.get_download_url(text)
-    {file_name, file_content} = FileDownloader.download(url)
+    urls = extract_urls_from_string(text)
 
-    {:ok, _} = bot_send_file(chat.id, file_name, file_content)
+    if Enum.empty?(urls) do
+      # TODO: 思考：使用 DSL answer 还是 function send_message?
+      # answer(context, "No URL found.")
+      ExGram.send_message(chat.id, "No URL found.")
+    else
+      # MEMO: for payment, free only one url, for multiple urls, need to pay
+      url = List.first(urls)
+
+      case CobaltClient.get_download_url(url) do
+        {:ok, download_url} ->
+          {:ok, file_name, file_content} = FileDownloader.download(download_url)
+
+          {:ok, _} = bot_send_file(chat.id, file_name, file_content)
+
+        {:error, error} ->
+          ExGram.send_message(chat.id, "Failed to download file. Reason: #{inspect(error)}")
+      end
+    end
+  end
+
+  defp extract_urls_from_string(str) do
+    regex = ~r/http[s]?:\/\/[^\s]+/
+    matches = Regex.scan(regex, str)
+
+    # 扁平化匹配结果，因为Regex.scan返回的是一个列表的列表
+    Enum.map(matches, fn [url] -> url end)
   end
 
   defp bot_send_file(chat_id, file_name, file_content) do

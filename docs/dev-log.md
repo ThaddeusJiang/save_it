@@ -1,3 +1,18 @@
+## FIXME: bug: 无法发送 20 分钟的长视频
+
+![bug log: 无法发送 20 分钟的长视频](./bug_log_发送20分钟长视频.png)
+
+> Bots can currently send video files of up to 50 MB in size, this limit may be changed in the future.
+> Check the documentation of this method in https://core.telegram.org/bots/api#sendvideo
+
+## 2024-07-22 x.com 无法下载图片 tweet
+
+like: https://x.com/magnum_d1ngus/status/1815029025984643510?s=46
+
+## ex_gram message struct
+
+![ex_gram message struct](ex_gram_input.png)
+
 # ins response
 
 ```elixir
