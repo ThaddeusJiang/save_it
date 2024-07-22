@@ -30,3 +30,4 @@ dev.sh
 start.sh
 run.sh
 nohup.out
+.env
