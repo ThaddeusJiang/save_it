@@ -1,3 +1,9 @@
+# 2024-07-22 logger 自带前缀，不需要额外加了
+
+```
+21:42:39.299 [info] File written successfully
+```
+
 ## FIXME: download youtube big video
 
 ![error log: download youtube big video](./error_log_download_youtube_big_video.png)
