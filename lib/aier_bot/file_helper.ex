@@ -1,4 +1,4 @@
-defmodule AierBot.FileDownloader do
+defmodule AierBot.FileHelper do
   use Tesla
 
   # youtube video download url: "https://olly.imput.net/api/stream?id=WpsLJCeQ24MBD_xM_3uwu&exp=1721625834931&sig=4UvjCvFD57jU7yrLdwmzRmfsPgPb8KhFIE1DwmnOj14&sec=C1Hty_eEXvswFhzdrDfDZ4cmkSUDgex1aV6mzDSK0dc&iv=ozku3rLJzeV_rVRSzWVlFw"
@@ -8,7 +8,6 @@ defmodule AierBot.FileDownloader do
     case get(url) do
       {:ok, %Tesla.Env{status: 200, body: body}} ->
         file_name = gen_desc_filename() <> ".mp4"
-        File.write("./.local/storage/#{file_name}", body)
         {:ok, file_name, body}
 
       {:ok, %Tesla.Env{status: status}} ->
@@ -34,7 +33,6 @@ defmodule AierBot.FileDownloader do
           |> List.last()
 
         file_name = gen_desc_filename() <> "." <> ext
-        File.write("./.local/storage/#{file_name}", body)
         {:ok, file_name, body}
 
       {:ok, %Tesla.Env{status: status}} ->
@@ -47,14 +45,32 @@ defmodule AierBot.FileDownloader do
     end
   end
 
-  @spec gen_desc_filename() :: String.t()
-  defp gen_desc_filename() do
-    # 10^16 - current_time = 9999999999999999 - current_time = 9999999999999999 - 1630848000000 = 9999999998361159
-    max = :math.pow(10, 16) |> round()
-    utc_now = DateTime.utc_now() |> DateTime.to_unix()
+  def write_into_file(chat_id, file_name, file_content) do
+    dir = Path.join(["./.local/storage", Integer.to_string(chat_id)])
 
-    (max - utc_now)
+    case File.mkdir_p(dir) do
+      :ok ->
+        case File.write(Path.join([dir, file_name]), file_content) do
+          :ok ->
+            IO.puts("File written successfully.")
+
+          {:error, reason} ->
+            IO.puts("Failed to write file: #{reason}")
+        end
+
+      {:error, reason} ->
+        IO.puts("Failed to create directory: #{reason}")
+    end
+  end
+
+  # version 2: 2124-01-01 00:00:00 UTC is 4624022400
+  # version 1: 10^16 - current_time, since JS max_safe_integer is 2^53 - 1 = 9007199254740991
+  defp gen_desc_filename(datetime \\ DateTime.utc_now()) do
+    last = ~U[2124-01-01 00:00:00Z] |> DateTime.to_unix()
+    current = datetime |> DateTime.to_unix()
+
+    (last - current)
     |> Integer.to_string()
-    |> String.pad_leading(16, "0")
+    |> String.pad_leading(10, "0")
   end
 end

@@ -1,6 +1,6 @@
 defmodule AierBot.Bot do
   alias AierBot.CobaltClient
-  alias AierBot.FileDownloader
+  alias AierBot.FileHelper
 
   @bot :save_it_bot
 
@@ -38,9 +38,10 @@ defmodule AierBot.Bot do
 
       case CobaltClient.get_download_url(url) do
         {:ok, download_url} ->
-          {:ok, file_name, file_content} = FileDownloader.download(download_url)
+          {:ok, file_name, file_content} = FileHelper.download(download_url)
 
           {:ok, _} = bot_send_file(chat.id, file_name, file_content, url)
+          FileHelper.write_into_file(chat.id, file_name, file_content)
 
         {:error, error} ->
           ExGram.send_message(chat.id, "Failed to download file. Reason: #{inspect(error)}")
