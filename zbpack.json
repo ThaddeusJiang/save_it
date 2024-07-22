@@ -1,0 +1,4 @@
+{
+  "build_command": "mix deps.get && mix compile",
+  "start_command": "mix run --no-halt"
+}
