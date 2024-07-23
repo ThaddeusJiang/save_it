@@ -54,7 +54,7 @@ defmodule AierBot.FileHelper do
   def write_file(file_name, file_content, download_url) do
     write_file_to_disk(@files_dir, file_name, file_content)
 
-    hashed_url = :crypto.hash(:sha256, download_url) |> Base.encode16()
+    hashed_url = :crypto.hash(:sha256, download_url) |> Base.url_encode64(padding: false)
     write_file_to_disk(@urls_dir, hashed_url, file_name)
   end
 
@@ -75,7 +75,7 @@ defmodule AierBot.FileHelper do
   end
 
   def get_downloaded_file(download_url) do
-    hashed_url = :crypto.hash(:sha256, download_url) |> Base.encode16()
+    hashed_url = :crypto.hash(:sha256, download_url) |> Base.url_encode64(padding: false)
 
     case File.read(Path.join([@urls_dir, hashed_url])) do
       {:ok, file} -> Path.join([@files_dir, file |> String.trim()])

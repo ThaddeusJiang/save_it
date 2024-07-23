@@ -1,4 +1,8 @@
-TIL:
+TIL: base64url RFC 4648 可以生成 URL and filename safe alphabet.
+
+https://x.com/kitayoshi_son/status/1815740828993962028
+
+TIL: base64 可能包含 / + 等特殊字符，在作为文件路径时可能产生 bug。
 
 - Base32 和 Base16 都不包含特殊字符
 - Base16（十六进制编码）在可读性和广泛使用方面具有优势，尤其是在软件开发和调试中。和 css color 类似
@@ -6,7 +10,7 @@ TIL:
 - [x] bug: [error] File.write failed, reason: enametoolong
 
 ```elixir
-hashed_url = :crypto.hash(:sha256, download_url) |> Base.encode16()
+hashed_url = :crypto.hash(:sha256, download_url) |> Base.url_encode64(padding: false)
 ```
 
 - [x] bug: 21:38:27.786 [error] File.write failed, reason: enoent
