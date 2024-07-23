@@ -1,4 +1,5 @@
 defmodule AierBot.Bot do
+  require Logger
   alias AierBot.CobaltClient
   alias AierBot.FileHelper
 
@@ -37,13 +38,20 @@ defmodule AierBot.Bot do
 
       case CobaltClient.get_download_url(url) do
         {:ok, download_url} ->
-          case FileHelper.download(download_url) do
-            {:ok, file_name, file_content} ->
-              {:ok, _} = bot_send_file(chat.id, file_name, file_content, url)
-              FileHelper.write_into_file(chat.id, file_name, file_content)
+          case FileHelper.get_downloaded_file(download_url) do
+            nil ->
+              case FileHelper.download(download_url) do
+                {:ok, file_name, file_content} ->
+                  {:ok, _} = bot_send_file_content(chat.id, file_name, file_content)
+                  FileHelper.write_file(file_name, file_content, download_url)
 
-            {:error, error} ->
-              ExGram.send_message(chat.id, "Failed to download file. #{inspect(error)}")
+                {:error, error} ->
+                  ExGram.send_message(chat.id, "Failed to download file. #{inspect(error)}")
+              end
+
+            download_file ->
+              Logger.info("File already downloaded, don't need to download again")
+              {:ok, _} = bot_send_file(chat.id, download_file)
           end
 
         {:error, error} ->
@@ -60,8 +68,44 @@ defmodule AierBot.Bot do
     Enum.map(matches, fn [url] -> url end)
   end
 
+  defp bot_send_file(chat_id, file_name) do
+    cond do
+      String.ends_with?(file_name, ".png") ->
+        ExGram.send_photo(
+          chat_id,
+          {:file, file_name}
+        )
+
+      String.ends_with?(file_name, ".jpg") ->
+        ExGram.send_photo(
+          chat_id,
+          {:file, file_name}
+        )
+
+      String.ends_with?(file_name, ".jpeg") ->
+        ExGram.send_photo(
+          chat_id,
+          {:file, file_name}
+        )
+
+      String.ends_with?(file_name, ".mp4") ->
+        # {:file_content, iodata() | Enum.t(), String.t()}
+        # MEMO: 注意：参数是 {:file_content, file_content, file_name} ，3 个元素的 tuple
+        ExGram.send_video(
+          chat_id,
+          {:file, file_name}
+        )
+
+      true ->
+        ExGram.send_document(
+          chat_id,
+          {:file, file_name}
+        )
+    end
+  end
+
   # TODO: 额外参数可以使用 options 来传递
-  defp bot_send_file(chat_id, file_name, file_content, _original_url) do
+  defp bot_send_file_content(chat_id, file_name, file_content) do
     cond do
       String.ends_with?(file_name, ".png") ->
         ExGram.send_photo(

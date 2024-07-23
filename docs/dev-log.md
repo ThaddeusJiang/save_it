@@ -1,3 +1,20 @@
+TIL:
+
+- Base32 和 Base16 都不包含特殊字符
+- Base16（十六进制编码）在可读性和广泛使用方面具有优势，尤其是在软件开发和调试中。和 css color 类似
+
+- [x] bug: [error] File.write failed, reason: enametoolong
+
+```elixir
+hashed_url = :crypto.hash(:sha256, download_url) |> Base.encode16()
+```
+
+- [x] bug: 21:38:27.786 [error] File.write failed, reason: enoent
+
+- [x] 2024-07-23 file path 不能含有太多特殊字符，例如斜杠
+
+![error message: file path 不能含有太多特殊字符，例如斜杠](./error_log_file%20path%20不能含有太多特殊字符，例如斜杠.png)
+
 # 2024-07-22 logger 自带前缀，不需要额外加了
 
 ```

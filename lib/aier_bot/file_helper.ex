@@ -2,6 +2,9 @@ defmodule AierBot.FileHelper do
   require Logger
   use Tesla
 
+  @files_dir "./.local/storage/files"
+  @urls_dir "./.local/storage/urls"
+
   def download(url) do
     cond do
       String.contains?(url, "/api/stream") -> download_stream(url)
@@ -48,9 +51,14 @@ defmodule AierBot.FileHelper do
     end
   end
 
-  def write_into_file(chat_id, file_name, file_content) do
-    dir = Path.join(["./.local/storage", Integer.to_string(chat_id)])
+  def write_file(file_name, file_content, download_url) do
+    write_file_to_disk(@files_dir, file_name, file_content)
 
+    hashed_url = :crypto.hash(:sha256, download_url) |> Base.encode16()
+    write_file_to_disk(@urls_dir, hashed_url, file_name)
+  end
+
+  defp write_file_to_disk(dir, file_name, file_content) do
     case File.mkdir_p(dir) do
       :ok ->
         case File.write(Path.join([dir, file_name]), file_content) do
@@ -63,6 +71,15 @@ defmodule AierBot.FileHelper do
 
       {:error, reason} ->
         Logger.error("File.mkdir_p failed, reason: #{reason}")
+    end
+  end
+
+  def get_downloaded_file(download_url) do
+    hashed_url = :crypto.hash(:sha256, download_url) |> Base.encode16()
+
+    case File.read(Path.join([@urls_dir, hashed_url])) do
+      {:ok, file} -> Path.join([@files_dir, file |> String.trim()])
+      {:error, _} -> nil
     end
   end
 
