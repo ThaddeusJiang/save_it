@@ -18,10 +18,5 @@ RUN mix do local.hex --force, local.rebar --force, deps.get
 # 复制剩余的项目文件
 COPY . .
 
-# 设置环境变量（如果需要在运行时指定，可以在 docker run 命令中传递）
-ENV TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN
-ENV AIER_API_TOKEN=$AIER_API_TOKEN
-ENV OPENAI_API_KEY=$OPENAI_API_KEY
-
 # 运行项目
 CMD ["mix", "run", "--no-halt"]
