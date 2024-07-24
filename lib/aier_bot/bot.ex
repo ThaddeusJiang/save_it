@@ -81,30 +81,30 @@ defmodule AierBot.Bot do
     ExGram.delete_message(chat_id, message_id)
   end
 
-  defp bot_send_file(chat_id, file_name, file_content, opts) do
+  defp bot_send_file(chat_id, file_name, file_content, options) do
     content =
       case file_content do
         {:file, file} -> {:file, file}
         {:file_content, file_content, file_name} -> {:file_content, file_content, file_name}
       end
 
-    caption = opts[:original_url]
+    caption = options[:original_url]
 
     cond do
       String.ends_with?(file_name, ".png") ->
-        ExGram.send_photo(chat_id, content, caption)
+        ExGram.send_photo(chat_id, content, caption: caption)
 
       String.ends_with?(file_name, ".jpg") ->
-        ExGram.send_photo(chat_id, content, caption)
+        ExGram.send_photo(chat_id, content, caption: caption)
 
       String.ends_with?(file_name, ".jpeg") ->
-        ExGram.send_photo(chat_id, content, caption)
+        ExGram.send_photo(chat_id, content, caption: caption)
 
       String.ends_with?(file_name, ".mp4") ->
-        ExGram.send_video(chat_id, content, caption)
+        ExGram.send_video(chat_id, content, caption: caption)
 
       true ->
-        ExGram.send_document(chat_id, content, caption)
+        ExGram.send_document(chat_id, content, caption: caption)
     end
   end
 end
