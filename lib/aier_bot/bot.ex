@@ -25,7 +25,7 @@ defmodule AierBot.Bot do
   end
 
   # def handle({:text, text, message}, context) do
-  def handle({:text, text, %{chat: chat}}, _context) do
+  def handle({:text, text, %{chat: chat, message_id: message_id}}, _context) do
     urls = extract_urls_from_string(text)
 
     if Enum.empty?(urls) do
@@ -42,7 +42,10 @@ defmodule AierBot.Bot do
             nil ->
               case FileHelper.download(download_url) do
                 {:ok, file_name, file_content} ->
-                  {:ok, _} = bot_send_file_content(chat.id, file_name, file_content)
+                  {:ok, _} =
+                    bot_send_file_content(chat.id, file_name, file_content, original_url: url)
+
+                  delete_message(chat.id, message_id)
                   FileHelper.write_file(file_name, file_content, download_url)
 
                 {:error, error} ->
@@ -51,11 +54,12 @@ defmodule AierBot.Bot do
 
             download_file ->
               Logger.info("File already downloaded, don't need to download again")
-              {:ok, _} = bot_send_file(chat.id, download_file)
+              {:ok, _} = bot_send_file(chat.id, download_file, original_url: url)
+              delete_message(chat.id, message_id)
           end
 
         {:error, error} ->
-          ExGram.send_message(chat.id, "Failed to download file. Reason: #{inspect(error)}")
+          ExGram.send_message(chat.id, error)
       end
     end
   end
@@ -68,24 +72,31 @@ defmodule AierBot.Bot do
     Enum.map(matches, fn [url] -> url end)
   end
 
-  defp bot_send_file(chat_id, file_name) do
+  defp delete_message(chat_id, message_id) do
+    ExGram.delete_message(chat_id, message_id)
+  end
+
+  defp bot_send_file(chat_id, file_name, opts) do
     cond do
       String.ends_with?(file_name, ".png") ->
         ExGram.send_photo(
           chat_id,
-          {:file, file_name}
+          {:file, file_name},
+          caption: opts[:original_url]
         )
 
       String.ends_with?(file_name, ".jpg") ->
         ExGram.send_photo(
           chat_id,
-          {:file, file_name}
+          {:file, file_name},
+          caption: opts[:original_url]
         )
 
       String.ends_with?(file_name, ".jpeg") ->
         ExGram.send_photo(
           chat_id,
-          {:file, file_name}
+          {:file, file_name},
+          caption: opts[:original_url]
         )
 
       String.ends_with?(file_name, ".mp4") ->
@@ -93,43 +104,45 @@ defmodule AierBot.Bot do
         # MEMO: 注意：参数是 {:file_content, file_content, file_name} ，3 个元素的 tuple
         ExGram.send_video(
           chat_id,
-          {:file, file_name}
+          {:file, file_name},
+          caption: opts[:original_url]
         )
 
       true ->
         ExGram.send_document(
           chat_id,
-          {:file, file_name}
+          {:file, file_name},
+          caption: opts[:original_url]
         )
     end
   end
 
   # TODO: 额外参数可以使用 options 来传递
-  defp bot_send_file_content(chat_id, file_name, file_content) do
+  defp bot_send_file_content(chat_id, file_name, file_content, opts) do
     cond do
       String.ends_with?(file_name, ".png") ->
         ExGram.send_photo(
           chat_id,
-          {:file_content, file_content, file_name}
+          {:file_content, file_content, file_name},
+          caption: opts[:original_url]
           # TODO: original_url 作为 caption 收益不高，AI generated searchable caption 会更好
           # original_text
           # AI generated searchable caption
           # and some other metadata
-          # caption: "Image from URL: #{original_url}"
         )
 
       String.ends_with?(file_name, ".jpg") ->
         ExGram.send_photo(
           chat_id,
-          {:file_content, file_content, file_name}
-          # caption: "Image from URL: #{original_url}"
+          {:file_content, file_content, file_name},
+          caption: opts[:original_url]
         )
 
       String.ends_with?(file_name, ".jpeg") ->
         ExGram.send_photo(
           chat_id,
-          {:file_content, file_content, file_name}
-          # caption: "Image from URL: #{original_url}"
+          {:file_content, file_content, file_name},
+          caption: opts[:original_url]
         )
 
       String.ends_with?(file_name, ".mp4") ->
@@ -137,15 +150,15 @@ defmodule AierBot.Bot do
         # MEMO: 注意：参数是 {:file_content, file_content, file_name} ，3 个元素的 tuple
         ExGram.send_video(
           chat_id,
-          {:file_content, file_content, file_name}
-          # caption: "Image from URL: #{original_url}"
+          {:file_content, file_content, file_name},
+          caption: opts[:original_url]
         )
 
       true ->
         ExGram.send_document(
           chat_id,
-          {:file_content, file_content, file_name}
-          # caption: "Image from URL: #{original_url}"
+          {:file_content, file_content, file_name},
+          caption: opts[:original_url]
         )
     end
   end
