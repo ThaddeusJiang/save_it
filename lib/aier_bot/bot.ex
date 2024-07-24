@@ -90,21 +90,22 @@ defmodule AierBot.Bot do
 
     caption = options[:original_url]
 
-    cond do
-      String.ends_with?(file_name, ".png") ->
+    case file_extension(file_name) do
+      ext when ext in [".png", ".jpg", ".jpeg"] ->
         ExGram.send_photo(chat_id, content, caption: caption)
 
-      String.ends_with?(file_name, ".jpg") ->
-        ExGram.send_photo(chat_id, content, caption: caption)
+      ".mp4" ->
+        ExGram.send_video(chat_id, content, caption: caption, supports_streaming: true)
 
-      String.ends_with?(file_name, ".jpeg") ->
-        ExGram.send_photo(chat_id, content, caption: caption)
+      ".gif" ->
+        ExGram.send_animation(chat_id, content, caption: caption)
 
-      String.ends_with?(file_name, ".mp4") ->
-        ExGram.send_video(chat_id, content, caption: caption)
-
-      true ->
+      _ ->
         ExGram.send_document(chat_id, content, caption: caption)
     end
+  end
+
+  defp file_extension(file_name) do
+    Path.extname(file_name)
   end
 end

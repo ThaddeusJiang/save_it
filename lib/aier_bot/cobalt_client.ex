@@ -25,8 +25,6 @@ defmodule AierBot.CobaltClient do
 
     case post("api/json", %{url: url}) do
       {:ok, response} ->
-        IO.inspect(response.body, label: "response.body")
-
         case response.body do
           %{"url" => url} ->
             # memo: ins single video, response.body is %{"url" => url}
