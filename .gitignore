@@ -31,4 +31,4 @@ start.sh
 run.sh
 nohup.out
 .env
-local_format_elixir_map.exs
+local_debug.exs
