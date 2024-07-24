@@ -5,12 +5,19 @@ defmodule AierBot.Bot do
 
   @bot :save_it_bot
 
+  @progress [
+    "🔎 Searching...",
+    "💧 Downloading...",
+    "🚀 Uploading...",
+    "✅ Done!"
+  ]
+
   use ExGram.Bot,
     name: @bot,
     setup_commands: true
 
   command("start")
-  command("help", description: "Print the bot's help")
+  command("about")
 
   middleware(ExGram.Middleware.IgnoreUsername)
 
@@ -20,42 +27,69 @@ defmodule AierBot.Bot do
     answer(context, "Hi! I'm a bot that can download images and videos, just give me a link.")
   end
 
-  def handle({:command, :help, _msg}, context) do
-    answer(context, "Here is your help:")
+  def handle({:command, :about, _msg}, context) do
+    answer(context, """
+    This bot is created by @ThaddeusJiang, feel free to contact me if you have any questions.
+
+    GitHub: https://github.com/ThaddeusJiang
+    Blog: https://thaddeusjiang.com
+    X: https://x.com/thaddeusjiang
+    """)
   end
 
   # def handle({:text, text, message}, context) do
-  def handle({:text, text, %{chat: chat}}, _context) do
+  def handle({:text, text, %{chat: chat, message_id: message_id}}, _context) do
     urls = extract_urls_from_string(text)
 
+    {:ok, progress_message} = send_message(chat.id, Enum.at(@progress, 0))
+
     if Enum.empty?(urls) do
-      # TODO: 思考：使用 DSL answer 还是 function send_message?
-      # answer(context, "No URL found.")
-      ExGram.send_message(chat.id, "No URL found.")
+      update_message(chat.id, progress_message.message_id, "💔 Failed getting download URL.")
     else
-      # MEMO: for payment, free only one url, for multiple urls, need to pay
+      # TODO: for payment, free only one url, for multiple urls, need to pay
       url = List.first(urls)
 
       case CobaltClient.get_download_url(url) do
         {:ok, download_url} ->
           case FileHelper.get_downloaded_file(download_url) do
             nil ->
+              update_message(chat.id, progress_message.message_id, Enum.slice(@progress, 0..1))
+
               case FileHelper.download(download_url) do
                 {:ok, file_name, file_content} ->
-                  {:ok, _} = bot_send_file_content(chat.id, file_name, file_content)
+                  update_message(
+                    chat.id,
+                    progress_message.message_id,
+                    Enum.slice(@progress, 0..2)
+                  )
+
+                  bot_send_file(chat.id, file_name, {:file_content, file_content, file_name},
+                    caption: url
+                  )
+
+                  delete_messages(chat.id, [message_id, progress_message.message_id])
                   FileHelper.write_file(file_name, file_content, download_url)
 
-                {:error, error} ->
-                  ExGram.send_message(chat.id, "Failed to download file. #{inspect(error)}")
+                _ ->
+                  update_message(
+                    chat.id,
+                    progress_message.message_id,
+                    "💔 Failed downloading file."
+                  )
               end
 
             download_file ->
-              Logger.info("File already downloaded, don't need to download again")
-              {:ok, _} = bot_send_file(chat.id, download_file)
+              Logger.info("👍 File already downloaded, don't need to download again")
+
+              update_message(chat.id, progress_message.message_id, Enum.slice(@progress, 0..2))
+
+              bot_send_file(chat.id, download_file, {:file, download_file}, caption: url)
+
+              delete_messages(chat.id, [message_id, progress_message.message_id])
           end
 
-        {:error, error} ->
-          ExGram.send_message(chat.id, "Failed to download file. Reason: #{inspect(error)}")
+        _ ->
+          update_message(chat.id, progress_message.message_id, Enum.at(@progress, 3))
       end
     end
   end
@@ -68,85 +102,51 @@ defmodule AierBot.Bot do
     Enum.map(matches, fn [url] -> url end)
   end
 
-  defp bot_send_file(chat_id, file_name) do
-    cond do
-      String.ends_with?(file_name, ".png") ->
-        ExGram.send_photo(
-          chat_id,
-          {:file, file_name}
-        )
+  defp send_message(chat_id, text) do
+    ExGram.send_message(chat_id, text)
+  end
 
-      String.ends_with?(file_name, ".jpg") ->
-        ExGram.send_photo(
-          chat_id,
-          {:file, file_name}
-        )
+  defp update_message(chat_id, message_id, texts) when is_list(texts) do
+    ExGram.edit_message_text(Enum.join(texts, "\n\n"), chat_id: chat_id, message_id: message_id)
+  end
 
-      String.ends_with?(file_name, ".jpeg") ->
-        ExGram.send_photo(
-          chat_id,
-          {:file, file_name}
-        )
+  defp update_message(chat_id, message_id, text) do
+    ExGram.edit_message_text(text, chat_id: chat_id, message_id: message_id)
+  end
 
-      String.ends_with?(file_name, ".mp4") ->
-        # {:file_content, iodata() | Enum.t(), String.t()}
-        # MEMO: 注意：参数是 {:file_content, file_content, file_name} ，3 个元素的 tuple
-        ExGram.send_video(
-          chat_id,
-          {:file, file_name}
-        )
+  defp delete_message(chat_id, message_id) do
+    ExGram.delete_message(chat_id, message_id)
+  end
 
-      true ->
-        ExGram.send_document(
-          chat_id,
-          {:file, file_name}
-        )
+  defp delete_messages(chat_id, message_ids) do
+    Enum.each(message_ids, fn message_id -> delete_message(chat_id, message_id) end)
+  end
+
+  defp bot_send_file(chat_id, file_name, file_content, options) do
+    content =
+      case file_content do
+        {:file, file} -> {:file, file}
+        {:file_content, file_content, file_name} -> {:file_content, file_content, file_name}
+      end
+
+    caption = options[:caption]
+
+    case file_extension(file_name) do
+      ext when ext in [".png", ".jpg", ".jpeg"] ->
+        ExGram.send_photo(chat_id, content, caption: caption)
+
+      ".mp4" ->
+        ExGram.send_video(chat_id, content, caption: caption, supports_streaming: true)
+
+      ".gif" ->
+        ExGram.send_animation(chat_id, content, caption: caption)
+
+      _ ->
+        ExGram.send_document(chat_id, content, caption: caption)
     end
   end
 
-  # TODO: 额外参数可以使用 options 来传递
-  defp bot_send_file_content(chat_id, file_name, file_content) do
-    cond do
-      String.ends_with?(file_name, ".png") ->
-        ExGram.send_photo(
-          chat_id,
-          {:file_content, file_content, file_name}
-          # TODO: original_url 作为 caption 收益不高，AI generated searchable caption 会更好
-          # original_text
-          # AI generated searchable caption
-          # and some other metadata
-          # caption: "Image from URL: #{original_url}"
-        )
-
-      String.ends_with?(file_name, ".jpg") ->
-        ExGram.send_photo(
-          chat_id,
-          {:file_content, file_content, file_name}
-          # caption: "Image from URL: #{original_url}"
-        )
-
-      String.ends_with?(file_name, ".jpeg") ->
-        ExGram.send_photo(
-          chat_id,
-          {:file_content, file_content, file_name}
-          # caption: "Image from URL: #{original_url}"
-        )
-
-      String.ends_with?(file_name, ".mp4") ->
-        # {:file_content, iodata() | Enum.t(), String.t()}
-        # MEMO: 注意：参数是 {:file_content, file_content, file_name} ，3 个元素的 tuple
-        ExGram.send_video(
-          chat_id,
-          {:file_content, file_content, file_name}
-          # caption: "Image from URL: #{original_url}"
-        )
-
-      true ->
-        ExGram.send_document(
-          chat_id,
-          {:file_content, file_content, file_name}
-          # caption: "Image from URL: #{original_url}"
-        )
-    end
+  defp file_extension(file_name) do
+    Path.extname(file_name)
   end
 end

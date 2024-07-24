@@ -25,12 +25,17 @@ defmodule AierBot.CobaltClient do
 
     case post("api/json", %{url: url}) do
       {:ok, response} ->
-        #
         case response.body do
           %{"url" => url} ->
+            # memo: ins single video, response.body is %{"url" => url}
+            # %{
+            #   "status" => "redirect",
+            #   "url" => "https://scontent.cdninstagram.com/..."
+            # }
             {:ok, url}
 
           %{"status" => "picker", "picker" => picker_items} ->
+            IO.inspect(picker_items, label: "picker_items")
             # [%{"url" => url}] = picker_items
             # error:  you attempted to apply a function named :first on [],  If you are using Kernel.apply/3, make sure the module is an atom. If you are using the dot syntax, such as module.function(), make sure the left-hand side of the dot is an atom representing a module
             # picker_items.first()["url"]
