@@ -43,7 +43,9 @@ defmodule AierBot.Bot do
               case FileHelper.download(download_url) do
                 {:ok, file_name, file_content} ->
                   {:ok, _} =
-                    bot_send_file_content(chat.id, file_name, file_content, original_url: url)
+                    bot_send_file(chat.id, file_name, {:file_content, file_content, file_name},
+                      original_url: url
+                    )
 
                   delete_message(chat.id, message_id)
                   FileHelper.write_file(file_name, file_content, download_url)
@@ -54,7 +56,10 @@ defmodule AierBot.Bot do
 
             download_file ->
               Logger.info("File already downloaded, don't need to download again")
-              {:ok, _} = bot_send_file(chat.id, download_file, original_url: url)
+
+              {:ok, _} =
+                bot_send_file(chat.id, download_file, {:file, download_file}, original_url: url)
+
               delete_message(chat.id, message_id)
           end
 
@@ -76,90 +81,30 @@ defmodule AierBot.Bot do
     ExGram.delete_message(chat_id, message_id)
   end
 
-  defp bot_send_file(chat_id, file_name, opts) do
+  defp bot_send_file(chat_id, file_name, file_content, opts) do
+    content =
+      case file_content do
+        {:file, file} -> {:file, file}
+        {:file_content, file_content, file_name} -> {:file_content, file_content, file_name}
+      end
+
+    caption = opts[:original_url]
+
     cond do
       String.ends_with?(file_name, ".png") ->
-        ExGram.send_photo(
-          chat_id,
-          {:file, file_name},
-          caption: opts[:original_url]
-        )
+        ExGram.send_photo(chat_id, content, caption)
 
       String.ends_with?(file_name, ".jpg") ->
-        ExGram.send_photo(
-          chat_id,
-          {:file, file_name},
-          caption: opts[:original_url]
-        )
+        ExGram.send_photo(chat_id, content, caption)
 
       String.ends_with?(file_name, ".jpeg") ->
-        ExGram.send_photo(
-          chat_id,
-          {:file, file_name},
-          caption: opts[:original_url]
-        )
+        ExGram.send_photo(chat_id, content, caption)
 
       String.ends_with?(file_name, ".mp4") ->
-        # {:file_content, iodata() | Enum.t(), String.t()}
-        # MEMO: 注意：参数是 {:file_content, file_content, file_name} ，3 个元素的 tuple
-        ExGram.send_video(
-          chat_id,
-          {:file, file_name},
-          caption: opts[:original_url]
-        )
+        ExGram.send_video(chat_id, content, caption)
 
       true ->
-        ExGram.send_document(
-          chat_id,
-          {:file, file_name},
-          caption: opts[:original_url]
-        )
-    end
-  end
-
-  # TODO: 额外参数可以使用 options 来传递
-  defp bot_send_file_content(chat_id, file_name, file_content, opts) do
-    cond do
-      String.ends_with?(file_name, ".png") ->
-        ExGram.send_photo(
-          chat_id,
-          {:file_content, file_content, file_name},
-          caption: opts[:original_url]
-          # TODO: original_url 作为 caption 收益不高，AI generated searchable caption 会更好
-          # original_text
-          # AI generated searchable caption
-          # and some other metadata
-        )
-
-      String.ends_with?(file_name, ".jpg") ->
-        ExGram.send_photo(
-          chat_id,
-          {:file_content, file_content, file_name},
-          caption: opts[:original_url]
-        )
-
-      String.ends_with?(file_name, ".jpeg") ->
-        ExGram.send_photo(
-          chat_id,
-          {:file_content, file_content, file_name},
-          caption: opts[:original_url]
-        )
-
-      String.ends_with?(file_name, ".mp4") ->
-        # {:file_content, iodata() | Enum.t(), String.t()}
-        # MEMO: 注意：参数是 {:file_content, file_content, file_name} ，3 个元素的 tuple
-        ExGram.send_video(
-          chat_id,
-          {:file_content, file_content, file_name},
-          caption: opts[:original_url]
-        )
-
-      true ->
-        ExGram.send_document(
-          chat_id,
-          {:file_content, file_content, file_name},
-          caption: opts[:original_url]
-        )
+        ExGram.send_document(chat_id, content, caption)
     end
   end
 end
