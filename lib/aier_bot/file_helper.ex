@@ -12,6 +12,20 @@ defmodule AierBot.FileHelper do
     end
   end
 
+  def download_files(urls) do
+    Logger.info("download_files started, urls: #{inspect(urls)}")
+
+    res =
+      urls
+      |> Enum.map(&download/1)
+      |> Enum.reduce_while([], fn
+        {:ok, file_name, file_content}, acc -> {:cont, [{file_name, file_content} | acc]}
+        {:error, reason}, _ -> {:halt, {:error, reason}}
+      end)
+
+    {:ok, res}
+  end
+
   defp download_stream(url) do
     Logger.info("download_stream started, url: #{url}")
 
@@ -58,6 +72,16 @@ defmodule AierBot.FileHelper do
     write_file_to_disk(@urls_dir, hashed_url, file_name)
   end
 
+  def write_folder(original_url, files) do
+    hashed_url = :crypto.hash(:sha256, original_url) |> Base.url_encode64(padding: false)
+
+    Enum.each(files, fn {file_name, file_content} ->
+      write_file_to_disk(Path.join(@files_dir, hashed_url), file_name, file_content)
+    end)
+
+    write_file_to_disk(@urls_dir, hashed_url, files |> Enum.map(&elem(&1, 0)) |> Enum.join("\n"))
+  end
+
   defp write_file_to_disk(dir, file_name, file_content) do
     case File.mkdir_p(dir) do
       :ok ->
@@ -80,6 +104,21 @@ defmodule AierBot.FileHelper do
     case File.read(Path.join([@urls_dir, hashed_url])) do
       {:ok, file} -> Path.join([@files_dir, file |> String.trim()])
       {:error, _} -> nil
+    end
+  end
+
+  def get_downloaded_files(download_url) do
+    hashed_url = :crypto.hash(:sha256, download_url) |> Base.url_encode64(padding: false)
+
+    case File.read(Path.join([@urls_dir, hashed_url])) do
+      {:ok, file} ->
+        file
+        |> String.trim()
+        |> String.split("\n")
+        |> Enum.map(&Path.join([@files_dir, hashed_url, &1]))
+
+      {:error, _} ->
+        nil
     end
   end
 

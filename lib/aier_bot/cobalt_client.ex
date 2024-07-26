@@ -38,9 +38,7 @@ defmodule AierBot.CobaltClient do
             IO.inspect(picker_items, label: "picker_items")
             # [%{"url" => url}] = picker_items
             # error:  you attempted to apply a function named :first on [],  If you are using Kernel.apply/3, make sure the module is an atom. If you are using the dot syntax, such as module.function(), make sure the left-hand side of the dot is an atom representing a module
-            # picker_items.first()["url"]
-            # TODO: handle multiple urls
-            {:ok, Enum.at(picker_items, 0)["url"]}
+            {:ok, url, Enum.map(picker_items, &Map.get(&1, "url"))}
 
           %{"status" => "error", "text" => msg} ->
             Logger.warning("response.body is status error, text: #{msg}")

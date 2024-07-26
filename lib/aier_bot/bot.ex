@@ -50,6 +50,46 @@ defmodule AierBot.Bot do
       url = List.first(urls)
 
       case CobaltClient.get_download_url(url) do
+        {:ok, url, download_urls} ->
+          case FileHelper.get_downloaded_files(download_urls) do
+            nil ->
+              update_message(chat.id, progress_message.message_id, Enum.slice(@progress, 0..1))
+              # TODO:
+              case FileHelper.download_files(download_urls) do
+                {:ok, files} ->
+                  update_message(
+                    chat.id,
+                    progress_message.message_id,
+                    Enum.slice(@progress, 0..2)
+                  )
+
+                  # TODO:
+                  # bot_send_media_group(chat.id, files)
+                  bot_send_files(chat.id, files)
+
+                  delete_messages(chat.id, [message_id, progress_message.message_id])
+                  FileHelper.write_folder(url, files)
+
+                _ ->
+                  update_message(
+                    chat.id,
+                    progress_message.message_id,
+                    "💔 Failed downloading file."
+                  )
+              end
+
+            downloaded_files ->
+              Logger.info("👍 File already downloaded, don't need to download again")
+
+              update_message(chat.id, progress_message.message_id, Enum.slice(@progress, 0..2))
+
+              # TODO:
+              # bot_send_media_group(chat.id, downloaded_files)
+              bot_send_filenames(chat.id, downloaded_files)
+
+              delete_messages(chat.id, [message_id, progress_message.message_id])
+          end
+
         {:ok, download_url} ->
           case FileHelper.get_downloaded_file(download_url) do
             nil ->
@@ -118,6 +158,28 @@ defmodule AierBot.Bot do
 
   defp delete_messages(chat_id, message_ids) do
     Enum.each(message_ids, fn message_id -> delete_message(chat_id, message_id) end)
+  end
+
+  # defp bot_send_media_group(chat_id, files) do
+  #   media =
+  #     Enum.map(files, fn {file_name, file_content} ->
+  #       %ExGram.Model.InputMediaDocument{
+  #         type: "document",
+  #         media: file_content
+  #       }
+  #     end)
+
+  #   ExGram.send_media_group(chat_id, media)
+  # end
+
+  defp bot_send_files(chat_id, files) do
+    Enum.each(files, fn {file_name, file_content} ->
+      bot_send_file(chat_id, file_name, {:file_content, file_content, file_name})
+    end)
+  end
+
+  defp bot_send_filenames(chat_id, filenames) do
+    Enum.each(filenames, fn filename -> bot_send_file(chat_id, filename, {:file, filename}) end)
   end
 
   defp bot_send_file(chat_id, file_name, file_content, opts \\ []) do
