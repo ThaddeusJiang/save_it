@@ -17,7 +17,7 @@ defmodule AierBot.Bot do
     setup_commands: true
 
   command("start")
-  command("about")
+  command("about", description: "Know more about this bot")
 
   middleware(ExGram.Middleware.IgnoreUsername)
 
