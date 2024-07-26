@@ -13,7 +13,7 @@ defmodule AierBot.FileHelper do
   end
 
   defp download_stream(url) do
-    Logger.info("download_stream started", url: url)
+    Logger.info("download_stream started, url: #{url}")
 
     case get(url) do
       {:ok, %Tesla.Env{status: 200, body: body}} ->
@@ -29,7 +29,7 @@ defmodule AierBot.FileHelper do
   end
 
   defp download_file(url) do
-    Logger.info("download_file started", url: url)
+    Logger.info("download_file started, url: #{url}")
 
     case get(url) do
       {:ok, %Tesla.Env{status: 200, body: body, headers: headers}} ->
@@ -63,7 +63,7 @@ defmodule AierBot.FileHelper do
       :ok ->
         case File.write(Path.join([dir, file_name]), file_content) do
           :ok ->
-            Logger.info("File.write succeeded", file_name: file_name)
+            Logger.info("File.write succeeded")
 
           {:error, reason} ->
             Logger.error("File.write failed, reason: #{reason}")
