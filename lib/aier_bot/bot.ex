@@ -182,7 +182,7 @@ defmodule AierBot.Bot do
     Enum.each(filenames, fn filename -> bot_send_file(chat_id, filename, {:file, filename}) end)
   end
 
-  defp bot_send_file(chat_id, file_name, file_content, opts \\ []) do
+  defp bot_send_file(chat_id, file_name, file_content, _opts \\ []) do
     content =
       case file_content do
         {:file, file} -> {:file, file}

@@ -31,7 +31,7 @@ defmodule AierBot.FileHelper do
 
     case get(url) do
       {:ok, %Tesla.Env{status: 200, body: body}} ->
-        file_name = gen_desc_filename() <> ".mp4"
+        file_name = gen_file_name(url) <> ".mp4"
         {:ok, file_name, body}
 
       {:ok, %Tesla.Env{status: status}} ->
@@ -54,7 +54,7 @@ defmodule AierBot.FileHelper do
           |> String.split("/")
           |> List.last()
 
-        file_name = gen_desc_filename() <> "." <> ext
+        file_name = gen_file_name(url) <> "." <> ext
         {:ok, file_name, body}
 
       {:ok, %Tesla.Env{status: status}} ->
@@ -122,14 +122,7 @@ defmodule AierBot.FileHelper do
     end
   end
 
-  # version 2: 2124-01-01 00:00:00 UTC is 4624022400
-  # version 1: 10^16 - current_time, since JS max_safe_integer is 2^53 - 1 = 9007199254740991
-  defp gen_desc_filename(datetime \\ DateTime.utc_now()) do
-    last = ~U[2124-01-01 00:00:00Z] |> DateTime.to_unix()
-    current = datetime |> DateTime.to_unix()
-
-    (last - current)
-    |> Integer.to_string()
-    |> String.pad_leading(10, "0")
+  defp gen_file_name(url) do
+    :crypto.hash(:sha256, url) |> Base.url_encode64(padding: false)
   end
 end
