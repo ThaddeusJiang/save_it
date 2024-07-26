@@ -88,8 +88,8 @@ defmodule AierBot.Bot do
               delete_messages(chat.id, [message_id, progress_message.message_id])
           end
 
-        _ ->
-          update_message(chat.id, progress_message.message_id, Enum.at(@progress, 3))
+        {:error, msg} ->
+          update_message(chat.id, progress_message.message_id, msg)
       end
     end
   end

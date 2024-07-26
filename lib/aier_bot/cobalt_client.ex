@@ -42,13 +42,13 @@ defmodule AierBot.CobaltClient do
             # TODO: handle multiple urls
             {:ok, Enum.at(picker_items, 0)["url"]}
 
-          %{"status" => "error", "text" => error_msg} ->
-            Logger.warning("response.body is status error, text: #{inspect(response.body)}")
-            {:error, error_msg}
+          %{"status" => "error", "text" => msg} ->
+            Logger.warning("response.body is status error, text: #{msg}")
+            {:error, msg}
 
           _ ->
             Logger.warning("response.body: #{inspect(response.body)}")
-            {:error, "Unknown response body"}
+            {:error, "inner service error"}
         end
 
       {:error, error} ->
