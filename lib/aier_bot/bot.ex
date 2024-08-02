@@ -41,11 +41,8 @@ defmodule AierBot.Bot do
   def handle({:text, text, %{chat: chat, message_id: message_id}}, _context) do
     urls = extract_urls_from_string(text)
 
-    {:ok, progress_message} = send_message(chat.id, Enum.at(@progress, 0))
-
-    if Enum.empty?(urls) do
-      update_message(chat.id, progress_message.message_id, "💔 Failed getting download URL.")
-    else
+    unless Enum.empty?(urls) do
+      {:ok, progress_message} = send_message(chat.id, Enum.at(@progress, 0))
       # TODO: for payment, free only one url, for multiple urls, need to pay
       url = List.first(urls)
 
