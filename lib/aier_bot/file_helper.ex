@@ -2,8 +2,8 @@ defmodule AierBot.FileHelper do
   require Logger
   use Tesla
 
-  @files_dir "./.local/storage/files"
-  @urls_dir "./.local/storage/urls"
+  @files_dir "./data/storage/files"
+  @urls_dir "./data/storage/urls"
 
   def download(url) do
     cond do
