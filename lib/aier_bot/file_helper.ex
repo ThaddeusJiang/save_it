@@ -65,6 +65,47 @@ defmodule AierBot.FileHelper do
     end
   end
 
+  # TODO:
+  # defp write_map_to_file(file_path, map) do
+  #   case File.write(file_path, Jason.encode!(map)) do
+  #     :ok -> {:ok, file_path}
+  #     {:error, reason} -> {:error, reason}
+  #   end
+  # end
+
+  def set_google_device_code(chat_id, device_code) do
+    write_file_to_disk("./data/settings/#{chat_id}", "device_code.txt", device_code)
+  end
+
+  def get_google_device_code(chat_id) do
+    case File.read(Path.join(["./data/settings/#{chat_id}", "device_code.txt"])) do
+      {:ok, device_code} -> device_code
+      {:error, _} -> nil
+    end
+  end
+
+  def set_google_access_token(chat_id, access_token) do
+    write_file_to_disk("./data/settings/#{chat_id}", "access_token.txt", access_token)
+  end
+
+  def get_google_access_token(chat_id) do
+    case File.read(Path.join(["./data/settings/#{chat_id}", "access_token.txt"])) do
+      {:ok, access_token} -> access_token
+      {:error, _} -> nil
+    end
+  end
+
+  @doc """
+  - dir: ./data/settings/<chat_id>.txt TODO: erlang / elixir style
+
+  settings = %{
+    "device_code" => "value"
+  }
+  """
+  def save_chat_settings(chat_id, settings) do
+    write_file_to_disk("./data/settings", "#{chat_id}.txt", settings)
+  end
+
   def write_file(file_name, file_content, download_url) do
     write_file_to_disk(@files_dir, file_name, file_content)
 
