@@ -31,4 +31,4 @@ start.sh
 run.sh
 nohup.out
 .env
-local_debug.exs
+.local

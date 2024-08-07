@@ -1,4 +1,4 @@
-defmodule AierBot.GoogleDriveUploader do
+defmodule AierBot.GoogleDrive do
   @moduledoc """
   TODO:
   - [ ] list folders
@@ -9,7 +9,8 @@ defmodule AierBot.GoogleDriveUploader do
   require Logger
 
   use Tesla
-  plug(Tesla.Middleware.BaseUrl, "https://www.googleapis.com/upload/drive/v3/files")
+
+  plug(Tesla.Middleware.BaseUrl, "https://www.googleapis.com")
 
   plug(Tesla.Middleware.Headers, [
     {"Content-Type", "application/json"}
@@ -18,17 +19,33 @@ defmodule AierBot.GoogleDriveUploader do
   plug(Tesla.Middleware.JSON)
 
   @upload_type "multipart"
-  @folder_id "1QH9q7YQ0_Bi8B9gJ_Z9ioGHlCeyg-cBI"
+
+  # TODO: can not list folders, Docs is lie. ref: https://developers.google.com/drive/api/guides/search-files
+  def list_files(chat_id) do
+    access_token = FileHelper.get_google_access_token(chat_id)
+
+    headers = [
+      {"Authorization", "Bearer #{access_token}"},
+      {"Content-Type", "application/json"}
+    ]
+
+    query_params = [
+      mimeType: "application/vnd.google-apps.folder",
+      fields: "files(id, name)"
+    ]
+
+    get("/drive/v3/files", query: query_params, headers: headers)
+    |> handle_response()
+  end
 
   def upload_file_content(chat_id, file_content, file_name) do
-    IO.puts("upload_file_content started, file_name: #{file_name}")
-
     # oauth = FileHelper.get_google_oauth(chat_id)
     access_token = FileHelper.get_google_access_token(chat_id)
+    folder_id = FileHelper.get_google_drive_folder_id(chat_id)
 
     metadata = %{
       name: file_name,
-      parents: [@folder_id]
+      parents: [folder_id]
     }
 
     boundary = "foo_bar_baz"
@@ -39,25 +56,22 @@ defmodule AierBot.GoogleDriveUploader do
       {"Content-Type", "multipart/related; boundary=#{boundary}"}
     ]
 
-    post("/", multipart_body,
+    post("/upload/drive/v3/files", multipart_body,
       query: [uploadType: @upload_type],
       headers: headers
     )
     |> handle_response()
   end
 
-  # def upload_file(file_path, file_name, folder_id \\ @folder_id) do
   def upload_file(chat_id, file_path) do
-    IO.puts("upload_file started, file_path: #{file_path}")
-
     # settings = SettingsStore.get(chat_id)
     # oauth = FileHelper.get_google_oauth(chat_id)
     access_token = FileHelper.get_google_access_token(chat_id)
+    folder_id = FileHelper.get_google_drive_folder_id(chat_id)
 
     metadata = %{
-      # name: file_name,
       name: Path.basename(file_path),
-      parents: [@folder_id]
+      parents: [folder_id]
     }
 
     file_content = File.read!(file_path)
@@ -69,7 +83,7 @@ defmodule AierBot.GoogleDriveUploader do
       {"Content-Type", "multipart/related; boundary=#{boundary}"}
     ]
 
-    post("/", multipart_body,
+    post("/upload/drive/v3/files", multipart_body,
       query: [uploadType: @upload_type],
       headers: headers
     )
@@ -88,6 +102,17 @@ defmodule AierBot.GoogleDriveUploader do
     #{file_content}
     --#{boundary}--
     """
+  end
+
+  defp handle_response(
+         {:ok,
+          %Tesla.Env{
+            status: 200,
+            body: %{"files" => files}
+          }}
+       ) do
+    IO.puts("handle_response, files: #{inspect(files)}")
+    {:ok, files}
   end
 
   defp handle_response({:ok, %Tesla.Env{status: 200, body: body}}) do

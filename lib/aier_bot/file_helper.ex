@@ -65,13 +65,16 @@ defmodule AierBot.FileHelper do
     end
   end
 
-  # TODO:
-  # defp write_map_to_file(file_path, map) do
-  #   case File.write(file_path, Jason.encode!(map)) do
-  #     :ok -> {:ok, file_path}
-  #     {:error, reason} -> {:error, reason}
-  #   end
-  # end
+  def set_google_drive_folder_id(chat_id, folder_id) do
+    write_file_to_disk("./data/settings/#{chat_id}", "folder_id.txt", folder_id)
+  end
+
+  def get_google_drive_folder_id(chat_id) do
+    case File.read(Path.join(["./data/settings/#{chat_id}", "folder_id.txt"])) do
+      {:ok, folder_id} -> folder_id
+      {:error, _} -> nil
+    end
+  end
 
   def set_google_device_code(chat_id, device_code) do
     write_file_to_disk("./data/settings/#{chat_id}", "device_code.txt", device_code)

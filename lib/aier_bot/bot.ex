@@ -2,7 +2,7 @@ defmodule AierBot.Bot do
   require Logger
   alias AierBot.CobaltClient
   alias AierBot.FileHelper
-  alias AierBot.GoogleDriveUploader
+  alias AierBot.GoogleDrive
   alias AierBot.GoogleOAuth2DeviceFlow
 
   @bot :save_it_bot
@@ -20,10 +20,9 @@ defmodule AierBot.Bot do
 
   command("start")
   command("about", description: "About the bot")
+  command("code", description: "Get Device Code for Google Drive")
   command("login", description: "Login to Google Drive")
-  # TODO: polling, currently manually run `/code` to exchange the device code for token
-  command("code", description: "Exchange Device Code for Token")
-  # command("folder", description: "Set Google Drive Folder")
+  command("folder", description: "Set Google Drive Folder")
 
   middleware(ExGram.Middleware.IgnoreUsername)
 
@@ -43,10 +42,7 @@ defmodule AierBot.Bot do
     """)
   end
 
-  def handle(
-        {:command, :login, %{chat: chat}},
-        _context
-      ) do
+  def handle({:command, :code, %{chat: chat}}, _context) do
     case GoogleOAuth2DeviceFlow.get_device_code() do
       {:ok, response} ->
         FileHelper.set_google_device_code(chat.id, response["device_code"])
@@ -55,7 +51,7 @@ defmodule AierBot.Bot do
         send_message(chat.id, """
         Open the following URL in your browser:
         #{response["verification_url"]}
-        Enter the below code:
+        Enter code: 👇
         """)
 
         send_message(chat.id, """
@@ -63,16 +59,17 @@ defmodule AierBot.Bot do
         """)
 
         send_message(chat.id, """
-        Run `/code` to exchange the device code for token.
+        Run `/login` after you have logged in.
         """)
 
       {:error, error} ->
-        IO.inspect(error)
+        Logger.error("Failed to get device code: #{inspect(error)}")
+        send_message(chat.id, "Failed to get device code")
     end
   end
 
-  def handle({:command, :code, msg}, _context) do
-    device_code = FileHelper.get_google_device_code(msg.chat.id)
+  def handle({:command, :login, %{chat: chat}}, _context) do
+    device_code = FileHelper.get_google_device_code(chat.id)
     # %{
     #   "google_device_code" => device_code
     # } = SettingsStore.get(msg.chat.id)
@@ -81,20 +78,41 @@ defmodule AierBot.Bot do
       {:ok, body} ->
         IO.inspect(body, label: "body")
         # SettingsStore.update_google_oauth(msg.chat.id, body)
-        FileHelper.set_google_access_token(msg.chat.id, body["access_token"])
-        {:ok, "Exchange Code success"}
+        FileHelper.set_google_access_token(chat.id, body["access_token"])
+        send_message(chat.id, "Login successful")
 
       {:error, error} ->
-        IO.inspect(error, label: "error")
-        {:ok, "Exchange Code failed"}
+        Logger.error("Login failed: #{inspect(error)}")
+        send_message(chat.id, "Login failed")
     end
   end
 
-  # def handle({:command, :folder, msg}, _context) do
-  #   chat_id = msg.chat.id
-  #   # TODO:
-  #   SettingsStore.update_google_drive_folder_id(chat_id, "1QH9q7YQ0_Bi8B9gJ_Z9ioGHlCeyg-cBI")
+  # def handle({:command, :files, %{chat: chat}}, _context) do
+  #   case GoogleDrive.list_files(chat.id) do
+  #     {:ok, files} ->
+  #       send_message(chat.id, """
+  #       Files:
+  #       #{Enum.map(files, fn file -> file["name"] end) |> Enum.join("\n")}
+  #       """)
+
+  #     {:error, error} ->
+  #       IO.inspect(error)
+  #   end
   # end
+
+  def handle({:command, :folder, %{chat: chat, text: text}}, _context) do
+    case text do
+      nil ->
+        send_message(chat.id, "Please provide a folder ID.")
+
+      "" ->
+        send_message(chat.id, "Please provide a folder ID.")
+
+      _ ->
+        FileHelper.set_google_drive_folder_id(chat.id, text)
+        send_message(chat.id, "Folder ID set successfully.")
+    end
+  end
 
   # def handle({:text, text, message}, context) do
   def handle({:text, text, %{chat: chat, message_id: message_id}}, _context) do
@@ -162,7 +180,7 @@ defmodule AierBot.Bot do
 
                   bot_send_file(chat.id, file_name, {:file_content, file_content, file_name})
 
-                  GoogleDriveUploader.upload_file_content(chat.id, file_content, file_name)
+                  GoogleDrive.upload_file_content(chat.id, file_content, file_name)
                   FileHelper.write_file(file_name, file_content, download_url)
                   delete_messages(chat.id, [message_id, progress_message.message_id])
 
@@ -180,7 +198,7 @@ defmodule AierBot.Bot do
               update_message(chat.id, progress_message.message_id, Enum.slice(@progress, 0..2))
 
               bot_send_file(chat.id, download_file, {:file, download_file})
-              GoogleDriveUploader.upload_file(chat.id, download_file)
+              GoogleDrive.upload_file(chat.id, download_file)
               delete_messages(chat.id, [message_id, progress_message.message_id])
           end
 
