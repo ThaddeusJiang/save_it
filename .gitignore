@@ -25,10 +25,10 @@ aier_bot-*.tar
 # Temporary files, for example, from tests.
 /tmp/
 .DS_Store
-.local
+data
 dev.sh
 start.sh
 run.sh
 nohup.out
 .env
-local_debug.exs
+.local

@@ -2,8 +2,8 @@ defmodule AierBot.FileHelper do
   require Logger
   use Tesla
 
-  @files_dir "./.local/storage/files"
-  @urls_dir "./.local/storage/urls"
+  @files_dir "./data/storage/files"
+  @urls_dir "./data/storage/urls"
 
   def download(url) do
     cond do
@@ -63,6 +63,50 @@ defmodule AierBot.FileHelper do
       {:error, reason} ->
         {:error, "Reason #{inspect(reason)}"}
     end
+  end
+
+  def set_google_drive_folder_id(chat_id, folder_id) do
+    write_file_to_disk("./data/settings/#{chat_id}", "folder_id.txt", folder_id)
+  end
+
+  def get_google_drive_folder_id(chat_id) do
+    case File.read(Path.join(["./data/settings/#{chat_id}", "folder_id.txt"])) do
+      {:ok, folder_id} -> folder_id
+      {:error, _} -> nil
+    end
+  end
+
+  def set_google_device_code(chat_id, device_code) do
+    write_file_to_disk("./data/settings/#{chat_id}", "device_code.txt", device_code)
+  end
+
+  def get_google_device_code(chat_id) do
+    case File.read(Path.join(["./data/settings/#{chat_id}", "device_code.txt"])) do
+      {:ok, device_code} -> device_code
+      {:error, _} -> nil
+    end
+  end
+
+  def set_google_access_token(chat_id, access_token) do
+    write_file_to_disk("./data/settings/#{chat_id}", "access_token.txt", access_token)
+  end
+
+  def get_google_access_token(chat_id) do
+    case File.read(Path.join(["./data/settings/#{chat_id}", "access_token.txt"])) do
+      {:ok, access_token} -> access_token
+      {:error, _} -> nil
+    end
+  end
+
+  @doc """
+  - dir: ./data/settings/<chat_id>.txt TODO: erlang / elixir style
+
+  settings = %{
+    "device_code" => "value"
+  }
+  """
+  def save_chat_settings(chat_id, settings) do
+    write_file_to_disk("./data/settings", "#{chat_id}.txt", settings)
   end
 
   def write_file(file_name, file_content, download_url) do
