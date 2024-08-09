@@ -151,8 +151,8 @@ defmodule AierBot.Bot do
                   bot_send_files(chat.id, files)
 
                   delete_messages(chat.id, [message_id, progress_message.message_id])
-                  # TODO: Google Drive Uploader
                   FileHelper.write_folder(url, files)
+                  GoogleDrive.upload_files(chat.id, files)
 
                 _ ->
                   update_message(
@@ -167,10 +167,8 @@ defmodule AierBot.Bot do
 
               update_message(chat.id, progress_message.message_id, Enum.slice(@progress, 0..2))
 
-              # TODO:
-              # bot_send_media_group(chat.id, downloaded_files)
+              # TODO: bot_send_media_group(chat.id, downloaded_files)
               bot_send_filenames(chat.id, downloaded_files)
-
               delete_messages(chat.id, [message_id, progress_message.message_id])
           end
 
@@ -207,7 +205,6 @@ defmodule AierBot.Bot do
               update_message(chat.id, progress_message.message_id, Enum.slice(@progress, 0..2))
 
               bot_send_file(chat.id, download_file, {:file, download_file})
-              GoogleDrive.upload_file(chat.id, download_file)
               delete_messages(chat.id, [message_id, progress_message.message_id])
           end
 

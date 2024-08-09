@@ -43,6 +43,19 @@ defmodule AierBot.GoogleDrive do
     access_token = FileHelper.get_google_access_token(chat_id)
     folder_id = FileHelper.get_google_drive_folder_id(chat_id)
 
+    upload_file(file_name, file_content, folder_id, access_token)
+  end
+
+  def upload_files(chat_id, files) do
+    access_token = FileHelper.get_google_access_token(chat_id)
+    folder_id = FileHelper.get_google_drive_folder_id(chat_id)
+
+    Enum.map(files, fn {file_name, file_content} ->
+      upload_file(file_name, file_content, folder_id, access_token)
+    end)
+  end
+
+  defp upload_file(file_name, file_content, folder_id, access_token) do
     metadata = %{
       name: file_name,
       parents: [folder_id]
@@ -116,17 +129,20 @@ defmodule AierBot.GoogleDrive do
   end
 
   defp handle_response({:ok, %Tesla.Env{status: 200, body: body}}) do
-    IO.puts("handle_response, body: #{inspect(body)}")
+    Logger.info("Successfully uploaded file to Google Drive")
     {:ok, body}
   end
 
   defp handle_response({:ok, %Tesla.Env{status: status, body: body}}) do
-    IO.puts("handle_response, status: #{status}, body: #{inspect(body)}")
+    Logger.warning(
+      "Failed to upload file to Google Drive, status: #{status}, body: #{inspect(body)}"
+    )
+
     {:error, %{status: status, body: body}}
   end
 
   defp handle_response({:error, reason}) do
-    IO.puts("handle_response, reason: #{inspect(reason)}")
+    Logger.error("Failed to upload file to Google Drive, reason: #{inspect(reason)}")
     {:error, reason}
   end
 end
