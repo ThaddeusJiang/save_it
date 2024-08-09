@@ -20,9 +20,9 @@ defmodule AierBot.Bot do
 
   command("start")
   command("about", description: "About the bot")
-  command("code", description: "Get Device Code for Google Drive")
-  command("login", description: "Login to Google Drive")
-  command("folder", description: "Set Google Drive Folder")
+  command("code", description: "Get code for login")
+  command("login", description: "Login")
+  command("folder", description: "Update Google Drive folder ID")
 
   middleware(ExGram.Middleware.IgnoreUsername)
 
@@ -68,6 +68,10 @@ defmodule AierBot.Bot do
     end
   end
 
+  def handle({:command, :login, %{from: %{is_bot: false}}}, context) do
+    answer(context, "You are not allowed to login.")
+  end
+
   def handle({:command, :login, %{chat: chat}}, _context) do
     device_code = FileHelper.get_google_device_code(chat.id)
     # %{
@@ -79,11 +83,16 @@ defmodule AierBot.Bot do
         IO.inspect(body, label: "body")
         # SettingsStore.update_google_oauth(msg.chat.id, body)
         FileHelper.set_google_access_token(chat.id, body["access_token"])
-        send_message(chat.id, "Login successful")
+        send_message(chat.id, "Login successful!")
 
       {:error, error} ->
         Logger.error("Login failed: #{inspect(error)}")
-        send_message(chat.id, "Login failed")
+
+        send_message(chat.id, """
+        Login failed.
+
+        Please run `/code` to get a new code, then run `/login` again.
+        """)
     end
   end
 

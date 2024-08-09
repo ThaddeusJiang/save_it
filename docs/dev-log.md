@@ -1,3 +1,75 @@
+# 2024-08-09 only bot owner can login and update folder
+
+```elixir
+# 一般
+%{
+  date: 1_723_185_293,
+  text: "",
+  from: %{
+    id: 940_788_576,
+    username: "ThaddeusJiang",
+    first_name: "TJ",
+    language_code: "zh-hans",
+    is_bot: false
+  },
+  chat: %{
+    id: -4_255_771_899,
+    type: "group",
+    title: "Ren and My J",
+    all_members_are_administrators: true
+  },
+  message_id: 734,
+  entities: [%{offset: 0, type: "bot_command", length: 24}]
+}
+
+```
+
+- 在一个包含 bot 的 group 随便发送 message
+
+```elixir
+# owner
+%{
+  date: 1723105666,
+  text: "我只是试试",
+  from: %{
+    id: 1087968824,
+    username: "GroupAnonymousBot",
+    first_name: "Group",
+    is_bot: true
+  },
+  chat: %{id: -1002229528208, type: "supergroup", title: "📝个人记事本"},
+  message_id: 19,
+  sender_chat: %{
+    id: -1002229528208,
+    type: "supergroup",
+    title: "📝个人记事本"
+  }
+}
+```
+
+在一个包含 bot 的 group，发送 command
+
+```elixir
+%{
+  date: 1_723_105_562,
+  text: "",
+  from: %{
+    id: 1_087_968_824,
+    username: "GroupAnonymousBot",
+    first_name: "Group",
+    is_bot: true
+  },
+  chat: %{id: -1_002_229_528_208, type: "supergroup", title: "📝个人记事本"},
+  message_id: 16,
+  entities: [%{offset: 0, type: "bot_command", length: 24}],
+  sender_chat: %{
+    id: -1_002_229_528_208,
+    type: "supergroup",
+    title: "📝个人记事本"
+  }
+}
+```
+
 TIL: base64url RFC 4648 可以生成 URL and filename safe alphabet.
 
 https://x.com/kitayoshi_son/status/1815740828993962028
