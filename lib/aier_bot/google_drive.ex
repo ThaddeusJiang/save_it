@@ -93,7 +93,9 @@ defmodule AierBot.GoogleDrive do
 
     headers = [
       {"Authorization", "Bearer #{access_token}"},
-      {"Content-Type", "multipart/related; boundary=#{boundary}"}
+      {"Content-Type", "multipart/related; boundary=#{boundary}"},
+      {"Content-Length", "*/*"}
+      # {"Content-Length", byte_size(multipart_body) |> Integer.to_string()}
     ]
 
     post("/upload/drive/v3/files", multipart_body,

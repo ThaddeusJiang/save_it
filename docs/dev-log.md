@@ -1,3 +1,73 @@
+# telegram channel & supergroup 管理权限
+
+- supergroup: from.is_bot is true
+- group: administrators includes from.id
+- private: alway true
+
+```elixir
+members: [
+  %ExGram.Model.ChatMemberAdministrator{
+    status: "administrator",
+    user: %{
+      id: 7363668833,
+      username: "save_it_local_bot",
+      first_name: "Save it(local)",
+      is_bot: true
+    },
+    can_be_edited: false,
+    is_anonymous: false,
+    can_manage_chat: true,
+    can_delete_messages: true,
+    can_manage_video_chats: true,
+    can_restrict_members: true,
+    can_promote_members: false,
+    can_change_info: true,
+    can_invite_users: true,
+    can_post_messages: nil,
+    can_edit_messages: nil,
+    can_pin_messages: true,
+    can_manage_topics: false,
+    custom_title: nil
+  },
+  %ExGram.Model.ChatMemberOwner{
+    status: "creator",
+    user: %{
+      id: 940788576,
+      username: "ThaddeusJiang",
+      first_name: "TJ",
+      language_code: "zh-hans",
+      is_bot: false
+    },
+    is_anonymous: true,
+    custom_title: nil
+  }
+]
+from: %{
+  id: 1087968824,
+  username: "GroupAnonymousBot",
+  first_name: "Group",
+  is_bot: true
+}
+```
+
+# 2024-09-05
+
+# 2024-09-05
+
+```sh
+12:53:31.447 [warning] Failed to upload file to Google Drive, status: 404, body: %{"error" => %{"code" => 404, "errors" => [%{"domain" => "global", "location" => "fileId", "locationType" => "parameter", "message" => "File not found: 1ltD5i58EMpU-yni5y5KzGNzMm0rQH3H7.", "reason" => "notFound"}], "message" => "File not found: 1ltD5i58EMpU-yni5y5KzGNzMm0rQH3H7."}}
+```
+
+## Reason:
+
+我填错了 folder_id，因为我有两个 Google account。
+
+所以，果然应该选择 folder_id 而不是输入。
+
+- [ ] TODO: 开发 Google Drive API 允许用户选择自己的 folder
+  - [ ] list folders
+  - [ ] select folder and store
+
 # 2024-08-09 only bot owner can login and update folder
 
 ```elixir

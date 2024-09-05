@@ -68,28 +68,45 @@ defmodule AierBot.Bot do
     end
   end
 
-  def handle({:command, :login, %{from: %{is_bot: false}}}, context) do
-    answer(context, "You are not allowed to login.")
+  def handle({:command, :login, %{chat: chat, from: from}}, _context) do
+    case chat.type do
+      "private" ->
+        login_google(chat)
+
+      x when x == "group" or x == "supergroup" ->
+        {:ok, members} = ExGram.get_chat_administrators(chat.id)
+
+        cond do
+          # TODO: 可以继续提取到一个函数中
+          from.is_bot ->
+            login_google(chat)
+
+          # 其他语言写法 fn member -> member.user.id == from.id end
+          Enum.any?(members, &(&1.user.id == from.id)) ->
+            login_google(chat)
+
+          true ->
+            send_message(chat.id, "You are not an administrator, you can't login.")
+        end
+
+      _ ->
+        send_message(chat.id, "You can't login in this chat.")
+    end
   end
 
-  def handle({:command, :login, %{chat: chat}}, _context) do
+  defp login_google(chat) do
     device_code = FileHelper.get_google_device_code(chat.id)
-    # %{
-    #   "google_device_code" => device_code
-    # } = SettingsStore.get(msg.chat.id)
 
     case GoogleOAuth2DeviceFlow.exchange_device_code_for_token(device_code) do
       {:ok, body} ->
-        IO.inspect(body, label: "body")
-        # SettingsStore.update_google_oauth(msg.chat.id, body)
         FileHelper.set_google_access_token(chat.id, body["access_token"])
-        send_message(chat.id, "Login successful!")
+        send_message(chat.id, "Successfully logged in!")
 
       {:error, error} ->
-        Logger.error("Login failed: #{inspect(error)}")
+        Logger.error("Failed to log in: #{inspect(error)}")
 
         send_message(chat.id, """
-        Login failed.
+        Failed to log in.
 
         Please run `/code` to get a new code, then run `/login` again.
         """)
@@ -103,7 +120,6 @@ defmodule AierBot.Bot do
   #       Files:
   #       #{Enum.map(files, fn file -> file["name"] end) |> Enum.join("\n")}
   #       """)
-
   #     {:error, error} ->
   #       IO.inspect(error)
   #   end
@@ -123,7 +139,6 @@ defmodule AierBot.Bot do
     end
   end
 
-  # def handle({:text, text, message}, context) do
   def handle({:text, text, %{chat: chat, message_id: message_id}}, _context) do
     urls = extract_urls_from_string(text)
 
@@ -152,6 +167,7 @@ defmodule AierBot.Bot do
 
                   delete_messages(chat.id, [message_id, progress_message.message_id])
                   FileHelper.write_folder(url, files)
+                  # TODO: 给图片添加 emoji
                   GoogleDrive.upload_files(chat.id, files)
 
                 _ ->
@@ -187,9 +203,9 @@ defmodule AierBot.Bot do
 
                   bot_send_file(chat.id, file_name, {:file_content, file_content, file_name})
 
-                  GoogleDrive.upload_file_content(chat.id, file_content, file_name)
-                  FileHelper.write_file(file_name, file_content, download_url)
                   delete_messages(chat.id, [message_id, progress_message.message_id])
+                  FileHelper.write_file(file_name, file_content, download_url)
+                  GoogleDrive.upload_file_content(chat.id, file_content, file_name)
 
                 _ ->
                   update_message(
@@ -213,6 +229,26 @@ defmodule AierBot.Bot do
       end
     end
   end
+
+  def handle(
+        {:update,
+         %ExGram.Model.Update{message: nil, edited_message: nil, channel_post: _channel_post}},
+        _context
+      ) do
+    Logger.warning("this is a channel post, ignore it")
+    {:ok, nil}
+  end
+
+  # def handle({:update, update}, _context) do
+  #   Logger.debug(":update: #{inspect(update)}")
+  #   {:ok, nil}
+  # end
+
+  # Doc: https://hexdocs.pm/ex_gram/readme.html#how-to-handle-messages
+  # def handle({:message, message}, _context) do
+  #   Logger.debug(":message: #{inspect(message)}")
+  #   {:ok, nil}
+  # end
 
   defp extract_urls_from_string(str) do
     regex = ~r/http[s]?:\/\/[^\s]+/
