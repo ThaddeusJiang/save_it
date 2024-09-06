@@ -1,4 +1,5 @@
-defmodule AierBot.GoogleOAuth2DeviceFlow do
+defmodule SaveIt.GoogleOAuth2DeviceFlow do
+  require Logger
   use Tesla
 
   plug(Tesla.Middleware.BaseUrl, "https://oauth2.googleapis.com")
@@ -8,8 +9,8 @@ defmodule AierBot.GoogleOAuth2DeviceFlow do
     {"Content-Type", "application/x-www-form-urlencoded"}
   ])
 
-  @client_id System.fetch_env!("GOOGLE_OAUTH_CLIENT_ID")
-  @client_secret System.fetch_env!("GOOGLE_OAUTH_CLIENT_SECRET")
+  @client_id Application.compile_env(:save_it, :google_oauth_client_id)
+  @client_secret Application.compile_env(:save_it, :google_oauth_client_secret)
   @device_code_url "/device/code"
   @token_url "/token"
 
@@ -24,17 +25,16 @@ defmodule AierBot.GoogleOAuth2DeviceFlow do
   end
 
   defp handle_response({:ok, %Tesla.Env{status: 200, body: body}}) do
-    IO.puts("handle_response, body: #{inspect(body)}")
     {:ok, body}
   end
 
   defp handle_response({:ok, %Tesla.Env{status: status, body: body}}) do
-    IO.puts("handle_response, status: #{status}, body: #{inspect(body)}")
+    Logger.warning("handle_response, status: #{status}, body: #{inspect(body)}")
     {:error, %{status: status, body: body}}
   end
 
   defp handle_response({:error, reason}) do
-    IO.puts("handle_response, reason: #{inspect(reason)}")
+    Logger.error("handle_response, reason: #{inspect(reason)}")
     {:error, reason}
   end
 

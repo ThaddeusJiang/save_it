@@ -1,4 +1,4 @@
-defmodule AierBot.CobaltClient do
+defmodule SaveIt.CobaltClient do
   require Logger
 
   use Tesla
@@ -35,7 +35,6 @@ defmodule AierBot.CobaltClient do
             {:ok, url}
 
           %{"status" => "picker", "picker" => picker_items} ->
-            IO.inspect(picker_items, label: "picker_items")
             # [%{"url" => url}] = picker_items
             # error:  you attempted to apply a function named :first on [],  If you are using Kernel.apply/3, make sure the module is an atom. If you are using the dot syntax, such as module.function(), make sure the left-hand side of the dot is an atom representing a module
             {:ok, url, Enum.map(picker_items, &Map.get(&1, "url"))}

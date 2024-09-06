@@ -1,13 +1,11 @@
-defmodule AierBot.GoogleDrive do
+defmodule SaveIt.GoogleDrive do
   @moduledoc """
   TODO:
   - [ ] list folders
   - [ ] select folder and save folder_id
   """
-  alias AierBot.FileHelper
-
+  alias SaveIt.FileHelper
   require Logger
-
   use Tesla
 
   plug(Tesla.Middleware.BaseUrl, "https://www.googleapis.com")
@@ -126,7 +124,6 @@ defmodule AierBot.GoogleDrive do
             body: %{"files" => files}
           }}
        ) do
-    IO.puts("handle_response, files: #{inspect(files)}")
     {:ok, files}
   end
 

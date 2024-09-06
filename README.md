@@ -1,38 +1,36 @@
-# AierBot
+# save_it
 
-A telegram bot to sync messages to https://aier.app
+A telegram bot who save what you love in internet.
 
-![save memo to AIer.app](./docs/assets/save-memo-to-aier.gif)
+## supported services
+
+- [x] https://x.com/
+- [x] https://instagram.com/
+- [x] https://www.youtube.com/
+- [x] https://www.pinterest.com/
+
+## Usage
+
+Just send the link to the bot.
 
 ## Build with
 
 - [Elixir](https://elixir-lang.org/)
 - [ex_gram](https://github.com/rockneurotiko/ex_gram)
-
-## Usage
-
-TODO:
+- [cobalt api](https://github.com/imputnet/cobalt/blob/current/docs/api.md)
 
 ## Development
 
 ```sh
+# install
 mix deps.get
-
-export TELEGRAM_BOT_TOKEN=
-export AIER_API_TOKEN=
-export OPENAI_API_KEY=
-
-mix run --no-halt
 ```
 
-## Deployment
+```sh
+# run
+export TELEGRAM_BOT_TOKEN=
+export GOOGLE_OAUTH_CLIENT_ID=
+export GOOGLE_OAUTH_CLIENT_SECRET=
 
-### CI/CD
-
-GitHub Actions
-
-Secrets:
-
-- `TELEGRAM_BOT_TOKEN`
-- `AIER_API_TOKEN`
-- `FLY_API_TOKEN`
+iex -S mix run --no-halt
+```

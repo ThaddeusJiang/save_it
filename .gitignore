@@ -20,7 +20,7 @@ erl_crash.dump
 *.ez
 
 # Ignore package tarball (built via "mix hex.build").
-aier_bot-*.tar
+save_it-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/
@@ -30,5 +30,5 @@ dev.sh
 start.sh
 run.sh
 nohup.out
-.env
-.local
+
+_local
