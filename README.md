@@ -13,9 +13,11 @@ A telegram bot who save what you love in internet.
 
 Just send the link to the bot.
 
-<a href="https://x.com/ThaddeusJiang/status/1815376745056682303">
-<div><video controls src="https://x.com/i/status/1815376745056682303" muted="false"></video></div>
-</a>
+https://github.com/user-attachments/assets/4a375cab-7124-44f3-994e-0cb026476d39
+
+## Playground
+
+https://t.me/save_it_playground
 
 ## Build with
 
