@@ -1,13 +1,12 @@
-defmodule AierBot.MixProject do
+defmodule SaveIt.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :aier_bot,
+      app: :save_it,
       version: "0.1.0",
-      elixir: "~> 1.15",
-      start_permanent: Mix.env() == :prod,
-      deps: deps()
+      deps: deps(),
+      start_permanent: Mix.env() == :prod
     ]
   end
 
@@ -15,18 +14,16 @@ defmodule AierBot.MixProject do
   def application do
     [
       extra_applications: [:logger],
-      mod: {AierBot.Application, []}
+      mod: {SaveIt.Application, []}
     ]
   end
 
-  # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:ex_gram, "~> 0.40.0"},
-      {:tesla, "~> 1.11.1"},
-      {:openai_ex, "~> 0.3.0"},
-      {:hackney, "~> 1.18.2"},
-      {:jason, ">= 1.4.2"}
+      {:ex_gram, "~> 0.53"},
+      {:tesla, "~> 1.11"},
+      {:hackney, "~> 1.12"},
+      {:jason, "~> 1.4.1"}
     ]
   end
 end

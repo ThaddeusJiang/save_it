@@ -1,9 +1,9 @@
-defmodule AierBot.Bot do
+defmodule SaveIt.Bot do
   require Logger
-  alias AierBot.CobaltClient
-  alias AierBot.FileHelper
-  alias AierBot.GoogleDrive
-  alias AierBot.GoogleOAuth2DeviceFlow
+  alias SaveIt.CobaltClient
+  alias SaveIt.FileHelper
+  alias SaveIt.GoogleDrive
+  alias SaveIt.GoogleOAuth2DeviceFlow
 
   @bot :save_it_bot
 
@@ -113,18 +113,6 @@ defmodule AierBot.Bot do
     end
   end
 
-  # def handle({:command, :files, %{chat: chat}}, _context) do
-  #   case GoogleDrive.list_files(chat.id) do
-  #     {:ok, files} ->
-  #       send_message(chat.id, """
-  #       Files:
-  #       #{Enum.map(files, fn file -> file["name"] end) |> Enum.join("\n")}
-  #       """)
-  #     {:error, error} ->
-  #       IO.inspect(error)
-  #   end
-  # end
-
   def handle({:command, :folder, %{chat: chat, text: text}}, _context) do
     case text do
       nil ->
@@ -144,7 +132,6 @@ defmodule AierBot.Bot do
 
     unless Enum.empty?(urls) do
       {:ok, progress_message} = send_message(chat.id, Enum.at(@progress, 0))
-      # TODO: for payment, free only one url, for multiple urls, need to pay
       url = List.first(urls)
 
       case CobaltClient.get_download_url(url) do
@@ -152,7 +139,7 @@ defmodule AierBot.Bot do
           case FileHelper.get_downloaded_files(download_urls) do
             nil ->
               update_message(chat.id, progress_message.message_id, Enum.slice(@progress, 0..1))
-              # TODO:
+
               case FileHelper.download_files(download_urls) do
                 {:ok, files} ->
                   update_message(
@@ -161,7 +148,7 @@ defmodule AierBot.Bot do
                     Enum.slice(@progress, 0..2)
                   )
 
-                  # TODO:
+                  # TODO: send media group
                   # bot_send_media_group(chat.id, files)
                   bot_send_files(chat.id, files)
 
