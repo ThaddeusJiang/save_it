@@ -1,4 +1,4 @@
-# save_it
+# Save it
 
 A telegram bot who save what you love in internet.
 
@@ -12,6 +12,10 @@ A telegram bot who save what you love in internet.
 ## Usage
 
 Just send the link to the bot.
+
+<a href="https://x.com/ThaddeusJiang/status/1815376745056682303">
+<div><video controls src="https://x.com/i/status/1815376745056682303" muted="false"></video></div>
+</a>
 
 ## Build with
 
