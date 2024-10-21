@@ -5,6 +5,10 @@ defmodule SaveIt.Bot do
   alias SaveIt.GoogleDrive
   alias SaveIt.GoogleOAuth2DeviceFlow
 
+  alias SaveIt.TypesenseClient
+
+  alias SmallSdk.Telegram
+
   @bot :save_it_bot
 
   @progress [
@@ -19,10 +23,11 @@ defmodule SaveIt.Bot do
     setup_commands: true
 
   command("start")
-  command("about", description: "About the bot")
-  command("code", description: "Get code for login")
+  command("search", description: "Search similar photos by photo")
   command("login", description: "Login")
+  command("code", description: "Get code for login")
   command("folder", description: "Update Google Drive folder ID")
+  command("about", description: "About the bot")
 
   middleware(ExGram.Middleware.IgnoreUsername)
 
@@ -94,25 +99,6 @@ defmodule SaveIt.Bot do
     end
   end
 
-  defp login_google(chat) do
-    device_code = FileHelper.get_google_device_code(chat.id)
-
-    case GoogleOAuth2DeviceFlow.exchange_device_code_for_token(device_code) do
-      {:ok, body} ->
-        FileHelper.set_google_access_token(chat.id, body["access_token"])
-        send_message(chat.id, "Successfully logged in!")
-
-      {:error, error} ->
-        Logger.error("Failed to log in: #{inspect(error)}")
-
-        send_message(chat.id, """
-        Failed to log in.
-
-        Please run `/code` to get a new code, then run `/login` again.
-        """)
-    end
-  end
-
   def handle({:command, :folder, %{chat: chat, text: text}}, _context) do
     case text do
       nil ->
@@ -125,6 +111,22 @@ defmodule SaveIt.Bot do
         FileHelper.set_google_drive_folder_id(chat.id, text)
         send_message(chat.id, "Folder ID set successfully.")
     end
+  end
+
+  def handle({:command, :search, %{chat: chat, photo: nil}}, _context) do
+    send_message(chat.id, "Please send me a photo to search.")
+    # TODO: ex_gram 是否可以支持连续对话？
+  end
+
+  def handle({:message, %{chat: chat, caption: caption, photo: photos}}, ctx) do
+    photo = List.last(photos)
+
+    bot_id = ctx.bot_info.id
+
+    similar_photos =
+      search_similar_photos_based_on_caption(bot_id, photo, caption)
+
+    answer_similar_photos(chat.id, similar_photos)
   end
 
   def handle({:text, text, %{chat: chat, message_id: message_id}}, _context) do
@@ -202,12 +204,12 @@ defmodule SaveIt.Bot do
                   )
               end
 
-            download_file ->
+            downloaded_file ->
               Logger.info("👍 File already downloaded, don't need to download again")
 
               update_message(chat.id, progress_message.message_id, Enum.slice(@progress, 0..2))
 
-              bot_send_file(chat.id, download_file, {:file, download_file})
+              bot_send_file(chat.id, downloaded_file, {:file, downloaded_file})
               delete_messages(chat.id, [message_id, progress_message.message_id])
           end
 
@@ -236,6 +238,44 @@ defmodule SaveIt.Bot do
   #   Logger.debug(":message: #{inspect(message)}")
   #   {:ok, nil}
   # end
+
+  defp search_similar_photos(bot_id, photo, distance_threshold) do
+    file = ExGram.get_file!(photo.file_id)
+
+    photo_file_content = Telegram.download_file_content!(file.file_path)
+
+    TypesenseClient.search_photos!(
+      %{
+        url: photo_url(bot_id, file.file_id),
+        caption: Map.get(photo, "caption", ""),
+        image: Base.encode64(photo_file_content)
+      },
+      distance_threshold: distance_threshold
+    )
+  end
+
+  defp pick_file_id_from_photo_url(photo_url) do
+    %{"file_id" => file_id} =
+      Regex.named_captures(~r"/files/(?<bot_id>\d+)/(?<file_id>.+)", photo_url)
+
+    file_id
+  end
+
+  defp answer_similar_photos(chat_id, nil) do
+    send_message(chat_id, "No similar photos found.")
+  end
+
+  defp answer_similar_photos(chat_id, similar_photos) do
+    media =
+      Enum.map(similar_photos, fn photo ->
+        %ExGram.Model.InputMediaPhoto{
+          type: "photo",
+          media: pick_file_id_from_photo_url(photo["url"])
+        }
+      end)
+
+    ExGram.send_media_group(chat_id, media)
+  end
 
   defp extract_urls_from_string(str) do
     regex = ~r/http[s]?:\/\/[^\s]+/
@@ -298,7 +338,21 @@ defmodule SaveIt.Bot do
 
     case file_extension(file_name) do
       ext when ext in [".png", ".jpg", ".jpeg"] ->
-        ExGram.send_photo(chat_id, content)
+        {:ok, msg} = ExGram.send_photo(chat_id, content)
+        bot_id = msg.from.id
+        file_id = get_file_id(msg)
+
+        image_base64 =
+          case file_content do
+            {:file, file} -> File.read!(file) |> Base.encode64()
+            {:file_content, file_content, _file_name} -> Base.encode64(file_content)
+          end
+
+        TypesenseClient.create_photo!(%{
+          url: photo_url(bot_id, file_id),
+          caption: file_name,
+          image: image_base64
+        })
 
       ".mp4" ->
         ExGram.send_video(chat_id, content, supports_streaming: true)
@@ -313,5 +367,47 @@ defmodule SaveIt.Bot do
 
   defp file_extension(file_name) do
     Path.extname(file_name)
+  end
+
+  defp get_file_id(msg) do
+    photo =
+      msg.photo
+      |> List.last()
+
+    photo.file_id
+  end
+
+  defp login_google(chat) do
+    device_code = FileHelper.get_google_device_code(chat.id)
+
+    case GoogleOAuth2DeviceFlow.exchange_device_code_for_token(device_code) do
+      {:ok, body} ->
+        FileHelper.set_google_access_token(chat.id, body["access_token"])
+        send_message(chat.id, "Successfully logged in!")
+
+      {:error, error} ->
+        Logger.error("Failed to log in: #{inspect(error)}")
+
+        send_message(chat.id, """
+        Failed to log in.
+
+        Please run `/code` to get a new code, then run `/login` again.
+        """)
+    end
+  end
+
+  defp photo_url(bot_id, file_id) do
+    proxy_url = Application.fetch_env!(:save_it, :web_url) <> "/telegram/files"
+    Logger.debug("bot_id: #{bot_id}, file_id: #{file_id}, proxy_url: #{proxy_url}")
+
+    "#{proxy_url}/#{bot_id}/#{file_id}"
+  end
+
+  defp search_similar_photos_based_on_caption(bot_id, photo, caption) do
+    if caption && String.contains?(caption, "/search") do
+      search_similar_photos(bot_id, photo, 0.5)
+    else
+      search_similar_photos(bot_id, photo, 0.1)
+    end
   end
 end
