@@ -31,36 +31,14 @@ defmodule SmallSdk.TypesenseAdmin do
   end
 
   def create_collection!(schema) do
-    {url, api_key} = get_env()
-
-    req =
-      Req.new(
-        base_url: url,
-        url: "/collections",
-        headers: [
-          {"Content-Type", "application/json"},
-          {"X-TYPESENSE-API-KEY", api_key}
-        ]
-      )
-
+    req = build_request("/collections")
     {:ok, res} = Req.post(req, json: schema)
 
     res.body
   end
 
   def delete_collection!(collection_name) do
-    {url, api_key} = get_env()
-
-    req =
-      Req.new(
-        base_url: url,
-        url: "/collections/#{collection_name}",
-        headers: [
-          {"Content-Type", "application/json"},
-          {"X-TYPESENSE-API-KEY", api_key}
-        ]
-      )
-
+    req = build_request("/collections/#{collection_name}")
     {:ok, res} = Req.delete(req)
 
     res.body
@@ -71,5 +49,18 @@ defmodule SmallSdk.TypesenseAdmin do
     api_key = Application.fetch_env!(:save_it, :typesense_api_key)
 
     {url, api_key}
+  end
+
+  defp build_request(path) do
+    {url, api_key} = get_env()
+
+    Req.new(
+      base_url: url,
+      url: path,
+      headers: [
+        {"Content-Type", "application/json"},
+        {"X-TYPESENSE-API-KEY", api_key}
+      ]
+    )
   end
 end

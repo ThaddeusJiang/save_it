@@ -9,13 +9,6 @@ defmodule SaveIt.GoogleOAuth2DeviceFlow do
     {"Content-Type", "application/x-www-form-urlencoded"}
   ])
 
-  defp get_env() do
-    client_id = Application.get_env(:save_it, :google_oauth_client_id)
-    client_secret = Application.get_env(:save_it, :google_oauth_client_secret)
-
-    {client_id, client_secret}
-  end
-
   def get_device_code do
     {client_id, _} = get_env()
 
@@ -54,5 +47,12 @@ defmodule SaveIt.GoogleOAuth2DeviceFlow do
 
     post("/token", body)
     |> handle_response()
+  end
+
+  defp get_env() do
+    client_id = Application.fetch_env!(:save_it, :google_oauth_client_id)
+    client_secret = Application.fetch_env!(:save_it, :google_oauth_client_secret)
+
+    {client_id, client_secret}
   end
 end

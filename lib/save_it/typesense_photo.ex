@@ -18,7 +18,7 @@ defmodule SaveIt.TypesensePhoto do
   end
 
   def update_photo(photo) do
-    Typesense.update_document("photos", photo)
+    Typesense.update_document("photos", photo.id, photo)
   end
 
   def get_photo(photo_id) do
@@ -26,32 +26,23 @@ defmodule SaveIt.TypesensePhoto do
   end
 
   def search_photos!(q: q) do
-    {url, api_key} = get_env()
-
-    req =
-      Req.new(
-        base_url: url,
-        url: "multi_search",
-        headers: [{"X-TYPESENSE-API-KEY", api_key}, {"Content-Type", "application/json"}]
-      )
-
-    {:ok, res} =
-      Req.post(req,
-        json: %{
-          "searches" => [
-            %{
-              "q" => q,
-              "query_by" => "image_embedding",
-              "collection" => "photos",
-              "prefix" => false,
-              "vector_query" => "image_embedding:([], k: 5, distance_threshold: 0.75)",
-              "exclude_fields" => "image_embedding"
-            }
-          ]
+    req_body = %{
+      "searches" => [
+        %{
+          "q" => q,
+          "query_by" => "image_embedding",
+          "collection" => "photos",
+          "prefix" => false,
+          "vector_query" => "image_embedding:([], k: 5, distance_threshold: 0.75)",
+          "exclude_fields" => "image_embedding"
         }
-      )
+      ]
+    }
 
-    res.body["results"] |> hd() |> Map.get("hits") |> Enum.map(&Map.get(&1, "document"))
+    req = build_request("/multi_search")
+    {:ok, res} = Req.post(req, json: req_body)
+
+    res.body["results"] |> typesense_results_to_documents()
   end
 
   def search_photos!(id, opts \\ []) do
@@ -61,33 +52,28 @@ defmodule SaveIt.TypesensePhoto do
   end
 
   def search_similar_photos!(photo_id, opts \\ []) when is_binary(photo_id) do
-    {url, api_key} = get_env()
-
     distance_threshold = Keyword.get(opts, :distance_threshold, 0.4)
 
-    req =
-      Req.new(
-        base_url: url,
-        url: "/multi_search",
-        headers: [{"X-TYPESENSE-API-KEY", api_key}, {"Content-Type", "application/json"}]
-      )
-
-    {:ok, res} =
-      Req.post(req,
-        json: %{
-          "searches" => [
-            %{
-              "collection" => "photos",
-              "q" => "*",
-              "vector_query" =>
-                "image_embedding:([], id:#{photo_id}, distance_threshold: #{distance_threshold}, k: 4)",
-              "exclude_fields" => "image_embedding"
-            }
-          ]
+    req_body = %{
+      "searches" => [
+        %{
+          "collection" => "photos",
+          "q" => "*",
+          "vector_query" =>
+            "image_embedding:([], id:#{photo_id}, distance_threshold: #{distance_threshold}, k: 4)",
+          "exclude_fields" => "image_embedding"
         }
-      )
+      ]
+    }
 
-    res.body["results"] |> hd() |> Map.get("hits") |> Enum.map(&Map.get(&1, "document"))
+    req = build_request("/multi_search")
+    {:ok, res} = Req.post(req, json: req_body)
+
+    res.body["results"] |> typesense_results_to_documents()
+  end
+
+  defp typesense_results_to_documents(results) do
+    results |> hd() |> Map.get("hits") |> Enum.map(&Map.get(&1, "document"))
   end
 
   defp get_env() do
@@ -95,5 +81,18 @@ defmodule SaveIt.TypesensePhoto do
     api_key = Application.fetch_env!(:save_it, :typesense_api_key)
 
     {url, api_key}
+  end
+
+  defp build_request(path) do
+    {url, api_key} = get_env()
+
+    Req.new(
+      base_url: url,
+      url: path,
+      headers: [
+        {"Content-Type", "application/json"},
+        {"X-TYPESENSE-API-KEY", api_key}
+      ]
+    )
   end
 end

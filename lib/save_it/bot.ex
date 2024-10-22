@@ -272,10 +272,16 @@ defmodule SaveIt.Bot do
   end
 
   defp pick_file_id_from_photo_url(photo_url) do
-    %{"file_id" => file_id} =
+    captures =
       Regex.named_captures(~r"/files/(?<bot_id>\d+)/(?<file_id>.+)", photo_url)
 
-    file_id
+    if captures == nil do
+      Logger.error("Invalid photo URL: #{photo_url}")
+      nil
+    else
+      %{"file_id" => file_id} = captures
+      file_id
+    end
   end
 
   defp answer_photos(chat_id, nil) do
@@ -297,7 +303,14 @@ defmodule SaveIt.Bot do
         }
       end)
 
-    ExGram.send_media_group(chat_id, media)
+    case ExGram.send_media_group(chat_id, media) do
+      {:ok, _response} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.error("Failed to send media group: #{inspect(reason)}")
+        send_message(chat_id, "Failed to send photos.")
+    end
   end
 
   defp extract_urls_from_string(str) do
@@ -394,11 +407,15 @@ defmodule SaveIt.Bot do
   end
 
   defp get_file_id(msg) do
-    photo =
-      msg.photo
-      |> List.last()
+    case msg.photo do
+      photos when is_list(photos) and length(photos) > 0 ->
+        photo = List.last(photos)
+        photo.file_id
 
-    photo.file_id
+      _ ->
+        Logger.error("No photo found in the message")
+        nil
+    end
   end
 
   defp login_google(chat) do
@@ -423,27 +440,29 @@ defmodule SaveIt.Bot do
   defp photo_url(bot_id, file_id) do
     proxy_url = Application.fetch_env!(:save_it, :web_url) <> "/telegram/files"
 
-    "#{proxy_url}/#{bot_id}/#{file_id}"
+    encoded_bot_id = URI.encode(bot_id |> to_string())
+    encoded_file_id = URI.encode(file_id)
+    "#{proxy_url}/#{encoded_bot_id}/#{encoded_file_id}"
   end
 
   defp search_similar_photos_based_on_caption(photo, caption, opts) do
     bot_id = Keyword.get(opts, :bot_id)
     chat_id = Keyword.get(opts, :chat_id)
 
-    if caption && String.contains?(caption, "/search") do
-      similar_photos =
-        search_similar_photos(photo,
-          distance_threshold: 0.4,
-          bot_id: bot_id,
-          chat_id: chat_id
-        )
+    distance_threshold =
+      if caption && String.contains?(caption, "/search") do
+        0.4
+      else
+        0.1
+      end
 
-      answer_photos(chat_id, similar_photos)
-    else
-      similar_photos =
-        search_similar_photos(photo, distance_threshold: 0.1, bot_id: bot_id, chat_id: chat_id)
+    similar_photos =
+      search_similar_photos(photo,
+        distance_threshold: distance_threshold,
+        bot_id: bot_id,
+        chat_id: chat_id
+      )
 
-      answer_photos(chat_id, similar_photos)
-    end
+    answer_photos(chat_id, similar_photos)
   end
 end
