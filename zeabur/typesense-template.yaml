@@ -22,7 +22,7 @@ spec:
             dir: /data
         env:
           TYPESENSE_API_KEY:
-            default: ""
+            default: "xyz"
             expose: false
           TYPESENSE_DATA_DIR:
             default: /data
