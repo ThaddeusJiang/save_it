@@ -23,6 +23,7 @@ defmodule SmallSdk.Typesense do
   end
 
   def create_search_key() do
+    {url, _} = get_env()
     req = build_request("/keys")
 
     {:ok, res} =
