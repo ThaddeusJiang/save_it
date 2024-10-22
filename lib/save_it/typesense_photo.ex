@@ -25,7 +25,7 @@ defmodule SaveIt.TypesensePhoto do
     Typesense.get_document("photos", photo_id)
   end
 
-  def search_photos!(q: q) do
+  def search_photos!(q: q, belongs_to_id: belongs_to_id) do
     req_body = %{
       "searches" => [
         %{
@@ -34,6 +34,7 @@ defmodule SaveIt.TypesensePhoto do
           "collection" => "photos",
           "prefix" => false,
           "vector_query" => "image_embedding:([], k: 5, distance_threshold: 0.75)",
+          "filter_by" => "belongs_to_id:#{belongs_to_id}",
           "exclude_fields" => "image_embedding"
         }
       ]
@@ -46,12 +47,17 @@ defmodule SaveIt.TypesensePhoto do
   end
 
   def search_photos!(id, opts \\ []) do
+    belongs_to_id = Keyword.get(opts, :belongs_to_id)
     distance_threshold = Keyword.get(opts, :distance_threshold, 0.4)
 
-    search_similar_photos!(id, distance_threshold: distance_threshold)
+    search_similar_photos!(id,
+      distance_threshold: distance_threshold,
+      belongs_to_id: belongs_to_id
+    )
   end
 
   def search_similar_photos!(photo_id, opts \\ []) when is_binary(photo_id) do
+    belongs_to_id = Keyword.get(opts, :belongs_to_id)
     distance_threshold = Keyword.get(opts, :distance_threshold, 0.4)
 
     req_body = %{
@@ -61,6 +67,8 @@ defmodule SaveIt.TypesensePhoto do
           "q" => "*",
           "vector_query" =>
             "image_embedding:([], id:#{photo_id}, distance_threshold: #{distance_threshold}, k: 4)",
+          # TODO:today
+          "filter_by" => "belongs_to_id:#{belongs_to_id}",
           "exclude_fields" => "image_embedding"
         }
       ]
