@@ -114,7 +114,7 @@ defmodule SaveIt.Bot do
   end
 
   def handle({:command, :search, %{chat: chat, photo: nil, text: q}}, _context) do
-    photos = TypesensePhoto.search_photos!(q: q)
+    photos = TypesensePhoto.search_photos!(q: q, belongs_to_id: chat.id)
 
     answer_photos(chat.id, photos)
   end
@@ -266,7 +266,8 @@ defmodule SaveIt.Bot do
     if typesense_photo != nil do
       TypesensePhoto.search_photos!(
         typesense_photo["id"],
-        distance_threshold: distance_threshold
+        distance_threshold: distance_threshold,
+        belongs_to_id: chat_id
       )
     end
   end
