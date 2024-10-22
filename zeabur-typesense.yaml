@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=https://schema.zeabur.app/template.json
+apiVersion: zeabur.com/v1
+kind: Template
+metadata:
+  name: Typesense
+spec:
+  description: Fast, open source, typo-tolerant search engine
+  icon: "https://typesense.org/docs/images/typesense_logo.svg"
+  services:
+    - name: typesense
+      icon: https://typesense.org/docs/images/typesense_logo.svg
+      template: PREBUILT_V2
+      spec:
+        source:
+          image: typesense/typesense:27.1
+        ports:
+          - id: web
+            port: 8108
+            type: HTTP
+        volumes:
+          - id: data
+            dir: /data
+        env:
+          TYPESENSE_API_KEY:
+            default: ""
+            expose: false
+          TYPESENSE_DATA_DIR:
+            default: /data
+            expose: false
+        configs: []
