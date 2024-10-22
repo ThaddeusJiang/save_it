@@ -67,7 +67,6 @@ defmodule SaveIt.TypesensePhoto do
           "q" => "*",
           "vector_query" =>
             "image_embedding:([], id:#{photo_id}, distance_threshold: #{distance_threshold}, k: 4)",
-          # TODO:today
           "filter_by" => "belongs_to_id:#{belongs_to_id}",
           "exclude_fields" => "image_embedding"
         }
