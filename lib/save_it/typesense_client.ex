@@ -20,6 +20,26 @@ defmodule SaveIt.TypesenseClient do
     get_document("photos", photo_id)
   end
 
+  def search_photos!(q) do
+    {url, api_key} = get_env()
+
+    req =
+      Req.new(
+        base_url: url,
+        url: "multi_search",
+        headers: [{"X-TYPESENSE-API-KEY", api_key}, {"Content-Type", "application/json"}]
+      )
+
+    {:ok, res} =
+      Req.post(req,
+        json: %{
+          "searches" => [%{"collection" => "photos", "q" => q, "query_by" => "image_embedding"}]
+        }
+      )
+
+    res.body["results"] |> hd() |> Map.get("hits") |> Enum.map(&Map.get(&1, "document"))
+  end
+
   def search_photos!(photo_params, opts \\ []) do
     distance_threshold = Keyword.get(opts, :distance_threshold, 0.40)
     photo = create_photo!(photo_params)

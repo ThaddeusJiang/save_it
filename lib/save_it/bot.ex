@@ -113,6 +113,12 @@ defmodule SaveIt.Bot do
     end
   end
 
+  def handle({:command, :search, %{chat: chat, photo: nil, text: q}} = msg, _context) do
+    photos = TypesenseClient.search_photos!(q)
+
+    answer_photos(chat.id, photos)
+  end
+
   def handle({:command, :search, %{chat: chat, photo: nil}}, _context) do
     send_message(chat.id, "Please send me a photo to search.")
     # TODO: ex_gram 是否可以支持连续对话？
@@ -126,7 +132,7 @@ defmodule SaveIt.Bot do
     similar_photos =
       search_similar_photos_based_on_caption(bot_id, photo, caption)
 
-    answer_similar_photos(chat.id, similar_photos)
+    answer_photos(chat.id, similar_photos)
   end
 
   def handle({:text, text, %{chat: chat, message_id: message_id}}, _context) do
@@ -228,6 +234,11 @@ defmodule SaveIt.Bot do
     {:ok, nil}
   end
 
+  def handle({:edited_message, _msg}, _context) do
+    Logger.warning("this is an edited message, ignore it")
+    {:ok, nil}
+  end
+
   # def handle({:update, update}, _context) do
   #   Logger.debug(":update: #{inspect(update)}")
   #   {:ok, nil}
@@ -261,11 +272,11 @@ defmodule SaveIt.Bot do
     file_id
   end
 
-  defp answer_similar_photos(chat_id, nil) do
+  defp answer_photos(chat_id, nil) do
     send_message(chat_id, "No similar photos found.")
   end
 
-  defp answer_similar_photos(chat_id, similar_photos) do
+  defp answer_photos(chat_id, similar_photos) do
     media =
       Enum.map(similar_photos, fn photo ->
         %ExGram.Model.InputMediaPhoto{
