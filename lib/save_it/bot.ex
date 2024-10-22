@@ -5,6 +5,10 @@ defmodule SaveIt.Bot do
   alias SaveIt.GoogleDrive
   alias SaveIt.GoogleOAuth2DeviceFlow
 
+  alias SaveIt.TypesensePhoto
+
+  alias SmallSdk.Telegram
+
   @bot :save_it_bot
 
   @progress [
@@ -19,10 +23,11 @@ defmodule SaveIt.Bot do
     setup_commands: true
 
   command("start")
-  command("about", description: "About the bot")
-  command("code", description: "Get code for login")
+  command("search", description: "Search similar photos by photo")
   command("login", description: "Login")
+  command("code", description: "Get code for login")
   command("folder", description: "Update Google Drive folder ID")
+  command("about", description: "About the bot")
 
   middleware(ExGram.Middleware.IgnoreUsername)
 
@@ -94,25 +99,6 @@ defmodule SaveIt.Bot do
     end
   end
 
-  defp login_google(chat) do
-    device_code = FileHelper.get_google_device_code(chat.id)
-
-    case GoogleOAuth2DeviceFlow.exchange_device_code_for_token(device_code) do
-      {:ok, body} ->
-        FileHelper.set_google_access_token(chat.id, body["access_token"])
-        send_message(chat.id, "Successfully logged in!")
-
-      {:error, error} ->
-        Logger.error("Failed to log in: #{inspect(error)}")
-
-        send_message(chat.id, """
-        Failed to log in.
-
-        Please run `/code` to get a new code, then run `/login` again.
-        """)
-    end
-  end
-
   def handle({:command, :folder, %{chat: chat, text: text}}, _context) do
     case text do
       nil ->
@@ -125,6 +111,25 @@ defmodule SaveIt.Bot do
         FileHelper.set_google_drive_folder_id(chat.id, text)
         send_message(chat.id, "Folder ID set successfully.")
     end
+  end
+
+  def handle({:command, :search, %{chat: chat, photo: nil, text: q}}, _context) do
+    photos = TypesensePhoto.search_photos!(q: q)
+
+    answer_photos(chat.id, photos)
+  end
+
+  def handle({:command, :search, %{chat: chat, photo: nil}}, _context) do
+    send_message(chat.id, "Please send me a photo to search.")
+  end
+
+  def handle({:message, %{chat: chat, caption: caption, photo: photos}}, ctx) do
+    photo = List.last(photos)
+
+    search_similar_photos_based_on_caption(photo, caption,
+      chat_id: chat.id,
+      bot_id: ctx.bot_info.id
+    )
   end
 
   def handle({:text, text, %{chat: chat, message_id: message_id}}, _context) do
@@ -202,12 +207,12 @@ defmodule SaveIt.Bot do
                   )
               end
 
-            download_file ->
+            downloaded_file ->
               Logger.info("👍 File already downloaded, don't need to download again")
 
               update_message(chat.id, progress_message.message_id, Enum.slice(@progress, 0..2))
 
-              bot_send_file(chat.id, download_file, {:file, download_file})
+              bot_send_file(chat.id, downloaded_file, {:file, downloaded_file})
               delete_messages(chat.id, [message_id, progress_message.message_id])
           end
 
@@ -226,16 +231,87 @@ defmodule SaveIt.Bot do
     {:ok, nil}
   end
 
-  # def handle({:update, update}, _context) do
-  #   Logger.debug(":update: #{inspect(update)}")
-  #   {:ok, nil}
-  # end
+  def handle({:edited_message, _msg}, _context) do
+    Logger.warning("this is an edited message, ignore it")
+    {:ok, nil}
+  end
 
-  # Doc: https://hexdocs.pm/ex_gram/readme.html#how-to-handle-messages
-  # def handle({:message, message}, _context) do
-  #   Logger.debug(":message: #{inspect(message)}")
-  #   {:ok, nil}
-  # end
+  def handle({:update, _update}, _context) do
+    Logger.warning("this is an update, ignore it")
+    {:ok, nil}
+  end
+
+  def handle({:message, _message}, _context) do
+    Logger.warning("this is a message, ignore it")
+    {:ok, nil}
+  end
+
+  defp search_similar_photos(photo, opts) do
+    file = ExGram.get_file!(photo.file_id)
+
+    photo_file_content = Telegram.download_file_content!(file.file_path)
+
+    bot_id = Keyword.get(opts, :bot_id)
+    chat_id = Keyword.get(opts, :chat_id)
+    distance_threshold = Keyword.get(opts, :distance_threshold, 0.4)
+
+    typesense_photo =
+      TypesensePhoto.create_photo!(%{
+        image: Base.encode64(photo_file_content),
+        caption: Map.get(photo, "caption", ""),
+        url: photo_url(bot_id, file.file_id),
+        belongs_to_id: chat_id
+      })
+
+    if typesense_photo != nil do
+      TypesensePhoto.search_photos!(
+        typesense_photo["id"],
+        distance_threshold: distance_threshold
+      )
+    end
+  end
+
+  defp pick_file_id_from_photo_url(photo_url) do
+    captures =
+      Regex.named_captures(~r"/files/(?<bot_id>\d+)/(?<file_id>.+)", photo_url)
+
+    if captures == nil do
+      Logger.error("Invalid photo URL: #{photo_url}")
+      nil
+    else
+      %{"file_id" => file_id} = captures
+      file_id
+    end
+  end
+
+  defp answer_photos(chat_id, nil) do
+    send_message(chat_id, "No photos found.")
+  end
+
+  defp answer_photos(chat_id, []) do
+    send_message(chat_id, "No photos found.")
+  end
+
+  defp answer_photos(chat_id, similar_photos) do
+    media =
+      Enum.map(similar_photos, fn photo ->
+        %ExGram.Model.InputMediaPhoto{
+          type: "photo",
+          media: pick_file_id_from_photo_url(photo["url"]),
+          caption: "Found photos",
+          show_caption_above_media: true
+        }
+      end)
+
+    case ExGram.send_media_group(chat_id, media) do
+      {:ok, _response} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.error("Failed to send media group: #{inspect(reason)}")
+        send_message(chat_id, "Failed to send photos.")
+    end
+  end
 
   defp extract_urls_from_string(str) do
     regex = ~r/http[s]?:\/\/[^\s]+/
@@ -298,7 +374,22 @@ defmodule SaveIt.Bot do
 
     case file_extension(file_name) do
       ext when ext in [".png", ".jpg", ".jpeg"] ->
-        ExGram.send_photo(chat_id, content)
+        {:ok, msg} = ExGram.send_photo(chat_id, content)
+        bot_id = msg.from.id
+        file_id = get_file_id(msg)
+
+        image_base64 =
+          case file_content do
+            {:file, file} -> File.read!(file) |> Base.encode64()
+            {:file_content, file_content, _file_name} -> Base.encode64(file_content)
+          end
+
+        TypesensePhoto.create_photo!(%{
+          image: image_base64,
+          caption: file_name,
+          url: photo_url(bot_id, file_id),
+          belongs_to_id: chat_id
+        })
 
       ".mp4" ->
         ExGram.send_video(chat_id, content, supports_streaming: true)
@@ -313,5 +404,65 @@ defmodule SaveIt.Bot do
 
   defp file_extension(file_name) do
     Path.extname(file_name)
+  end
+
+  defp get_file_id(msg) do
+    case msg.photo do
+      photos when is_list(photos) and length(photos) > 0 ->
+        photo = List.last(photos)
+        photo.file_id
+
+      _ ->
+        Logger.error("No photo found in the message")
+        nil
+    end
+  end
+
+  defp login_google(chat) do
+    device_code = FileHelper.get_google_device_code(chat.id)
+
+    case GoogleOAuth2DeviceFlow.exchange_device_code_for_token(device_code) do
+      {:ok, body} ->
+        FileHelper.set_google_access_token(chat.id, body["access_token"])
+        send_message(chat.id, "Successfully logged in!")
+
+      {:error, error} ->
+        Logger.error("Failed to log in: #{inspect(error)}")
+
+        send_message(chat.id, """
+        Failed to log in.
+
+        Please run `/code` to get a new code, then run `/login` again.
+        """)
+    end
+  end
+
+  defp photo_url(bot_id, file_id) do
+    proxy_url = Application.fetch_env!(:save_it, :web_url) <> "/telegram/files"
+
+    encoded_bot_id = URI.encode(bot_id |> to_string())
+    encoded_file_id = URI.encode(file_id)
+    "#{proxy_url}/#{encoded_bot_id}/#{encoded_file_id}"
+  end
+
+  defp search_similar_photos_based_on_caption(photo, caption, opts) do
+    bot_id = Keyword.get(opts, :bot_id)
+    chat_id = Keyword.get(opts, :chat_id)
+
+    distance_threshold =
+      if caption && String.contains?(caption, "/search") do
+        0.4
+      else
+        0.1
+      end
+
+    similar_photos =
+      search_similar_photos(photo,
+        distance_threshold: distance_threshold,
+        bot_id: bot_id,
+        chat_id: chat_id
+      )
+
+    answer_photos(chat_id, similar_photos)
   end
 end

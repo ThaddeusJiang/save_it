@@ -35,8 +35,8 @@ mix deps.get
 ```sh
 # run
 export TELEGRAM_BOT_TOKEN=
-export GOOGLE_OAUTH_CLIENT_ID=
-export GOOGLE_OAUTH_CLIENT_SECRET=
+# export GOOGLE_OAUTH_CLIENT_ID=
+# export GOOGLE_OAUTH_CLIENT_SECRET=
 
 iex -S mix run --no-halt
 ```

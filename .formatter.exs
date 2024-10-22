@@ -2,7 +2,7 @@
 [
   inputs: [
     "{mix,.formatter}.exs",
-    "{config,lib,test}/**/*.{ex,exs}",
+    "{config,lib,test,priv}/**/*.{ex,exs}",
     "_local/**/*.{ex,exs}"
   ]
 ]
