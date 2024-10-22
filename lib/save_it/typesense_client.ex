@@ -8,8 +8,20 @@ defmodule SaveIt.TypesenseClient do
     {url, api_key}
   end
 
-  def create_photo!(photo) do
-    create_document!("photos", photo)
+  def create_photo!(
+        %{
+          belongs_to_id: belongs_to_id
+        } = photo_params
+      ) do
+    photo_create_input =
+      photo_params
+      |> Map.put(:belongs_to_id, Integer.to_string(belongs_to_id))
+      |> Map.put(:inserted_at, DateTime.utc_now() |> DateTime.to_unix())
+
+    create_document!(
+      "photos",
+      photo_create_input
+    )
   end
 
   def update_photo(photo) do
@@ -20,7 +32,7 @@ defmodule SaveIt.TypesenseClient do
     get_document("photos", photo_id)
   end
 
-  def search_photos!(q) do
+  def search_photos!(q: q) do
     {url, api_key} = get_env()
 
     req =
@@ -33,18 +45,28 @@ defmodule SaveIt.TypesenseClient do
     {:ok, res} =
       Req.post(req,
         json: %{
-          "searches" => [%{"collection" => "photos", "q" => q, "query_by" => "image_embedding"}]
+          "searches" => [
+            %{
+              "q" => q,
+              "query_by" => "image_embedding",
+              "collection" => "photos",
+              "prefix" => false,
+              "vector_query" => "image_embedding:([], k: 5, distance_threshold: 0.75)",
+              "exclude_fields" => "image_embedding"
+            }
+          ]
         }
       )
+
+    Logger.debug("debug: res #{inspect(res)}")
 
     res.body["results"] |> hd() |> Map.get("hits") |> Enum.map(&Map.get(&1, "document"))
   end
 
-  def search_photos!(photo_params, opts \\ []) do
-    distance_threshold = Keyword.get(opts, :distance_threshold, 0.40)
-    photo = create_photo!(photo_params)
+  def search_photos!(id, opts \\ []) do
+    distance_threshold = Keyword.get(opts, :distance_threshold, 0.4)
 
-    photos = search_similar_photos!(photo["id"], distance_threshold: distance_threshold)
+    photos = search_similar_photos!(id, distance_threshold: distance_threshold)
 
     photos
   end
@@ -52,7 +74,7 @@ defmodule SaveIt.TypesenseClient do
   def search_similar_photos!(photo_id, opts \\ []) when is_binary(photo_id) do
     {url, api_key} = get_env()
 
-    distance_threshold = Keyword.get(opts, :distance_threshold, 0.40)
+    distance_threshold = Keyword.get(opts, :distance_threshold, 0.4)
 
     req =
       Req.new(

@@ -113,26 +113,23 @@ defmodule SaveIt.Bot do
     end
   end
 
-  def handle({:command, :search, %{chat: chat, photo: nil, text: q}} = msg, _context) do
-    photos = TypesenseClient.search_photos!(q)
+  def handle({:command, :search, %{chat: chat, photo: nil, text: q}}, _context) do
+    photos = TypesenseClient.search_photos!(q: q)
 
     answer_photos(chat.id, photos)
   end
 
   def handle({:command, :search, %{chat: chat, photo: nil}}, _context) do
     send_message(chat.id, "Please send me a photo to search.")
-    # TODO: ex_gram 是否可以支持连续对话？
   end
 
   def handle({:message, %{chat: chat, caption: caption, photo: photos}}, ctx) do
     photo = List.last(photos)
 
-    bot_id = ctx.bot_info.id
-
-    similar_photos =
-      search_similar_photos_based_on_caption(bot_id, photo, caption)
-
-    answer_photos(chat.id, similar_photos)
+    search_similar_photos_based_on_caption(photo, caption,
+      chat_id: chat.id,
+      bot_id: ctx.bot_info.id
+    )
   end
 
   def handle({:text, text, %{chat: chat, message_id: message_id}}, _context) do
@@ -250,19 +247,29 @@ defmodule SaveIt.Bot do
   #   {:ok, nil}
   # end
 
-  defp search_similar_photos(bot_id, photo, distance_threshold) do
+  defp search_similar_photos(photo, opts) do
     file = ExGram.get_file!(photo.file_id)
 
     photo_file_content = Telegram.download_file_content!(file.file_path)
 
-    TypesenseClient.search_photos!(
-      %{
-        url: photo_url(bot_id, file.file_id),
+    bot_id = Keyword.get(opts, :bot_id)
+    chat_id = Keyword.get(opts, :chat_id)
+    distance_threshold = Keyword.get(opts, :distance_threshold, 0.4)
+
+    typesense_photo =
+      TypesenseClient.create_photo!(%{
+        image: Base.encode64(photo_file_content),
         caption: Map.get(photo, "caption", ""),
-        image: Base.encode64(photo_file_content)
-      },
-      distance_threshold: distance_threshold
-    )
+        url: photo_url(bot_id, file.file_id),
+        belongs_to_id: chat_id
+      })
+
+    if typesense_photo != nil do
+      TypesenseClient.search_photos!(
+        typesense_photo["id"],
+        distance_threshold: distance_threshold
+      )
+    end
   end
 
   defp pick_file_id_from_photo_url(photo_url) do
@@ -273,7 +280,11 @@ defmodule SaveIt.Bot do
   end
 
   defp answer_photos(chat_id, nil) do
-    send_message(chat_id, "No similar photos found.")
+    send_message(chat_id, "No photos found.")
+  end
+
+  defp answer_photos(chat_id, []) do
+    send_message(chat_id, "No photos found.")
   end
 
   defp answer_photos(chat_id, similar_photos) do
@@ -281,7 +292,9 @@ defmodule SaveIt.Bot do
       Enum.map(similar_photos, fn photo ->
         %ExGram.Model.InputMediaPhoto{
           type: "photo",
-          media: pick_file_id_from_photo_url(photo["url"])
+          media: pick_file_id_from_photo_url(photo["url"]),
+          caption: "Found photos",
+          show_caption_above_media: true
         }
       end)
 
@@ -360,9 +373,10 @@ defmodule SaveIt.Bot do
           end
 
         TypesenseClient.create_photo!(%{
-          url: photo_url(bot_id, file_id),
+          image: image_base64,
           caption: file_name,
-          image: image_base64
+          url: photo_url(bot_id, file_id),
+          belongs_to_id: chat_id
         })
 
       ".mp4" ->
@@ -409,16 +423,28 @@ defmodule SaveIt.Bot do
 
   defp photo_url(bot_id, file_id) do
     proxy_url = Application.fetch_env!(:save_it, :web_url) <> "/telegram/files"
-    Logger.debug("bot_id: #{bot_id}, file_id: #{file_id}, proxy_url: #{proxy_url}")
 
     "#{proxy_url}/#{bot_id}/#{file_id}"
   end
 
-  defp search_similar_photos_based_on_caption(bot_id, photo, caption) do
+  defp search_similar_photos_based_on_caption(photo, caption, opts) do
+    bot_id = Keyword.get(opts, :bot_id)
+    chat_id = Keyword.get(opts, :chat_id)
+
     if caption && String.contains?(caption, "/search") do
-      search_similar_photos(bot_id, photo, 0.5)
+      similar_photos =
+        search_similar_photos(photo,
+          distance_threshold: 0.4,
+          bot_id: bot_id,
+          chat_id: chat_id
+        )
+
+      answer_photos(chat_id, similar_photos)
     else
-      search_similar_photos(bot_id, photo, 0.1)
+      similar_photos =
+        search_similar_photos(photo, distance_threshold: 0.1, bot_id: bot_id, chat_id: chat_id)
+
+      answer_photos(chat_id, similar_photos)
     end
   end
 end
