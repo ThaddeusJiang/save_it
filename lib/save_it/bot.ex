@@ -5,7 +5,7 @@ defmodule SaveIt.Bot do
   alias SaveIt.GoogleDrive
   alias SaveIt.GoogleOAuth2DeviceFlow
 
-  alias SaveIt.TypesenseClient
+  alias SaveIt.TypesensePhoto
 
   alias SmallSdk.Telegram
 
@@ -114,7 +114,7 @@ defmodule SaveIt.Bot do
   end
 
   def handle({:command, :search, %{chat: chat, photo: nil, text: q}}, _context) do
-    photos = TypesenseClient.search_photos!(q: q)
+    photos = TypesensePhoto.search_photos!(q: q)
 
     answer_photos(chat.id, photos)
   end
@@ -236,16 +236,15 @@ defmodule SaveIt.Bot do
     {:ok, nil}
   end
 
-  # def handle({:update, update}, _context) do
-  #   Logger.debug(":update: #{inspect(update)}")
-  #   {:ok, nil}
-  # end
+  def handle({:update, _update}, _context) do
+    Logger.warning("this is an update, ignore it")
+    {:ok, nil}
+  end
 
-  # Doc: https://hexdocs.pm/ex_gram/readme.html#how-to-handle-messages
-  # def handle({:message, message}, _context) do
-  #   Logger.debug(":message: #{inspect(message)}")
-  #   {:ok, nil}
-  # end
+  def handle({:message, _message}, _context) do
+    Logger.warning("this is a message, ignore it")
+    {:ok, nil}
+  end
 
   defp search_similar_photos(photo, opts) do
     file = ExGram.get_file!(photo.file_id)
@@ -257,7 +256,7 @@ defmodule SaveIt.Bot do
     distance_threshold = Keyword.get(opts, :distance_threshold, 0.4)
 
     typesense_photo =
-      TypesenseClient.create_photo!(%{
+      TypesensePhoto.create_photo!(%{
         image: Base.encode64(photo_file_content),
         caption: Map.get(photo, "caption", ""),
         url: photo_url(bot_id, file.file_id),
@@ -265,7 +264,7 @@ defmodule SaveIt.Bot do
       })
 
     if typesense_photo != nil do
-      TypesenseClient.search_photos!(
+      TypesensePhoto.search_photos!(
         typesense_photo["id"],
         distance_threshold: distance_threshold
       )
@@ -372,7 +371,7 @@ defmodule SaveIt.Bot do
             {:file_content, file_content, _file_name} -> Base.encode64(file_content)
           end
 
-        TypesenseClient.create_photo!(%{
+        TypesensePhoto.create_photo!(%{
           image: image_base64,
           caption: file_name,
           url: photo_url(bot_id, file_id),

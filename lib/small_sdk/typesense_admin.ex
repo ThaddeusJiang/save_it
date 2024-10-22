@@ -1,4 +1,4 @@
-defmodule SmallSdk.TypesenseAdminClient do
+defmodule SmallSdk.TypesenseAdmin do
   @photos_schema %{
     "name" => "photos",
     "fields" => [

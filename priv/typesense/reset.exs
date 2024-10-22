@@ -1,3 +1,3 @@
 # mix run priv/typesense/reset.exs
 
-SmallSdk.TypesenseAdminClient.reset()
+SmallSdk.TypesenseAdmin.reset()

@@ -1,12 +1,5 @@
-defmodule SaveIt.TypesenseClient do
-  require Logger
-
-  defp get_env() do
-    url = Application.get_env(:save_it, :typesense_url)
-    api_key = Application.get_env(:save_it, :typesense_api_key)
-
-    {url, api_key}
-  end
+defmodule SaveIt.TypesensePhoto do
+  alias SmallSdk.Typesense
 
   def create_photo!(
         %{
@@ -18,18 +11,18 @@ defmodule SaveIt.TypesenseClient do
       |> Map.put(:belongs_to_id, Integer.to_string(belongs_to_id))
       |> Map.put(:inserted_at, DateTime.utc_now() |> DateTime.to_unix())
 
-    create_document!(
+    Typesense.create_document!(
       "photos",
       photo_create_input
     )
   end
 
   def update_photo(photo) do
-    update_document("photos", photo)
+    Typesense.update_document("photos", photo)
   end
 
   def get_photo(photo_id) do
-    get_document("photos", photo_id)
+    Typesense.get_document("photos", photo_id)
   end
 
   def search_photos!(q: q) do
@@ -58,17 +51,13 @@ defmodule SaveIt.TypesenseClient do
         }
       )
 
-    Logger.debug("debug: res #{inspect(res)}")
-
     res.body["results"] |> hd() |> Map.get("hits") |> Enum.map(&Map.get(&1, "document"))
   end
 
   def search_photos!(id, opts \\ []) do
     distance_threshold = Keyword.get(opts, :distance_threshold, 0.4)
 
-    photos = search_similar_photos!(id, distance_threshold: distance_threshold)
-
-    photos
+    search_similar_photos!(id, distance_threshold: distance_threshold)
   end
 
   def search_similar_photos!(photo_id, opts \\ []) when is_binary(photo_id) do
@@ -101,83 +90,10 @@ defmodule SaveIt.TypesenseClient do
     res.body["results"] |> hd() |> Map.get("hits") |> Enum.map(&Map.get(&1, "document"))
   end
 
-  defp get_document(collection_name, document_id) do
-    {url, api_key} = get_env()
+  defp get_env() do
+    url = Application.fetch_env!(:save_it, :typesense_url)
+    api_key = Application.fetch_env!(:save_it, :typesense_api_key)
 
-    req =
-      Req.new(
-        base_url: url,
-        url: "/collections/#{collection_name}/documents/#{document_id}",
-        headers: [{"X-TYPESENSE-API-KEY", api_key}],
-        params: [exclude_fields: "image_embedding"]
-      )
-
-    {:ok, res} = Req.get(req)
-
-    res.body
-  end
-
-  defp create_document!(collection_name, document) do
-    {url, api_key} = get_env()
-
-    req =
-      Req.new(
-        base_url: url,
-        url: "/collections/#{collection_name}/documents",
-        headers: [
-          {"Content-Type", "application/json"},
-          {"X-TYPESENSE-API-KEY", api_key}
-        ]
-      )
-
-    {:ok, res} = Req.post(req, json: document)
-
-    res.body
-  end
-
-  defp update_document(collection_name, document) do
-    {url, api_key} = get_env()
-
-    req =
-      Req.new(
-        base_url: url,
-        url: "/collections/#{collection_name}/documents/#{document[:id]}",
-        headers: [
-          {"Content-Type", "application/json"},
-          {"X-TYPESENSE-API-KEY", api_key}
-        ]
-      )
-
-    {:ok, res} = Req.patch(req, json: document)
-
-    res.body
-  end
-
-  def create_search_key() do
-    {url, api_key} = get_env()
-
-    req =
-      Req.new(
-        base_url: url,
-        url: "/keys",
-        headers: [
-          {"Content-Type", "application/json"},
-          {"X-TYPESENSE-API-KEY", api_key}
-        ]
-      )
-
-    {:ok, res} =
-      Req.post(req,
-        json: %{
-          "description" => "Search-only photos key",
-          "actions" => ["documents:search"],
-          "collections" => ["photos"]
-        }
-      )
-
-    %{
-      url: url,
-      api_key: res.body["value"]
-    }
+    {url, api_key}
   end
 end
