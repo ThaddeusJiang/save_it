@@ -26,7 +26,9 @@ defmodule SaveIt.TypesensePhoto do
     Typesense.get_document("photos", photo_id)
   end
 
-  def search_photos!(q: q, belongs_to_id: belongs_to_id) do
+  def search_photos!(q, opts) do
+    belongs_to_id = Keyword.get(opts, :belongs_to_id)
+
     req_body = %{
       "searches" => [
         %{

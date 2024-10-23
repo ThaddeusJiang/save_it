@@ -124,7 +124,7 @@ defmodule SaveIt.Bot do
         send_message(chat.id, "What do you want to search? animal, food, etc.")
 
       _ ->
-        photos = TypesensePhoto.search_photos!(q)
+        photos = TypesensePhoto.search_photos!(q, belongs_to_id: chat.id)
 
         answer_photos(chat.id, photos)
     end
