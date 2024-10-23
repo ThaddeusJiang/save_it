@@ -1,4 +1,5 @@
 defmodule SaveIt.TypesensePhoto do
+  require Logger
   alias SmallSdk.Typesense
 
   def create_photo!(
@@ -25,12 +26,14 @@ defmodule SaveIt.TypesensePhoto do
     Typesense.get_document("photos", photo_id)
   end
 
-  def search_photos!(q: q, belongs_to_id: belongs_to_id) do
+  def search_photos!(q, opts) do
+    belongs_to_id = Keyword.get(opts, :belongs_to_id)
+
     req_body = %{
       "searches" => [
         %{
+          "query_by" => "image_embedding,caption",
           "q" => q,
-          "query_by" => "image_embedding",
           "collection" => "photos",
           "prefix" => false,
           "vector_query" => "image_embedding:([], k: 5, distance_threshold: 0.75)",
@@ -44,16 +47,6 @@ defmodule SaveIt.TypesensePhoto do
     {:ok, res} = Req.post(req, json: req_body)
 
     res.body["results"] |> typesense_results_to_documents()
-  end
-
-  def search_photos!(id, opts \\ []) do
-    belongs_to_id = Keyword.get(opts, :belongs_to_id)
-    distance_threshold = Keyword.get(opts, :distance_threshold, 0.4)
-
-    search_similar_photos!(id,
-      distance_threshold: distance_threshold,
-      belongs_to_id: belongs_to_id
-    )
   end
 
   def search_similar_photos!(photo_id, opts \\ []) when is_binary(photo_id) do
