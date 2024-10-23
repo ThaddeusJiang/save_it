@@ -23,11 +23,13 @@ defmodule SaveIt.Bot do
     setup_commands: true
 
   command("start")
-  command("search", description: "Search similar photos by photo")
+  command("similar", description: "Find similar photos")
+  command("search", description: "Search photos")
+  command("about", description: "About the bot")
+
   command("login", description: "Login")
   command("code", description: "Get code for login")
   command("folder", description: "Update Google Drive folder ID")
-  command("about", description: "About the bot")
 
   middleware(ExGram.Middleware.IgnoreUsername)
 
@@ -113,23 +115,93 @@ defmodule SaveIt.Bot do
     end
   end
 
-  def handle({:command, :search, %{chat: chat, photo: nil, text: q}}, _context) do
-    photos = TypesensePhoto.search_photos!(q: q)
+  def handle({:command, :search, %{chat: chat, text: text}}, _context)
+      when is_binary(text) do
+    q = String.trim(text)
 
-    answer_photos(chat.id, photos)
+    case q do
+      "" ->
+        send_message(chat.id, "What do you want to search? animal, food, etc.")
+
+      _ ->
+        photos = TypesensePhoto.search_photos!(q)
+
+        answer_photos(chat.id, photos)
+    end
   end
 
-  def handle({:command, :search, %{chat: chat, photo: nil}}, _context) do
-    send_message(chat.id, "Please send me a photo to search.")
+  def handle({:command, :similar, %{chat: chat, photo: nil}}, _context) do
+    send_message(chat.id, "Upload a photo to find similar photos.")
   end
 
+  # dev-notes: never reach here, it will be handled by handle({:message, %{chat: chat, caption: nil, photo: photos}}, ctx)
+  # def handle({:command, :similar, %{chat: _chat, photo: photo}}, _context) do
+  # end
+
+  # caption: nil -> find same photos
+  def handle({:message, %{chat: chat, caption: nil, photo: photos}}, ctx) do
+    photo = List.last(photos)
+
+    file = ExGram.get_file!(photo.file_id)
+    photo_file_content = Telegram.download_file_content!(file.file_path)
+
+    bot_id = ctx.bot_info.id
+    chat_id = chat.id
+
+    typesense_photo =
+      TypesensePhoto.create_photo!(%{
+        image: Base.encode64(photo_file_content),
+        caption: "",
+        url: photo_url(bot_id, file.file_id),
+        belongs_to_id: chat_id
+      })
+
+    photos = find_same_photos(typesense_photo["id"])
+
+    case photos do
+      [] -> nil
+      _ -> answer_photos(chat.id, photos)
+    end
+  end
+
+  # caption: contains /similar or /search -> search similar photos; otherwise, find same photos
   def handle({:message, %{chat: chat, caption: caption, photo: photos}}, ctx) do
     photo = List.last(photos)
 
-    search_similar_photos_based_on_caption(photo, caption,
-      chat_id: chat.id,
-      bot_id: ctx.bot_info.id
-    )
+    file = ExGram.get_file!(photo.file_id)
+    photo_file_content = Telegram.download_file_content!(file.file_path)
+
+    bot_id = ctx.bot_info.id
+    chat_id = chat.id
+
+    caption =
+      if String.contains?(caption, ["/similar", "/search"]) do
+        ""
+      else
+        caption
+      end
+
+    typesense_photo =
+      TypesensePhoto.create_photo!(%{
+        image: Base.encode64(photo_file_content),
+        caption: caption,
+        url: photo_url(bot_id, file.file_id),
+        belongs_to_id: chat_id
+      })
+
+    case caption do
+      "" ->
+        photos = search_similar_photos(typesense_photo["id"])
+        answer_photos(chat.id, photos)
+
+      _ ->
+        photos = find_same_photos(typesense_photo["id"])
+
+        case photos do
+          [] -> nil
+          _ -> answer_photos(chat.id, photos)
+        end
+    end
   end
 
   def handle({:text, text, %{chat: chat, message_id: message_id}}, _context) do
@@ -246,29 +318,18 @@ defmodule SaveIt.Bot do
     {:ok, nil}
   end
 
-  defp search_similar_photos(photo, opts) do
-    file = ExGram.get_file!(photo.file_id)
+  defp find_same_photos(photo_id) do
+    TypesensePhoto.search_similar_photos!(
+      photo_id,
+      distance_threshold: 0.1
+    )
+  end
 
-    photo_file_content = Telegram.download_file_content!(file.file_path)
-
-    bot_id = Keyword.get(opts, :bot_id)
-    chat_id = Keyword.get(opts, :chat_id)
-    distance_threshold = Keyword.get(opts, :distance_threshold, 0.4)
-
-    typesense_photo =
-      TypesensePhoto.create_photo!(%{
-        image: Base.encode64(photo_file_content),
-        caption: Map.get(photo, "caption", ""),
-        url: photo_url(bot_id, file.file_id),
-        belongs_to_id: chat_id
-      })
-
-    if typesense_photo != nil do
-      TypesensePhoto.search_photos!(
-        typesense_photo["id"],
-        distance_threshold: distance_threshold
-      )
-    end
+  defp search_similar_photos(photo_id) do
+    TypesensePhoto.search_similar_photos!(
+      photo_id,
+      distance_threshold: 0.4
+    )
   end
 
   defp pick_file_id_from_photo_url(photo_url) do
@@ -340,18 +401,6 @@ defmodule SaveIt.Bot do
   defp delete_messages(chat_id, message_ids) do
     Enum.each(message_ids, fn message_id -> delete_message(chat_id, message_id) end)
   end
-
-  # defp bot_send_media_group(chat_id, files) do
-  #   media =
-  #     Enum.map(files, fn {file_name, file_content} ->
-  #       %ExGram.Model.InputMediaDocument{
-  #         type: "document",
-  #         media: file_content
-  #       }
-  #     end)
-
-  #   ExGram.send_media_group(chat_id, media)
-  # end
 
   defp bot_send_files(chat_id, files) do
     Enum.each(files, fn {file_name, file_content} ->
@@ -443,26 +492,5 @@ defmodule SaveIt.Bot do
     encoded_bot_id = URI.encode(bot_id |> to_string())
     encoded_file_id = URI.encode(file_id)
     "#{proxy_url}/#{encoded_bot_id}/#{encoded_file_id}"
-  end
-
-  defp search_similar_photos_based_on_caption(photo, caption, opts) do
-    bot_id = Keyword.get(opts, :bot_id)
-    chat_id = Keyword.get(opts, :chat_id)
-
-    distance_threshold =
-      if caption && String.contains?(caption, "/search") do
-        0.4
-      else
-        0.1
-      end
-
-    similar_photos =
-      search_similar_photos(photo,
-        distance_threshold: distance_threshold,
-        bot_id: bot_id,
-        chat_id: chat_id
-      )
-
-    answer_photos(chat_id, similar_photos)
   end
 end
