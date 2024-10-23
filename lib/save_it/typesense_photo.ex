@@ -47,16 +47,6 @@ defmodule SaveIt.TypesensePhoto do
     res.body["results"] |> typesense_results_to_documents()
   end
 
-  def search_photos!(id, opts \\ []) do
-    belongs_to_id = Keyword.get(opts, :belongs_to_id)
-    distance_threshold = Keyword.get(opts, :distance_threshold, 0.4)
-
-    search_similar_photos!(id,
-      distance_threshold: distance_threshold,
-      belongs_to_id: belongs_to_id
-    )
-  end
-
   def search_similar_photos!(photo_id, opts \\ []) when is_binary(photo_id) do
     belongs_to_id = Keyword.get(opts, :belongs_to_id)
     distance_threshold = Keyword.get(opts, :distance_threshold, 0.4)

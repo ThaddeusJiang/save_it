@@ -156,7 +156,12 @@ defmodule SaveIt.Bot do
         belongs_to_id: chat_id
       })
 
-    photos = find_same_photos(typesense_photo["id"])
+    photos =
+      TypesensePhoto.search_similar_photos!(
+        typesense_photo["id"],
+        distance_threshold: 0.1,
+        belongs_to_id: chat_id
+      )
 
     case photos do
       [] -> nil
@@ -191,11 +196,22 @@ defmodule SaveIt.Bot do
 
     case caption do
       "" ->
-        photos = search_similar_photos(typesense_photo["id"])
+        photos =
+          TypesensePhoto.search_similar_photos!(
+            typesense_photo["id"],
+            distance_threshold: 0.4,
+            belongs_to_id: chat_id
+          )
+
         answer_photos(chat.id, photos)
 
       _ ->
-        photos = find_same_photos(typesense_photo["id"])
+        photos =
+          TypesensePhoto.search_similar_photos!(
+            typesense_photo["id"],
+            distance_threshold: 0.1,
+            belongs_to_id: chat_id
+          )
 
         case photos do
           [] -> nil
@@ -316,20 +332,6 @@ defmodule SaveIt.Bot do
   def handle({:message, _message}, _context) do
     Logger.warning("this is a message, ignore it")
     {:ok, nil}
-  end
-
-  defp find_same_photos(photo_id) do
-    TypesensePhoto.search_similar_photos!(
-      photo_id,
-      distance_threshold: 0.1
-    )
-  end
-
-  defp search_similar_photos(photo_id) do
-    TypesensePhoto.search_similar_photos!(
-      photo_id,
-      distance_threshold: 0.4
-    )
   end
 
   defp pick_file_id_from_photo_url(photo_url) do
