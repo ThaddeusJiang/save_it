@@ -4,16 +4,17 @@ defmodule SaveIt.MixProject do
   def project do
     [
       app: :save_it,
-      version: "0.1.0",
-      deps: deps(),
-      start_permanent: Mix.env() == :prod
+      version: "0.2.0-rc.1",
+      elixir: "~> 1.17",
+      start_permanent: Mix.env() == :prod,
+      deps: deps()
     ]
   end
 
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      extra_applications: [:logger],
+      extra_applications: [:logger, :crypto, ex_unit: :optional],
       mod: {SaveIt.Application, []}
     ]
   end

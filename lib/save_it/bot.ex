@@ -23,8 +23,8 @@ defmodule SaveIt.Bot do
     setup_commands: true
 
   command("start")
-  command("similar", description: "Find similar photos")
   command("search", description: "Search photos")
+  command("similar", description: "Find similar photos")
   command("about", description: "About the bot")
 
   command("login", description: "Login")
