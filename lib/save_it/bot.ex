@@ -7,6 +7,8 @@ defmodule SaveIt.Bot do
 
   alias SaveIt.TypesensePhoto
 
+  alias SaveIt.NoteService
+
   alias SmallSdk.Telegram
 
   @bot :save_it_bot
@@ -24,6 +26,7 @@ defmodule SaveIt.Bot do
 
   command("start")
   command("search", description: "Search photos")
+  command("note", description: "Add a note to a photo")
   command("similar", description: "Find similar photos")
   command("about", description: "About the bot")
 
@@ -115,6 +118,10 @@ defmodule SaveIt.Bot do
     end
   end
 
+  def handle({:command, :search, %{chat: chat, text: nil}}, _context) do
+    send_message(chat.id, "What do you want to search? animal, food, etc.")
+  end
+
   def handle({:command, :search, %{chat: chat, text: text}}, _context)
       when is_binary(text) do
     q = String.trim(text)
@@ -127,6 +134,47 @@ defmodule SaveIt.Bot do
         photos = TypesensePhoto.search_photos!(q, belongs_to_id: chat.id)
 
         answer_photos(chat.id, photos)
+    end
+  end
+
+  # dev-notes: never reach here, text never be nil, ""
+  # def handle({:command, :note, %{chat: chat, text: nil}}, _context) do
+  # end
+
+  def handle(
+        {:command, :note, %{chat: chat, text: text, reply_to_message: reply_to_message}} = msg,
+        _context
+      )
+      when is_binary(text) do
+    Logger.debug("photo: #{inspect(reply_to_message.photo)}")
+
+    file_id = reply_to_message.photo |> List.last() |> Map.get(:file_id)
+
+    case file_id do
+      nil ->
+        send_message(chat.id, "Please reply to a photo to add a note.")
+
+      _ ->
+        case String.trim(text) do
+          "" ->
+            send_message(chat.id, "What note do you want to add?")
+
+          note_content ->
+            # photo_url = photo_url(chat.id, file_id)
+            # TypesensePhoto.update_photo!(photo_url, %{"note" => text})
+
+            note =
+              NoteService.create_note!(%{
+                content: note_content,
+                file_id: file_id,
+                belongs_to_id: chat.id
+              })
+
+            case note do
+              nil -> send_message(chat.id, "Failed to add note.")
+              _ -> send_message(chat.id, "Note added successfully.")
+            end
+        end
     end
   end
 

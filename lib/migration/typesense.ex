@@ -1,4 +1,11 @@
-defmodule SmallSdk.TypesenseAdmin do
+defmodule Migration.Typesense do
+  def list_collections() do
+    req = build_request("/collections")
+    {:ok, res} = Req.get(req)
+
+    res.body
+  end
+
   def create_collection!(schema) do
     req = build_request("/collections")
     {:ok, res} = Req.post(req, json: schema)

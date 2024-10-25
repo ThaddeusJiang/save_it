@@ -46,7 +46,8 @@ defmodule SaveIt.TypesensePhoto do
     req = build_request("/multi_search")
     {:ok, res} = Req.post(req, json: req_body)
 
-    res.body["results"] |> typesense_results_to_documents()
+    # FIXME: nil check
+    res.body["results"] |> hd() |> Map.get("hits") |> Enum.map(&Map.get(&1, "document"))
   end
 
   def search_similar_photos!(photo_id, opts \\ []) when is_binary(photo_id) do
@@ -69,11 +70,8 @@ defmodule SaveIt.TypesensePhoto do
     req = build_request("/multi_search")
     {:ok, res} = Req.post(req, json: req_body)
 
-    res.body["results"] |> typesense_results_to_documents()
-  end
-
-  defp typesense_results_to_documents(results) do
-    results |> hd() |> Map.get("hits") |> Enum.map(&Map.get(&1, "document"))
+    # FIXME: nil check
+    res.body["results"] |> hd() |> Map.get("hits") |> Enum.map(&Map.get(&1, "document"))
   end
 
   defp get_env() do

@@ -1,0 +1,83 @@
+# yaml-language-server: $schema=https://schema.zeabur.app/template.json
+apiVersion: zeabur.com/v1
+kind: Template
+metadata:
+  name: SaveIt
+spec:
+  description: SaveIt is a telegram bot that helps you save photos.
+  icon: https://github.com/user-attachments/assets/fae196b8-716e-4be7-a8c2-3b141984c0e5
+  tags:
+    - Bot
+    - Telegram
+    - Photos Storage
+    - Search Engine
+  coverImage:
+
+  readme: |-
+    # SaveIt
+    A telegram bot can Save photos and Search photos
+
+    ##  Features
+    - Save photos via a link
+    - Search photos using semantic search
+    - Find similar photos by photo
+
+    ## Learn more
+    https://github.com/ThaddeusJiang/save_it
+
+    <video src="https://github.com/user-attachments/assets/b0dedcc0-3305-42b2-8101-6b0b5d32f17a" controls="controls" width="100%" height="auto" ></video>
+
+  services:
+    - name: save_it
+      icon: https://github.com/user-attachments/assets/fae196b8-716e-4be7-a8c2-3b141984c0e5
+      template: GIT
+      spec:
+        source:
+          source: GITHUB
+          repo: 831394769
+          branch: main
+          rootDirectory: /
+        env:
+          TELEGRAM_BOT_TOKEN:
+            default: ""
+            expose: false
+          TYPESENSE_URL:
+            default: http://typesense.zeabur.internal:8108
+            expose: false
+          TYPESENSE_API_KEY:
+            default: ${TYPESENSE_API_KEY}
+            expose: false
+          GOOGLE_OAUTH_CLIENT_ID:
+            default: ""
+            expose: false
+          GOOGLE_OAUTH_CLIENT_SECRET:
+            default: ""
+            expose: false
+        configs: []
+    - name: typesense
+      icon: https://typesense.org/docs/images/typesense_logo.svg
+      template: PREBUILT_V2
+      spec:
+        source:
+          image: typesense/typesense:27.1
+        ports:
+          - id: web
+            port: 8108
+            type: HTTP
+        volumes:
+          - id: data
+            dir: /data
+        instructions:
+          - type: PASSWORD
+            title: Typesense API Key
+            content: ${TYPESENSE_API_KEY}
+            category: Credentials
+        env:
+          TYPESENSE_API_KEY:
+            default: ${PASSWORD}
+            expose: true
+          TYPESENSE_DATA_DIR:
+            default: /data
+            expose: false
+
+        configs: []

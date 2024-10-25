@@ -1,11 +1,43 @@
 defmodule SmallSdk.Typesense do
   require Logger
 
+  def handle_response(res) do
+    case res do
+      %Req.Response{status: 200} ->
+        res.body
+
+      %Req.Response{status: 201} ->
+        res.body
+
+      %Req.Response{status: 400} ->
+        Logger.error("Bad Request: #{inspect(res.body)}")
+        raise "Bad Request"
+
+      %Req.Response{status: 401} ->
+        raise "Unauthorized"
+
+      %Req.Response{status: 404} ->
+        raise "Not Found"
+
+      %Req.Response{status: 409} ->
+        raise "Conflict"
+
+      %Req.Response{status: 422} ->
+        raise "Unprocessable Entity"
+
+      %Req.Response{status: 503} ->
+        raise "Service Unavailable"
+
+      _ ->
+        raise "Unknown error"
+    end
+  end
+
   def create_document!(collection_name, document) do
     req = build_request("/collections/#{collection_name}/documents")
     {:ok, res} = Req.post(req, json: document)
 
-    res.body
+    handle_response(res)
   end
 
   def get_document(collection_name, document_id) do
