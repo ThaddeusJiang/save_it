@@ -1,11 +1,4 @@
 defmodule Migration.Typesense do
-  def list_collections() do
-    req = build_request("/collections")
-    {:ok, res} = Req.get(req)
-
-    res.body
-  end
-
   def create_collection!(schema) do
     req = build_request("/collections")
     {:ok, res} = Req.post(req, json: schema)
@@ -16,6 +9,13 @@ defmodule Migration.Typesense do
   def delete_collection!(collection_name) do
     req = build_request("/collections/#{collection_name}")
     {:ok, res} = Req.delete(req)
+
+    res.body
+  end
+
+  def list_collections() do
+    req = build_request("/collections")
+    {:ok, res} = Req.get(req)
 
     res.body
   end

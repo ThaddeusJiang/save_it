@@ -1,4 +1,4 @@
-defmodule SaveIt.TypesensePhoto do
+defmodule SaveIt.PhotoService do
   require Logger
   alias SmallSdk.Typesense
 

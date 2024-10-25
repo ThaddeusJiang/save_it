@@ -5,7 +5,7 @@ defmodule SaveIt.Bot do
   alias SaveIt.GoogleDrive
   alias SaveIt.GoogleOAuth2DeviceFlow
 
-  alias SaveIt.TypesensePhoto
+  alias SaveIt.PhotoService
 
   alias SaveIt.NoteService
 
@@ -131,7 +131,7 @@ defmodule SaveIt.Bot do
         send_message(chat.id, "What do you want to search? animal, food, etc.")
 
       _ ->
-        photos = TypesensePhoto.search_photos!(q, belongs_to_id: chat.id)
+        photos = PhotoService.search_photos!(q, belongs_to_id: chat.id)
 
         answer_photos(chat.id, photos)
     end
@@ -142,7 +142,7 @@ defmodule SaveIt.Bot do
   # end
 
   def handle(
-        {:command, :note, %{chat: chat, text: text, reply_to_message: reply_to_message}} = msg,
+        {:command, :note, %{chat: chat, text: text, reply_to_message: reply_to_message}},
         _context
       )
       when is_binary(text) do
@@ -161,7 +161,7 @@ defmodule SaveIt.Bot do
 
           note_content ->
             # photo_url = photo_url(chat.id, file_id)
-            # TypesensePhoto.update_photo!(photo_url, %{"note" => text})
+            # PhotoService.update_photo!(photo_url, %{"note" => text})
 
             note =
               NoteService.create_note!(%{
@@ -197,7 +197,7 @@ defmodule SaveIt.Bot do
     chat_id = chat.id
 
     typesense_photo =
-      TypesensePhoto.create_photo!(%{
+      PhotoService.create_photo!(%{
         image: Base.encode64(photo_file_content),
         caption: "",
         url: photo_url(bot_id, file.file_id),
@@ -205,7 +205,7 @@ defmodule SaveIt.Bot do
       })
 
     photos =
-      TypesensePhoto.search_similar_photos!(
+      PhotoService.search_similar_photos!(
         typesense_photo["id"],
         distance_threshold: 0.1,
         belongs_to_id: chat_id
@@ -235,7 +235,7 @@ defmodule SaveIt.Bot do
       end
 
     typesense_photo =
-      TypesensePhoto.create_photo!(%{
+      PhotoService.create_photo!(%{
         image: Base.encode64(photo_file_content),
         caption: caption,
         url: photo_url(bot_id, file.file_id),
@@ -245,7 +245,7 @@ defmodule SaveIt.Bot do
     case caption do
       "" ->
         photos =
-          TypesensePhoto.search_similar_photos!(
+          PhotoService.search_similar_photos!(
             typesense_photo["id"],
             distance_threshold: 0.4,
             belongs_to_id: chat_id
@@ -255,7 +255,7 @@ defmodule SaveIt.Bot do
 
       _ ->
         photos =
-          TypesensePhoto.search_similar_photos!(
+          PhotoService.search_similar_photos!(
             typesense_photo["id"],
             distance_threshold: 0.1,
             belongs_to_id: chat_id
@@ -483,7 +483,7 @@ defmodule SaveIt.Bot do
             {:file_content, file_content, _file_name} -> Base.encode64(file_content)
           end
 
-        TypesensePhoto.create_photo!(%{
+        PhotoService.create_photo!(%{
           image: image_base64,
           caption: file_name,
           url: photo_url(bot_id, file_id),
