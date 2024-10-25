@@ -32,6 +32,7 @@ data
 
 # scripts
 _local*
-_stag*
 _dev*
+_stag*
+_prod*
 nohup.out

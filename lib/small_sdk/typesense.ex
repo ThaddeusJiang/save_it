@@ -17,7 +17,7 @@ defmodule SmallSdk.Typesense do
         raise "Unauthorized"
 
       %Req.Response{status: 404} ->
-        raise "Not Found"
+        nil
 
       %Req.Response{status: 409} ->
         raise "Conflict"
@@ -40,18 +40,39 @@ defmodule SmallSdk.Typesense do
     handle_response(res)
   end
 
+  def search_documents!(collection_name, opts) do
+    q = Keyword.get(opts, :q, "*")
+    query_by = Keyword.get(opts, :query_by, "")
+    filter_by = Keyword.get(opts, :filter_by, "")
+
+    req = build_request("/collections/#{collection_name}/documents/search")
+
+    {:ok, res} =
+      Req.get(req,
+        params: %{
+          q: q,
+          query_by: query_by,
+          filter_by: filter_by
+        }
+      )
+
+    data = handle_response(res)
+
+    data["hits"] |> Enum.map(&Map.get(&1, "document"))
+  end
+
   def get_document(collection_name, document_id) do
     req = build_request("/collections/#{collection_name}/documents/#{document_id}")
     {:ok, res} = Req.get(req)
 
-    res.body
+    handle_response(res)
   end
 
-  def update_document(collection_name, document_id, update_input) do
+  def update_document!(collection_name, document_id, update_input) do
     req = build_request("/collections/#{collection_name}/documents/#{document_id}")
     {:ok, res} = Req.patch(req, json: update_input)
 
-    res.body
+    handle_response(res)
   end
 
   def create_search_key() do

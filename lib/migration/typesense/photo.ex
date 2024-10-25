@@ -17,12 +17,8 @@ defmodule Migration.Typesense.Photo do
         }
       },
       %{"name" => "caption", "type" => "string", "optional" => true, "facet" => false},
-      # "telegram://<bot_id>/<file_id>"
-      # TODO: 不能再简单的 reset 了，reset 会导致数据丢失，应该合理 migrate 数据
-      %{"name" => "url", "type" => "string"},
-      # chat.id -> string
+      %{"name" => "file_id", "type" => "string"},
       %{"name" => "belongs_to_id", "type" => "string"},
-      # unix timestamp
       %{"name" => "inserted_at", "type" => "int64"}
     ],
     "default_sorting_field" => "inserted_at"

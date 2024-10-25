@@ -19,7 +19,7 @@ defmodule SaveIt.PhotoService do
   end
 
   def update_photo(photo) do
-    Typesense.update_document("photos", photo.id, photo)
+    Typesense.update_document!("photos", photo.id, photo)
   end
 
   def get_photo(photo_id) do
