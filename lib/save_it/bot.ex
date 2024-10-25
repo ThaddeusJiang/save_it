@@ -379,7 +379,7 @@ defmodule SaveIt.Bot do
         NoteService.update_note!(note["id"], %{"content" => edited_note_text})
 
       false ->
-        Logger.debug("edited message: #{inspect(_msg)}")
+        Logger.info("edited message: #{inspect(text)}, ignore it")
     end
   end
 
