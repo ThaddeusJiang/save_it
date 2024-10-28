@@ -1,4 +1,4 @@
-defmodule SaveIt.TypesensePhoto do
+defmodule SaveIt.PhotoService do
   require Logger
   alias SmallSdk.Typesense
 
@@ -19,11 +19,28 @@ defmodule SaveIt.TypesensePhoto do
   end
 
   def update_photo(photo) do
-    Typesense.update_document("photos", photo.id, photo)
+    Typesense.update_document!("photos", photo["id"], photo)
+  end
+
+  def update_photo_caption!(file_id, belongs_to_id, caption) do
+    get_photo!(file_id, belongs_to_id)
+    |> Map.put("caption", caption)
+    |> update_photo()
   end
 
   def get_photo(photo_id) do
     Typesense.get_document("photos", photo_id)
+  end
+
+  def get_photo!(file_id, belongs_to_id) do
+    case Typesense.search_documents!("photos",
+           q: "*",
+           query_by: "caption",
+           filter_by: "file_id:=#{file_id} && belongs_to_id:=#{belongs_to_id}"
+         ) do
+      [photo | _] -> photo
+      [] -> nil
+    end
   end
 
   def search_photos!(q, opts) do
@@ -46,7 +63,8 @@ defmodule SaveIt.TypesensePhoto do
     req = build_request("/multi_search")
     {:ok, res} = Req.post(req, json: req_body)
 
-    res.body["results"] |> typesense_results_to_documents()
+    # FIXME: nil check
+    res.body["results"] |> hd() |> Map.get("hits") |> Enum.map(&Map.get(&1, "document"))
   end
 
   def search_similar_photos!(photo_id, opts \\ []) when is_binary(photo_id) do
@@ -69,11 +87,8 @@ defmodule SaveIt.TypesensePhoto do
     req = build_request("/multi_search")
     {:ok, res} = Req.post(req, json: req_body)
 
-    res.body["results"] |> typesense_results_to_documents()
-  end
-
-  defp typesense_results_to_documents(results) do
-    results |> hd() |> Map.get("hits") |> Enum.map(&Map.get(&1, "document"))
+    # FIXME: nil check
+    res.body["results"] |> hd() |> Map.get("hits") |> Enum.map(&Map.get(&1, "document"))
   end
 
   defp get_env() do

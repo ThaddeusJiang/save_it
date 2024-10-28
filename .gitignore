@@ -25,10 +25,14 @@ save_it-*.tar
 # Temporary files, for example, from tests.
 /tmp/
 .DS_Store
-data
-dev.sh
-start.sh
-run.sh
-nohup.out
 
+# data
 _local
+data
+
+# scripts
+_local*
+_dev*
+_stag*
+_prod*
+nohup.out

@@ -1,3 +1,3 @@
 # mix run priv/typesense/reset.exs
 
-SmallSdk.TypesenseAdmin.reset()
+Migration.Typesense.Photo.reset!()
