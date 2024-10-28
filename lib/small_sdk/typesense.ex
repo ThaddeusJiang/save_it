@@ -87,35 +87,36 @@ defmodule SmallSdk.Typesense do
     )
   end
 
-  defp handle_response(res) do
-    case res do
-      %Req.Response{status: 200} ->
-        res.body
+  defp handle_response(%Req.Response{status: status, body: body}) do
+    case status do
+      200 ->
+        body
 
-      %Req.Response{status: 201} ->
-        res.body
+      201 ->
+        body
 
-      %Req.Response{status: 400} ->
-        Logger.error("Bad Request: #{inspect(res.body)}")
+      400 ->
+        Logger.warning("Bad Request: #{inspect(body)}")
         raise "Bad Request"
 
-      %Req.Response{status: 401} ->
+      401 ->
         raise "Unauthorized"
 
-      %Req.Response{status: 404} ->
+      404 ->
         nil
 
-      %Req.Response{status: 409} ->
+      409 ->
         raise "Conflict"
 
-      %Req.Response{status: 422} ->
+      422 ->
         raise "Unprocessable Entity"
 
-      %Req.Response{status: 503} ->
+      503 ->
         raise "Service Unavailable"
 
       _ ->
-        raise "Unknown error"
+        Logger.error("Unhandled status code #{status}: #{inspect(body)}")
+        raise "Unknown error: #{status}"
     end
   end
 end

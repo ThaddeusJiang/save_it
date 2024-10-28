@@ -23,16 +23,22 @@ defmodule SaveIt.PhotoService do
   end
 
   def update_photo_caption!(file_id, belongs_to_id, caption) do
-    get_photo!(file_id, belongs_to_id)
-    |> Map.put("caption", caption)
-    |> update_photo()
+    case get_photo(file_id, belongs_to_id) do
+      photo when is_map(photo) ->
+        photo
+        |> Map.put("caption", caption)
+        |> update_photo()
+
+      nil ->
+        raise "Photo not found for file_id #{file_id} and belongs_to_id #{belongs_to_id}"
+    end
   end
 
   def get_photo(photo_id) do
     Typesense.get_document("photos", photo_id)
   end
 
-  def get_photo!(file_id, belongs_to_id) do
+  def get_photo(file_id, belongs_to_id) do
     case Typesense.search_documents!("photos",
            q: "*",
            query_by: "caption",
@@ -64,7 +70,16 @@ defmodule SaveIt.PhotoService do
     {:ok, res} = Req.post(req, json: req_body)
     data = handle_response(res)
 
-    data["results"] |> hd() |> Map.get("hits") |> Enum.map(&Map.get(&1, "document"))
+    results = data["results"]
+
+    if results != [] do
+      results
+      |> hd()
+      |> Map.get("hits")
+      |> Enum.map(&Map.get(&1, "document"))
+    else
+      []
+    end
   end
 
   def search_similar_photos!(photo_id, opts \\ []) when is_binary(photo_id) do
@@ -88,7 +103,16 @@ defmodule SaveIt.PhotoService do
     {:ok, res} = Req.post(req, json: req_body)
     data = handle_response(res)
 
-    data["results"] |> hd() |> Map.get("hits") |> Enum.map(&Map.get(&1, "document"))
+    results = data["results"]
+
+    if results != [] do
+      results
+      |> hd()
+      |> Map.get("hits")
+      |> Enum.map(&Map.get(&1, "document"))
+    else
+      []
+    end
   end
 
   defp get_env() do
@@ -111,35 +135,36 @@ defmodule SaveIt.PhotoService do
     )
   end
 
-  defp handle_response(res) do
-    case res do
-      %Req.Response{status: 200} ->
-        res.body
+  defp handle_response(%Req.Response{status: status, body: body}) do
+    case status do
+      200 ->
+        body
 
-      %Req.Response{status: 201} ->
-        res.body
+      201 ->
+        body
 
-      %Req.Response{status: 400} ->
-        Logger.error("Bad Request: #{inspect(res.body)}")
+      400 ->
+        Logger.warning("Bad Request: #{inspect(body)}")
         raise "Bad Request"
 
-      %Req.Response{status: 401} ->
+      401 ->
         raise "Unauthorized"
 
-      %Req.Response{status: 404} ->
+      404 ->
         nil
 
-      %Req.Response{status: 409} ->
+      409 ->
         raise "Conflict"
 
-      %Req.Response{status: 422} ->
+      422 ->
         raise "Unprocessable Entity"
 
-      %Req.Response{status: 503} ->
+      503 ->
         raise "Service Unavailable"
 
       _ ->
-        raise "Unknown error"
+        Logger.error("Unhandled status code #{status}: #{inspect(body)}")
+        raise "Unknown error: #{status}"
     end
   end
 end
