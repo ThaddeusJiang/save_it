@@ -86,9 +86,9 @@ defmodule SaveIt.PhotoService do
 
     req = build_request("/multi_search")
     {:ok, res} = Req.post(req, json: req_body)
+    data = handle_response(res)
 
-    # FIXME: nil check
-    res.body["results"] |> hd() |> Map.get("hits") |> Enum.map(&Map.get(&1, "document"))
+    data["results"] |> hd() |> Map.get("hits") |> Enum.map(&Map.get(&1, "document"))
   end
 
   defp get_env() do

@@ -41,6 +41,13 @@ defmodule SmallSdk.Typesense do
     handle_response(res)
   end
 
+  def delete_document!(collection_name, document_id) do
+    req = build_request("/collections/#{collection_name}/documents/#{document_id}")
+    {:ok, res} = Req.delete(req)
+
+    handle_response(res)
+  end
+
   def create_search_key() do
     {url, _} = get_env()
     req = build_request("/keys")
