@@ -62,9 +62,9 @@ defmodule SaveIt.PhotoService do
 
     req = build_request("/multi_search")
     {:ok, res} = Req.post(req, json: req_body)
+    data = handle_response(res)
 
-    # FIXME: nil check
-    res.body["results"] |> hd() |> Map.get("hits") |> Enum.map(&Map.get(&1, "document"))
+    data["results"] |> hd() |> Map.get("hits") |> Enum.map(&Map.get(&1, "document"))
   end
 
   def search_similar_photos!(photo_id, opts \\ []) when is_binary(photo_id) do
@@ -109,5 +109,37 @@ defmodule SaveIt.PhotoService do
         {"X-TYPESENSE-API-KEY", api_key}
       ]
     )
+  end
+
+  defp handle_response(res) do
+    case res do
+      %Req.Response{status: 200} ->
+        res.body
+
+      %Req.Response{status: 201} ->
+        res.body
+
+      %Req.Response{status: 400} ->
+        Logger.error("Bad Request: #{inspect(res.body)}")
+        raise "Bad Request"
+
+      %Req.Response{status: 401} ->
+        raise "Unauthorized"
+
+      %Req.Response{status: 404} ->
+        nil
+
+      %Req.Response{status: 409} ->
+        raise "Conflict"
+
+      %Req.Response{status: 422} ->
+        raise "Unprocessable Entity"
+
+      %Req.Response{status: 503} ->
+        raise "Service Unavailable"
+
+      _ ->
+        raise "Unknown error"
+    end
   end
 end

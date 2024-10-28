@@ -343,7 +343,7 @@ defmodule SaveIt.Bot do
         %ExGram.Model.InputMediaPhoto{
           type: "photo",
           media: photo["file_id"],
-          caption: "Found photos",
+          caption: photo["caption"],
           show_caption_above_media: true
         }
       end)

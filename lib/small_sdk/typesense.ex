@@ -1,38 +1,6 @@
 defmodule SmallSdk.Typesense do
   require Logger
 
-  def handle_response(res) do
-    case res do
-      %Req.Response{status: 200} ->
-        res.body
-
-      %Req.Response{status: 201} ->
-        res.body
-
-      %Req.Response{status: 400} ->
-        Logger.error("Bad Request: #{inspect(res.body)}")
-        raise "Bad Request"
-
-      %Req.Response{status: 401} ->
-        raise "Unauthorized"
-
-      %Req.Response{status: 404} ->
-        nil
-
-      %Req.Response{status: 409} ->
-        raise "Conflict"
-
-      %Req.Response{status: 422} ->
-        raise "Unprocessable Entity"
-
-      %Req.Response{status: 503} ->
-        raise "Service Unavailable"
-
-      _ ->
-        raise "Unknown error"
-    end
-  end
-
   def create_document!(collection_name, document) do
     req = build_request("/collections/#{collection_name}/documents")
     {:ok, res} = Req.post(req, json: document)
@@ -45,18 +13,15 @@ defmodule SmallSdk.Typesense do
     query_by = Keyword.get(opts, :query_by, "")
     filter_by = Keyword.get(opts, :filter_by, "")
 
+    query_params = %{
+      q: q,
+      query_by: query_by,
+      filter_by: filter_by,
+      exclude_fields: "image_embedding"
+    }
+
     req = build_request("/collections/#{collection_name}/documents/search")
-
-    {:ok, res} =
-      Req.get(req,
-        params: %{
-          q: q,
-          query_by: query_by,
-          filter_by: filter_by,
-          exclude_fields: "image_embedding"
-        }
-      )
-
+    {:ok, res} = Req.get(req, params: query_params)
     data = handle_response(res)
 
     data["hits"] |> Enum.map(&Map.get(&1, "document"))
@@ -113,5 +78,37 @@ defmodule SmallSdk.Typesense do
         {"X-TYPESENSE-API-KEY", api_key}
       ]
     )
+  end
+
+  defp handle_response(res) do
+    case res do
+      %Req.Response{status: 200} ->
+        res.body
+
+      %Req.Response{status: 201} ->
+        res.body
+
+      %Req.Response{status: 400} ->
+        Logger.error("Bad Request: #{inspect(res.body)}")
+        raise "Bad Request"
+
+      %Req.Response{status: 401} ->
+        raise "Unauthorized"
+
+      %Req.Response{status: 404} ->
+        nil
+
+      %Req.Response{status: 409} ->
+        raise "Conflict"
+
+      %Req.Response{status: 422} ->
+        raise "Unprocessable Entity"
+
+      %Req.Response{status: 503} ->
+        raise "Service Unavailable"
+
+      _ ->
+        raise "Unknown error"
+    end
   end
 end
