@@ -1,6 +1,8 @@
-defmodule SaveIt.TypesensePhoto do
+defmodule SaveIt.PhotoService do
   require Logger
   alias SmallSdk.Typesense
+
+  import Tj.UrlHelper, only: [validate_url!: 1]
 
   def create_photo!(
         %{
@@ -19,11 +21,33 @@ defmodule SaveIt.TypesensePhoto do
   end
 
   def update_photo(photo) do
-    Typesense.update_document("photos", photo.id, photo)
+    Typesense.update_document!("photos", photo["id"], photo)
+  end
+
+  def update_photo_caption!(file_id, belongs_to_id, caption) do
+    case get_photo(file_id, belongs_to_id) do
+      photo when is_map(photo) ->
+        photo
+        |> Map.put("caption", caption)
+        |> update_photo()
+
+      nil ->
+        raise "Photo not found for file_id #{file_id} and belongs_to_id #{belongs_to_id}"
+    end
   end
 
   def get_photo(photo_id) do
     Typesense.get_document("photos", photo_id)
+  end
+
+  def get_photo(file_id, belongs_to_id) do
+    case Typesense.search_documents!("photos",
+           q: "*",
+           filter_by: "file_id:=#{file_id} && belongs_to_id:=#{belongs_to_id}"
+         ) do
+      [photo | _] -> photo
+      [] -> nil
+    end
   end
 
   def search_photos!(q, opts) do
@@ -44,9 +68,19 @@ defmodule SaveIt.TypesensePhoto do
     }
 
     req = build_request("/multi_search")
-    {:ok, res} = Req.post(req, json: req_body)
+    res = Req.post(req, json: req_body)
+    data = Typesense.handle_response(res)
 
-    res.body["results"] |> typesense_results_to_documents()
+    results = data["results"]
+
+    if results != [] do
+      results
+      |> hd()
+      |> Map.get("hits")
+      |> Enum.map(&Map.get(&1, "document"))
+    else
+      []
+    end
   end
 
   def search_similar_photos!(photo_id, opts \\ []) when is_binary(photo_id) do
@@ -67,17 +101,23 @@ defmodule SaveIt.TypesensePhoto do
     }
 
     req = build_request("/multi_search")
-    {:ok, res} = Req.post(req, json: req_body)
+    res = Req.post(req, json: req_body)
+    data = Typesense.handle_response(res)
 
-    res.body["results"] |> typesense_results_to_documents()
-  end
+    results = data["results"]
 
-  defp typesense_results_to_documents(results) do
-    results |> hd() |> Map.get("hits") |> Enum.map(&Map.get(&1, "document"))
+    if results != [] do
+      results
+      |> hd()
+      |> Map.get("hits")
+      |> Enum.map(&Map.get(&1, "document"))
+    else
+      []
+    end
   end
 
   defp get_env() do
-    url = Application.fetch_env!(:save_it, :typesense_url)
+    url = Application.fetch_env!(:save_it, :typesense_url) |> validate_url!()
     api_key = Application.fetch_env!(:save_it, :typesense_api_key)
 
     {url, api_key}

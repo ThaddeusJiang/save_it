@@ -5,7 +5,7 @@ defmodule SaveIt.Bot do
   alias SaveIt.GoogleDrive
   alias SaveIt.GoogleOAuth2DeviceFlow
 
-  alias SaveIt.TypesensePhoto
+  alias SaveIt.PhotoService
 
   alias SmallSdk.Telegram
 
@@ -115,6 +115,10 @@ defmodule SaveIt.Bot do
     end
   end
 
+  def handle({:command, :search, %{chat: chat, text: nil}}, _context) do
+    send_message(chat.id, "What do you want to search? animal, food, etc.")
+  end
+
   def handle({:command, :search, %{chat: chat, text: text}}, _context)
       when is_binary(text) do
     q = String.trim(text)
@@ -124,7 +128,7 @@ defmodule SaveIt.Bot do
         send_message(chat.id, "What do you want to search? animal, food, etc.")
 
       _ ->
-        photos = TypesensePhoto.search_photos!(q, belongs_to_id: chat.id)
+        photos = PhotoService.search_photos!(q, belongs_to_id: chat.id)
 
         answer_photos(chat.id, photos)
     end
@@ -134,30 +138,25 @@ defmodule SaveIt.Bot do
     send_message(chat.id, "Upload a photo to find similar photos.")
   end
 
-  # dev-notes: never reach here, it will be handled by handle({:message, %{chat: chat, caption: nil, photo: photos}}, ctx)
-  # def handle({:command, :similar, %{chat: _chat, photo: photo}}, _context) do
-  # end
-
   # caption: nil -> find same photos
-  def handle({:message, %{chat: chat, caption: nil, photo: photos}}, ctx) do
+  def handle({:message, %{chat: chat, caption: nil, photo: photos}}, _ctx) do
     photo = List.last(photos)
 
     file = ExGram.get_file!(photo.file_id)
     photo_file_content = Telegram.download_file_content!(file.file_path)
 
-    bot_id = ctx.bot_info.id
     chat_id = chat.id
 
     typesense_photo =
-      TypesensePhoto.create_photo!(%{
+      PhotoService.create_photo!(%{
         image: Base.encode64(photo_file_content),
         caption: "",
-        url: photo_url(bot_id, file.file_id),
+        file_id: file.file_id,
         belongs_to_id: chat_id
       })
 
     photos =
-      TypesensePhoto.search_similar_photos!(
+      PhotoService.search_similar_photos!(
         typesense_photo["id"],
         distance_threshold: 0.1,
         belongs_to_id: chat_id
@@ -170,13 +169,12 @@ defmodule SaveIt.Bot do
   end
 
   # caption: contains /similar or /search -> search similar photos; otherwise, find same photos
-  def handle({:message, %{chat: chat, caption: caption, photo: photos}}, ctx) do
+  def handle({:message, %{chat: chat, caption: caption, photo: photos}}, _ctx) do
     photo = List.last(photos)
 
     file = ExGram.get_file!(photo.file_id)
     photo_file_content = Telegram.download_file_content!(file.file_path)
 
-    bot_id = ctx.bot_info.id
     chat_id = chat.id
 
     caption =
@@ -187,17 +185,17 @@ defmodule SaveIt.Bot do
       end
 
     typesense_photo =
-      TypesensePhoto.create_photo!(%{
+      PhotoService.create_photo!(%{
         image: Base.encode64(photo_file_content),
         caption: caption,
-        url: photo_url(bot_id, file.file_id),
+        file_id: file.file_id,
         belongs_to_id: chat_id
       })
 
     case caption do
       "" ->
         photos =
-          TypesensePhoto.search_similar_photos!(
+          PhotoService.search_similar_photos!(
             typesense_photo["id"],
             distance_threshold: 0.4,
             belongs_to_id: chat_id
@@ -207,7 +205,7 @@ defmodule SaveIt.Bot do
 
       _ ->
         photos =
-          TypesensePhoto.search_similar_photos!(
+          PhotoService.search_similar_photos!(
             typesense_photo["id"],
             distance_threshold: 0.1,
             belongs_to_id: chat_id
@@ -310,18 +308,15 @@ defmodule SaveIt.Bot do
     end
   end
 
-  def handle(
-        {:update,
-         %ExGram.Model.Update{message: nil, edited_message: nil, channel_post: _channel_post}},
-        _context
-      ) do
-    Logger.warning("this is a channel post, ignore it")
+  def handle({:edited_message, %{photo: nil}}, _context) do
+    Logger.warning("this is an edited message, ignore it")
+    # TODO: edit /search trigger re-search
     {:ok, nil}
   end
 
-  def handle({:edited_message, _msg}, _context) do
-    Logger.warning("this is an edited message, ignore it")
-    {:ok, nil}
+  def handle({:edited_message, %{chat: chat, caption: caption, photo: photos}}, _context) do
+    file_id = photos |> List.last() |> Map.get(:file_id)
+    PhotoService.update_photo_caption!(file_id, chat.id, caption)
   end
 
   def handle({:update, _update}, _context) do
@@ -332,19 +327,6 @@ defmodule SaveIt.Bot do
   def handle({:message, _message}, _context) do
     Logger.warning("this is a message, ignore it")
     {:ok, nil}
-  end
-
-  defp pick_file_id_from_photo_url(photo_url) do
-    captures =
-      Regex.named_captures(~r"/files/(?<bot_id>\d+)/(?<file_id>.+)", photo_url)
-
-    if captures == nil do
-      Logger.error("Invalid photo URL: #{photo_url}")
-      nil
-    else
-      %{"file_id" => file_id} = captures
-      file_id
-    end
   end
 
   defp answer_photos(chat_id, nil) do
@@ -360,8 +342,8 @@ defmodule SaveIt.Bot do
       Enum.map(similar_photos, fn photo ->
         %ExGram.Model.InputMediaPhoto{
           type: "photo",
-          media: pick_file_id_from_photo_url(photo["url"]),
-          caption: "Found photos",
+          media: photo["file_id"],
+          caption: photo["caption"],
           show_caption_above_media: true
         }
       end)
@@ -414,19 +396,19 @@ defmodule SaveIt.Bot do
     Enum.each(filenames, fn filename -> bot_send_file(chat_id, filename, {:file, filename}) end)
   end
 
-  defp bot_send_file(chat_id, file_name, file_content, _opts \\ []) do
+  defp bot_send_file(chat_id, file_name, file_content, opts \\ []) do
     content =
       case file_content do
         {:file, file} -> {:file, file}
         {:file_content, file_content, file_name} -> {:file_content, file_content, file_name}
       end
 
-    # caption = opts[:caption]
+    caption = Keyword.get(opts, :caption, "")
 
     case file_extension(file_name) do
       ext when ext in [".png", ".jpg", ".jpeg"] ->
-        {:ok, msg} = ExGram.send_photo(chat_id, content)
-        bot_id = msg.from.id
+        {:ok, msg} = ExGram.send_photo(chat_id, content, caption: caption)
+
         file_id = get_file_id(msg)
 
         image_base64 =
@@ -435,21 +417,21 @@ defmodule SaveIt.Bot do
             {:file_content, file_content, _file_name} -> Base.encode64(file_content)
           end
 
-        TypesensePhoto.create_photo!(%{
+        PhotoService.create_photo!(%{
           image: image_base64,
-          caption: file_name,
-          url: photo_url(bot_id, file_id),
+          caption: caption,
+          file_id: file_id,
           belongs_to_id: chat_id
         })
 
       ".mp4" ->
-        ExGram.send_video(chat_id, content, supports_streaming: true)
+        ExGram.send_video(chat_id, content, supports_streaming: true, caption: caption)
 
       ".gif" ->
-        ExGram.send_animation(chat_id, content)
+        ExGram.send_animation(chat_id, content, caption: caption)
 
       _ ->
-        ExGram.send_document(chat_id, content)
+        ExGram.send_document(chat_id, content, caption: caption)
     end
   end
 
@@ -486,13 +468,5 @@ defmodule SaveIt.Bot do
         Please run `/code` to get a new code, then run `/login` again.
         """)
     end
-  end
-
-  defp photo_url(bot_id, file_id) do
-    proxy_url = Application.fetch_env!(:save_it, :web_url) <> "/telegram/files"
-
-    encoded_bot_id = URI.encode(bot_id |> to_string())
-    encoded_file_id = URI.encode(file_id)
-    "#{proxy_url}/#{encoded_bot_id}/#{encoded_file_id}"
   end
 end

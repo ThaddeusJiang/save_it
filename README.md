@@ -2,6 +2,8 @@
 
 A telegram bot can Save photos and Search photos
 
+## Features
+
 - [x] Save photos via a link
 - [x] Search photos using semantic search
 - [x] Find similar photos by photo
@@ -27,13 +29,8 @@ messages:
 
 ```
 /search cat
-
 /search dog
-
 /search girl
-
-/similar photo
-
 /similar photo
 ```
 
@@ -53,15 +50,18 @@ https://t.me/save_it_playground
 ## Development
 
 ```sh
-# install
+# Install
 mix deps.get
 ```
 
 ```sh
-# run
-export TELEGRAM_BOT_TOKEN=
-export TYPESENSE_URL=
-export TYPESENSE_API_KEY=
+# Start typesense
+docker compose up
+```
+
+```sh
+# Run
+export TELEGRAM_BOT_TOKEN=<YOUR_TELEGRAM_BOT_TOKEN>
 
 iex -S mix run --no-halt
 ```
