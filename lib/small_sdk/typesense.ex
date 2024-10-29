@@ -10,6 +10,24 @@ defmodule SmallSdk.Typesense do
     handle_response(res)
   end
 
+  def list_documents(collection_name, opts \\ []) do
+    page = Keyword.get(opts, :page, 1)
+    per_page = Keyword.get(opts, :per_page, 10)
+    req = build_request("/collections/#{collection_name}/documents")
+
+    res =
+      Req.get(req,
+        params: %{
+          q: "*",
+          query_by: "",
+          page: page,
+          per_page: per_page
+        }
+      )
+
+    handle_response(res) || []
+  end
+
   def search_documents!(collection_name, opts) do
     q = Keyword.get(opts, :q, "*")
     query_by = Keyword.get(opts, :query_by, "")

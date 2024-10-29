@@ -1,1 +1,1 @@
-Migration.Typesense.Photo.create_collection!()
+SaveIt.Migration.Typesense.Photo.create_photos_20241024!()

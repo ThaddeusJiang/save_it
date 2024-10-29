@@ -1,4 +1,4 @@
-defmodule Migration.Typesense do
+defmodule SaveIt.Migration.Typesense do
   alias SmallSdk.Typesense
 
   import Tj.UrlHelper, only: [validate_url!: 1]
@@ -6,6 +6,13 @@ defmodule Migration.Typesense do
   def create_collection!(schema) do
     req = build_request("/collections")
     res = Req.post!(req, json: schema)
+
+    Typesense.handle_response!(res)
+  end
+
+  def update_collection!(collection_name, schema) do
+    req = build_request("/collections/#{collection_name}")
+    res = Req.patch!(req, json: schema)
 
     Typesense.handle_response!(res)
   end
