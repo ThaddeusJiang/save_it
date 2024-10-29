@@ -1,6 +1,8 @@
 defmodule SmallSdk.Typesense do
   require Logger
 
+  import Tj.UrlHelper, only: [validate_url!: 1]
+
   def create_document!(collection_name, document) do
     req = build_request("/collections/#{collection_name}/documents")
     res = Req.post(req, json: document)
@@ -70,7 +72,7 @@ defmodule SmallSdk.Typesense do
   end
 
   defp get_env() do
-    url = Application.fetch_env!(:save_it, :typesense_url)
+    url = Application.fetch_env!(:save_it, :typesense_url) |> validate_url!()
     api_key = Application.fetch_env!(:save_it, :typesense_api_key)
 
     {url, api_key}

@@ -2,6 +2,8 @@ defmodule SaveIt.PhotoService do
   require Logger
   alias SmallSdk.Typesense
 
+  import Tj.UrlHelper, only: [validate_url!: 1]
+
   def create_photo!(
         %{
           belongs_to_id: belongs_to_id
@@ -115,7 +117,7 @@ defmodule SaveIt.PhotoService do
   end
 
   defp get_env() do
-    url = Application.fetch_env!(:save_it, :typesense_url)
+    url = Application.fetch_env!(:save_it, :typesense_url) |> validate_url!()
     api_key = Application.fetch_env!(:save_it, :typesense_api_key)
 
     {url, api_key}

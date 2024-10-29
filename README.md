@@ -60,12 +60,8 @@ docker compose up
 ```
 
 ```sh
-# Create .env file
-cp .env.template .env
-```
+# Run
+export TELEGRAM_BOT_TOKEN=<YOUR_TELEGRAM_BOT_TOKEN>
 
-Run app
-
-```sh
-sh start.sh
+iex -S mix run --no-halt
 ```

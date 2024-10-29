@@ -36,5 +36,3 @@ _dev*
 _stag*
 _prod*
 nohup.out
-
-.env
