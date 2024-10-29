@@ -41,7 +41,6 @@ defmodule SaveIt.PhotoService do
   def get_photo(file_id, belongs_to_id) do
     case Typesense.search_documents!("photos",
            q: "*",
-           query_by: "caption",
            filter_by: "file_id:=#{file_id} && belongs_to_id:=#{belongs_to_id}"
          ) do
       [photo | _] -> photo
@@ -67,8 +66,8 @@ defmodule SaveIt.PhotoService do
     }
 
     req = build_request("/multi_search")
-    {:ok, res} = Req.post(req, json: req_body)
-    data = handle_response(res)
+    res = Req.post(req, json: req_body)
+    data = Typesense.handle_response(res)
 
     results = data["results"]
 
@@ -100,8 +99,8 @@ defmodule SaveIt.PhotoService do
     }
 
     req = build_request("/multi_search")
-    {:ok, res} = Req.post(req, json: req_body)
-    data = handle_response(res)
+    res = Req.post(req, json: req_body)
+    data = Typesense.handle_response(res)
 
     results = data["results"]
 
@@ -133,38 +132,5 @@ defmodule SaveIt.PhotoService do
         {"X-TYPESENSE-API-KEY", api_key}
       ]
     )
-  end
-
-  defp handle_response(%Req.Response{status: status, body: body}) do
-    case status do
-      200 ->
-        body
-
-      201 ->
-        body
-
-      400 ->
-        Logger.warning("Bad Request: #{inspect(body)}")
-        raise "Bad Request"
-
-      401 ->
-        raise "Unauthorized"
-
-      404 ->
-        nil
-
-      409 ->
-        raise "Conflict"
-
-      422 ->
-        raise "Unprocessable Entity"
-
-      503 ->
-        raise "Service Unavailable"
-
-      _ ->
-        Logger.error("Unhandled status code #{status}: #{inspect(body)}")
-        raise "Unknown error: #{status}"
-    end
   end
 end

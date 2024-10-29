@@ -1,23 +1,18 @@
 defmodule Migration.Typesense do
+  alias SmallSdk.Typesense
+
   def create_collection!(schema) do
     req = build_request("/collections")
-    {:ok, res} = Req.post(req, json: schema)
+    res = Req.post!(req, json: schema)
 
-    res.body
+    Typesense.handle_response!(res)
   end
 
   def delete_collection!(collection_name) do
     req = build_request("/collections/#{collection_name}")
-    {:ok, res} = Req.delete(req)
+    res = Req.delete!(req)
 
-    res.body
-  end
-
-  def list_collections() do
-    req = build_request("/collections")
-    {:ok, res} = Req.get(req)
-
-    res.body
+    Typesense.handle_response!(res)
   end
 
   defp get_env() do

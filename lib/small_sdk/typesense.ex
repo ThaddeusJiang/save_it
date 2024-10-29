@@ -3,7 +3,7 @@ defmodule SmallSdk.Typesense do
 
   def create_document!(collection_name, document) do
     req = build_request("/collections/#{collection_name}/documents")
-    {:ok, res} = Req.post(req, json: document)
+    res = Req.post(req, json: document)
 
     handle_response(res)
   end
@@ -21,7 +21,7 @@ defmodule SmallSdk.Typesense do
     }
 
     req = build_request("/collections/#{collection_name}/documents/search")
-    {:ok, res} = Req.get(req, params: query_params)
+    res = Req.get(req, params: query_params)
     data = handle_response(res)
 
     data["hits"] |> Enum.map(&Map.get(&1, "document"))
@@ -29,21 +29,21 @@ defmodule SmallSdk.Typesense do
 
   def get_document(collection_name, document_id) do
     req = build_request("/collections/#{collection_name}/documents/#{document_id}")
-    {:ok, res} = Req.get(req)
+    res = Req.get(req)
 
     handle_response(res)
   end
 
   def update_document!(collection_name, document_id, update_input) do
     req = build_request("/collections/#{collection_name}/documents/#{document_id}")
-    {:ok, res} = Req.patch(req, json: update_input)
+    res = Req.patch(req, json: update_input)
 
     handle_response(res)
   end
 
   def delete_document!(collection_name, document_id) do
     req = build_request("/collections/#{collection_name}/documents/#{document_id}")
-    {:ok, res} = Req.delete(req)
+    res = Req.delete(req)
 
     handle_response(res)
   end
@@ -52,7 +52,7 @@ defmodule SmallSdk.Typesense do
     {url, _} = get_env()
     req = build_request("/keys")
 
-    {:ok, res} =
+    res =
       Req.post(req,
         json: %{
           "description" => "Search-only photos key",
@@ -61,9 +61,11 @@ defmodule SmallSdk.Typesense do
         }
       )
 
+    data = handle_response(res)
+
     %{
       url: url,
-      api_key: res.body["value"]
+      api_key: data["value"]
     }
   end
 
@@ -87,12 +89,9 @@ defmodule SmallSdk.Typesense do
     )
   end
 
-  defp handle_response(%Req.Response{status: status, body: body}) do
+  def handle_response({:ok, %{status: status, body: body}}) do
     case status do
-      200 ->
-        body
-
-      201 ->
+      status when status in 200..209 ->
         body
 
       400 ->
@@ -117,6 +116,22 @@ defmodule SmallSdk.Typesense do
       _ ->
         Logger.error("Unhandled status code #{status}: #{inspect(body)}")
         raise "Unknown error: #{status}"
+    end
+  end
+
+  def handle_response({:error, reason}) do
+    Logger.error("Request failed: #{inspect(reason)}")
+    raise "Request failed"
+  end
+
+  def handle_response!(%{status: status, body: body}) do
+    case status do
+      status when status in 200..209 ->
+        body
+
+      status ->
+        Logger.warning("Request failed with status #{status}: #{inspect(body)}")
+        raise "Request failed with status #{status}"
     end
   end
 end
