@@ -13,19 +13,21 @@ defmodule SmallSdk.Typesense do
   def list_documents(collection_name, opts \\ []) do
     page = Keyword.get(opts, :page, 1)
     per_page = Keyword.get(opts, :per_page, 10)
-    req = build_request("/collections/#{collection_name}/documents")
+    req = build_request("/collections/#{collection_name}/documents/search")
 
     res =
       Req.get(req,
         params: %{
           q: "*",
-          query_by: "",
+          query_by: "caption",
           page: page,
           per_page: per_page
         }
       )
 
-    handle_response(res) || []
+    data = handle_response(res)
+
+    data["hits"] |> Enum.map(&Map.get(&1, "document"))
   end
 
   def search_documents!(collection_name, opts) do

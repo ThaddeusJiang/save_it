@@ -17,6 +17,13 @@ defmodule SaveIt.Migration.Typesense do
     Typesense.handle_response!(res)
   end
 
+  def list_collections!() do
+    req = build_request("/collections")
+    res = Req.get!(req)
+
+    Typesense.handle_response!(res)
+  end
+
   def delete_collection!(collection_name) do
     req = build_request("/collections/#{collection_name}")
     res = Req.delete!(req)

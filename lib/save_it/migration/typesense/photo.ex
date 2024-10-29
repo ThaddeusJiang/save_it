@@ -37,33 +37,33 @@ defmodule SaveIt.Migration.Typesense.Photo do
 
     Typesense.update_collection!(@collection_name, %{
       "fields" => [
-        %{"name" => "file_id", "type" => "string"}
+        %{"name" => "file_id", "type" => "string", "optional" => true}
       ]
     })
+  end
 
-    Logger.info("migrating photos data")
+  def migrate_photos_data_20241029 do
+    Logger.info("migrating photos documents")
 
-    TypesenseDataClient.list_documents(@collection_name, per_page: 10000)
-    |> Enum.each(fn doc ->
-      id = doc["id"]
+    docs =
+      TypesenseDataClient.list_documents(@collection_name, per_page: 200)
 
-      file_id =
-        doc["url"]
-        |> String.split("/")
-        |> List.last()
+    count =
+      Enum.map(docs, fn doc ->
+        id = doc["id"]
 
-      TypesenseDataClient.update_document!(@collection_name, id, %{
-        "file_id" => file_id
-      })
-    end)
+        file_id =
+          doc["url"]
+          |> String.split("/")
+          |> List.last()
 
-    Logger.info("dropping url field")
+        TypesenseDataClient.update_document!(@collection_name, id, %{
+          "file_id" => file_id
+        })
+      end)
+      |> Enum.count()
 
-    Typesense.update_collection!(@collection_name, %{
-      "fields" => [
-        %{"name" => "url", "drop" => true}
-      ]
-    })
+    Logger.info("migrated #{count} photos")
   end
 
   def drop_photos!() do
