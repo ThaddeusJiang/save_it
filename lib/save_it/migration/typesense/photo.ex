@@ -32,7 +32,7 @@ defmodule SaveIt.Migration.Typesense.Photo do
     Typesense.create_collection!(schema)
   end
 
-  def migrate_photos_2024_10_29!() do
+  def migrate_photos_20241029!() do
     Logger.info("updating photos collection")
 
     Typesense.update_collection!(@collection_name, %{
@@ -73,6 +73,6 @@ defmodule SaveIt.Migration.Typesense.Photo do
   def reset!() do
     drop_photos!()
     create_photos_20241024!()
-    migrate_photos_2024_10_29!()
+    migrate_photos_20241029!()
   end
 end

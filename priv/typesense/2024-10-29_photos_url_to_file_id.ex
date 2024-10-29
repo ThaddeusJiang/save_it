@@ -1,1 +1,1 @@
-SaveIt.Migration.Typesense.Photo.migrate_photos_2024_10_29!()
+SaveIt.Migration.Typesense.Photo.migrate_photos_20241029!()
