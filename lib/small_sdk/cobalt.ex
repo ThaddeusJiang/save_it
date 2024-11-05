@@ -1,7 +1,7 @@
 defmodule SmallSdk.Cobalt do
   require Logger
 
-  import Tj.UrlHelper, only: [validate_url!: 1]
+  import SaveIt.SmallHelper.UrlHelper, only: [validate_url!: 1]
 
   def get_download_url(text) do
     url = String.split(text, "?") |> hd()

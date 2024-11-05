@@ -1,4 +1,4 @@
-defmodule Tj.UrlHelper do
+defmodule SaveIt.SmallHelper.UrlHelper do
   def validate_url!(url) do
     uri = URI.parse(url)
 

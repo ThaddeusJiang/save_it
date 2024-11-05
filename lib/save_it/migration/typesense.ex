@@ -1,7 +1,7 @@
 defmodule SaveIt.Migration.Typesense do
   alias SmallSdk.Typesense
 
-  import Tj.UrlHelper, only: [validate_url!: 1]
+  import SaveIt.SmallHelper.UrlHelper, only: [validate_url!: 1]
 
   def create_collection!(schema) do
     req = build_request("/collections")
