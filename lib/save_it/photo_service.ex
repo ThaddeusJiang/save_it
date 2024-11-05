@@ -2,7 +2,7 @@ defmodule SaveIt.PhotoService do
   require Logger
   alias SmallSdk.Typesense
 
-  import Tj.UrlHelper, only: [validate_url!: 1]
+  import SaveIt.SmallHelper.UrlHelper, only: [validate_url!: 1]
 
   def create_photo!(
         %{

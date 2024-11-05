@@ -1,7 +1,7 @@
 defmodule SmallSdk.Typesense do
   require Logger
 
-  import Tj.UrlHelper, only: [validate_url!: 1]
+  import SaveIt.SmallHelper.UrlHelper, only: [validate_url!: 1]
 
   def create_document!(collection_name, document) do
     req = build_request("/collections/#{collection_name}/documents")

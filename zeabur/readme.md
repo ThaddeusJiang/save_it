@@ -1,11 +1,14 @@
-# Zeabur
+# SaveIt template on zeabur
 
-## Typesense Template
+- zeabur template: https://zeabur.com/templates/FTAONK
+- github: https://github.com/ThaddeusJiang/save_it/
+
+## Develop
 
 ```sh
-npx zeabur template update -c FTAONK -f typesense-template.yaml
+npx zeabur template update -c FTAONK -f template.yaml
 ```
 
-docs:
+## Docs
 
-- https://zeabur.com/docs/template/template-in-code
+- [zeabur docs | template ](https://zeabur.com/docs/template/template-in-code)

@@ -1,6 +1,6 @@
 defmodule SaveIt.Bot do
   require Logger
-  alias SaveIt.CobaltClient
+
   alias SaveIt.FileHelper
   alias SaveIt.GoogleDrive
   alias SaveIt.GoogleOAuth2DeviceFlow
@@ -8,6 +8,7 @@ defmodule SaveIt.Bot do
   alias SaveIt.PhotoService
 
   alias SmallSdk.Telegram
+  alias SmallSdk.Cobalt
 
   @bot :save_it_bot
 
@@ -225,8 +226,8 @@ defmodule SaveIt.Bot do
       {:ok, progress_message} = send_message(chat.id, Enum.at(@progress, 0))
       url = List.first(urls)
 
-      case CobaltClient.get_download_url(url) do
-        {:ok, url, download_urls} ->
+      case Cobalt.get_download_url(url) do
+        {:ok, purge_url, download_urls} ->
           case FileHelper.get_downloaded_files(download_urls) do
             nil ->
               update_message(chat.id, progress_message.message_id, Enum.slice(@progress, 0..1))
@@ -244,7 +245,7 @@ defmodule SaveIt.Bot do
                   bot_send_files(chat.id, files)
 
                   delete_messages(chat.id, [message_id, progress_message.message_id])
-                  FileHelper.write_folder(url, files)
+                  FileHelper.write_folder(purge_url, files)
                   # TODO: 给图片添加 emoji
                   GoogleDrive.upload_files(chat.id, files)
 
