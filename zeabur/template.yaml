@@ -5,13 +5,13 @@ metadata:
   name: SaveIt
 spec:
   description: SaveIt is a telegram bot that helps you save photos.
-  icon: https://github.com/user-attachments/assets/fae196b8-716e-4be7-a8c2-3b141984c0e5
+  icon: https://raw.githubusercontent.com/ThaddeusJiang/save_it/refs/heads/main/docs/assets/savt_it_bot_logo.jpg
   tags:
     - Bot
     - Telegram
     - Photos Storage
     - Search Engine
-  coverImage:
+  coverImage: https://raw.githubusercontent.com/ThaddeusJiang/save_it/refs/heads/main/docs/assets/savt_it_demo.gif
 
   readme: |-
     # SaveIt
@@ -22,14 +22,11 @@ spec:
     - Search photos using semantic search
     - Find similar photos by photo
 
-    ## Learn more
-    https://github.com/ThaddeusJiang/save_it
-
-    <video src="https://github.com/user-attachments/assets/b0dedcc0-3305-42b2-8101-6b0b5d32f17a" controls="controls" width="100%" height="auto" ></video>
+    [more](https://github.com/ThaddeusJiang/save_it)
 
   services:
     - name: save_it
-      icon: https://github.com/user-attachments/assets/fae196b8-716e-4be7-a8c2-3b141984c0e5
+      icon: https://raw.githubusercontent.com/ThaddeusJiang/save_it/refs/heads/main/docs/assets/savt_it_bot_logo.jpg
       template: GIT
       spec:
         source:
@@ -40,6 +37,9 @@ spec:
         env:
           TELEGRAM_BOT_TOKEN:
             default: ""
+            expose: false
+          COBALT_API_URL:
+            default: http://cobalt-api.zeabur.internal:9000
             expose: false
           TYPESENSE_URL:
             default: http://typesense.zeabur.internal:8108
@@ -78,6 +78,22 @@ spec:
             expose: true
           TYPESENSE_DATA_DIR:
             default: /data
+            expose: false
+
+        configs: []
+    - name: cobalt-api
+      icon: https://github.com/imputnet/cobalt/raw/main/web/static/favicon.png
+      template: PREBUILT_V2
+      spec:
+        source:
+          image: ghcr.io/imputnet/cobalt:10
+        ports:
+          - id: api
+            port: 9000
+            type: TCP
+        env:
+          API_URL:
+            default: undefined
             expose: false
 
         configs: []
