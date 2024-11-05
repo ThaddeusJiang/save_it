@@ -1,15 +1,28 @@
 services:
+  cobalt-api:
+    image: ghcr.io/imputnet/cobalt:10
+
+    init: true
+    read_only: true
+    restart: unless-stopped
+
+    ports:
+      - 9001:9000/tcp
+    environment:
+      API_URL: "http://localhost:9001/"
+
   typesense:
     image: typesense/typesense:27.1
+
     restart: on-failure
-    hostname: typesense
+
     ports:
-      - "8100:8108"
+      - "8101:8108"
     volumes:
       - ./data/typesense-data:/data
     command: "--data-dir /data --api-key=xyz --enable-cors"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8100/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8101/health"]
       interval: 30s
       timeout: 10s
       retries: 5

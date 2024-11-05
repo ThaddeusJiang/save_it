@@ -44,7 +44,7 @@ https://t.me/save_it_playground
 
 - [Elixir](https://elixir-lang.org/)
 - [ex_gram](https://github.com/rockneurotiko/ex_gram)
-- [cobalt api](https://github.com/imputnet/cobalt/blob/current/docs/api.md)
+- [cobalt api](https://github.com/imputnet/cobalt)
 - [Typesense](https://typesense.org/)
 
 ## Development
@@ -61,6 +61,7 @@ docker compose up
 
 ```sh
 # Run
+export COBALT_API_URL=<your_cobalt_api_url>
 export TELEGRAM_BOT_TOKEN=<YOUR_TELEGRAM_BOT_TOKEN>
 
 iex -S mix run --no-halt
