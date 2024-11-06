@@ -25,13 +25,16 @@ defmodule SaveIt.Bot do
     setup_commands: true
 
   command("start")
+
   command("search", description: "Search photos")
   command("similar", description: "Find similar photos")
-  command("about", description: "About the bot")
+  command("delete", description: "Delete message")
 
   command("login", description: "Login")
   command("code", description: "Get code for login")
   command("folder", description: "Update Google Drive folder ID")
+
+  command("about", description: "Know more about this bot")
 
   middleware(ExGram.Middleware.IgnoreUsername)
 
@@ -43,11 +46,11 @@ defmodule SaveIt.Bot do
 
   def handle({:command, :about, _msg}, context) do
     answer(context, """
-    This bot is created by @ThaddeusJiang, feel free to contact me if you have any questions.
+    SaveIt can download images and videos, just give me a link.
 
-    GitHub: https://github.com/ThaddeusJiang
-    Blog: https://thaddeusjiang.com
-    X: https://x.com/thaddeusjiang
+    Created by @ThaddeusJiang, powered by Cobalt, Typesense, and Elixir.Access
+
+    Give a star ⭐ if you like it, https://github.com/ThaddeusJiang/save_it
     """)
   end
 
@@ -137,7 +140,25 @@ defmodule SaveIt.Bot do
   end
 
   def handle({:command, :similar, %{chat: chat, photo: nil}}, _context) do
-    send_message(chat.id, "Upload a photo to find similar photos.")
+    send_message(chat.id, "Upload a photo with /similar for finding similar photos.")
+  end
+
+  def handle({:command, :delete, %{chat: chat, reply_to_message: nil}}, _ctx) do
+    send_message(chat.id, "reply a message with /delete command.")
+  end
+
+  def handle(
+        {:command, :delete,
+         %{chat: chat, message_id: message_id, from: from, reply_to_message: reply_to_message}},
+        _ctx
+      ) do
+    {:ok, %{id: bot_id, username: bot_username}} = ExGram.get_me()
+
+    if Enum.member?([bot_id, from.id], reply_to_message.from.id) do
+      handle_delete_command(chat.id, message_id, reply_to_message)
+    else
+      send_message(chat.id, "Only delete messages from @#{bot_username} and yourself.")
+    end
   end
 
   # caption: nil -> find same photos
@@ -466,5 +487,24 @@ defmodule SaveIt.Bot do
         Please run `/code` to get a new code, then run `/login` again.
         """)
     end
+  end
+
+  defp handle_delete_command(chat_id, message_id, reply_to_message) do
+    case reply_to_message do
+      %{photo: nil} ->
+        delete_message(chat_id, reply_to_message.message_id)
+
+      %{photo: photo} ->
+        photo
+        |> Enum.map(& &1.file_id)
+        |> PhotoService.delete_photos()
+
+        delete_message(chat_id, reply_to_message.message_id)
+
+      _ ->
+        send_message(chat_id, "reply a message with /delete command.")
+    end
+
+    delete_message(chat_id, message_id)
   end
 end

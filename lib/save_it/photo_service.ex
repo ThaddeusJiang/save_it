@@ -36,6 +36,14 @@ defmodule SaveIt.PhotoService do
     end
   end
 
+  def delete_photo(file_id) do
+    Typesense.delete_document_by_query("photos", "file_id:[#{file_id}]")
+  end
+
+  def delete_photos(file_ids) do
+    Typesense.delete_document_by_query("photos", "file_id:[#{Enum.join(file_ids, ",")}]")
+  end
+
   def get_photo(photo_id) do
     Typesense.get_document("photos", photo_id)
   end

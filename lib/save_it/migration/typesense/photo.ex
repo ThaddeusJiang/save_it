@@ -37,7 +37,8 @@ defmodule SaveIt.Migration.Typesense.Photo do
 
     Typesense.update_collection!(@collection_name, %{
       "fields" => [
-        %{"name" => "file_id", "type" => "string", "optional" => true}
+        %{"name" => "file_id", "type" => "string", "optional" => true},
+        %{"name" => "url", "drop" => true}
       ]
     })
   end
@@ -66,12 +67,12 @@ defmodule SaveIt.Migration.Typesense.Photo do
     Logger.info("migrated #{count} photos")
   end
 
-  def drop_photos!() do
-    Typesense.delete_collection!(@collection_name)
+  def drop_photos() do
+    Typesense.delete_collection(@collection_name)
   end
 
   def reset!() do
-    drop_photos!()
+    drop_photos()
     create_photos_20241024!()
     migrate_photos_20241029!()
   end
