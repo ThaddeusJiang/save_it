@@ -9,22 +9,20 @@ defmodule SmallSdk.Cobalt do
     req = build_request("/")
     res = Req.post(req, json: %{url: url})
 
-    body = handle_response(res)
-
-    case body do
-      %{"url" => download_url} ->
+    case handle_response(res) do
+      {:ok, %{"url" => download_url}} ->
         {:ok, download_url}
 
-      %{"status" => "picker", "picker" => picker_items} ->
+      {:ok, %{"status" => "picker", "picker" => picker_items}} ->
         {:ok, url, Enum.map(picker_items, &Map.get(&1, "url"))}
 
-      %{"status" => "error", "text" => msg} ->
-        Logger.warning("response.body is status error, text: #{msg}")
-        {:error, msg}
+      {:ok, _} ->
+        Logger.warning("cobalt response: #{inspect(res)}")
+        {:error, "Can't get download url using Cobalt API"}
 
-      _ ->
-        Logger.warning("response.body: #{inspect(body)}")
-        {:error, "inner service error"}
+      {:error, msg} ->
+        Logger.error("cobalt error: #{msg}")
+        {:error, "Can't get download url using Cobalt API"}
     end
   end
 
@@ -53,30 +51,10 @@ defmodule SmallSdk.Cobalt do
   def handle_response({:ok, %{status: status, body: body}}) do
     case status do
       status when status in 200..209 ->
-        body
-
-      400 ->
-        Logger.warning("Bad Request: #{inspect(body)}")
-        raise "Bad Request"
-
-      401 ->
-        raise "Unauthorized"
-
-      404 ->
-        nil
-
-      409 ->
-        raise "Conflict"
-
-      422 ->
-        raise "Unprocessable Entity"
-
-      503 ->
-        raise "Service Unavailable"
+        {:ok, body}
 
       _ ->
-        Logger.error("Unhandled status code #{status}: #{inspect(body)}")
-        raise "Unknown error: #{status}"
+        {:error, "Request failed with status #{status}: #{inspect(body)}"}
     end
   end
 
@@ -91,7 +69,7 @@ defmodule SmallSdk.Cobalt do
         body
 
       status ->
-        Logger.warning("Request failed with status #{status}: #{inspect(body)}")
+        Logger.error("Request failed with status #{status}: #{inspect(body)}")
         raise "Request failed with status #{status}"
     end
   end
