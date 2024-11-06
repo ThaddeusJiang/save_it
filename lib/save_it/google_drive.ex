@@ -1,6 +1,10 @@
 defmodule SaveIt.GoogleDrive do
   @moduledoc """
-  TODO:
+  TODO:重要：
+  改善
+  - [ ] 1. 如果没有配置，直接 skip
+  - [ ] 移动至 small_sdk
+
   - [ ] list folders
   - [ ] select folder and save folder_id
   """
@@ -117,31 +121,22 @@ defmodule SaveIt.GoogleDrive do
     """
   end
 
-  defp handle_response(
-         {:ok,
-          %Tesla.Env{
-            status: 200,
-            body: %{"files" => files}
-          }}
-       ) do
+  defp handle_response({:ok, %{status: 200, body: %{"files" => files}}}) do
     {:ok, files}
   end
 
-  defp handle_response({:ok, %Tesla.Env{status: 200, body: body}}) do
+  defp handle_response({:ok, %{status: 200, body: body}}) do
     Logger.info("Successfully uploaded file to Google Drive")
     {:ok, body}
   end
 
-  defp handle_response({:ok, %Tesla.Env{status: status, body: body}}) do
-    Logger.warning(
-      "Failed to upload file to Google Drive, status: #{status}, body: #{inspect(body)}"
-    )
-
+  defp handle_response({:ok, %{status: status, body: body}}) do
+    Logger.warning("Failed at Google Drive, status: #{status}, body: #{inspect(body)}")
     {:error, %{status: status, body: body}}
   end
 
   defp handle_response({:error, reason}) do
-    Logger.error("Failed to upload file to Google Drive, reason: #{inspect(reason)}")
+    Logger.error("Failed at Google Drive, reason: #{inspect(reason)}")
     {:error, reason}
   end
 end

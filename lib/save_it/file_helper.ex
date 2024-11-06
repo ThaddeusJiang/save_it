@@ -6,12 +6,16 @@ defmodule SaveIt.FileHelper do
   @urls_dir "./data/storage/urls"
 
   def download(url) do
+    Logger.info("download started, url: #{url}")
+
     cond do
       String.contains?(url, "/api/stream") -> download_stream(url)
+      String.contains?(url, "/tunnel") -> download_file_via_tunnel(url)
       true -> download_file(url)
     end
   end
 
+  # FIXME:TODAY return {:ok, file_name, file_content} | {:error, reason}
   def download_files(urls) do
     Logger.info("download_files started, urls: #{inspect(urls)}")
 
@@ -57,11 +61,41 @@ defmodule SaveIt.FileHelper do
         file_name = gen_file_name(url) <> "." <> ext
         {:ok, file_name, body}
 
-      {:ok, %Tesla.Env{status: status}} ->
-        {:error, "Status: #{status}"}
+      {:ok, %Tesla.Env{status: status, body: body}} ->
+        Logger.error("download_file failed, status: #{status}, body: #{inspect(body)}")
+        {:error, "Failed to download file"}
 
       {:error, reason} ->
-        {:error, "Reason #{inspect(reason)}"}
+        Logger.error("download_file failed, reason: #{inspect(reason)}")
+        {:error, "Failed to download file"}
+    end
+  end
+
+  defp download_file_via_tunnel(url) do
+    Logger.info("download_file_via_tunnel started, url: #{url}")
+
+    case get(url) do
+      {:ok, %Tesla.Env{status: 200, body: body, headers: headers}} ->
+        filename =
+          headers
+          |> Enum.find(fn {k, _} -> k == "content-disposition" end)
+          |> elem(1)
+          |> String.split(";")
+          |> Enum.find(fn x -> String.contains?(x, "filename") end)
+          |> String.split("=")
+          |> List.last()
+          |> String.trim()
+          |> String.replace("\"", "")
+
+        {:ok, filename, body}
+
+      {:ok, %Tesla.Env{status: status, body: body}} ->
+        Logger.error("download_file_via_tunnel failed, status: #{status}, body: #{inspect(body)}")
+        {:error, "Failed to download file"}
+
+      {:error, reason} ->
+        Logger.error("download_file_via_tunnel failed, reason: #{inspect(reason)}")
+        {:error, "Failed to download file"}
     end
   end
 

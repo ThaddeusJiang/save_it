@@ -303,8 +303,8 @@ defmodule SaveIt.Bot do
               delete_messages(chat.id, [message_id, progress_message.message_id])
           end
 
-        {:error, msg} ->
-          update_message(chat.id, progress_message.message_id, msg)
+        {:error, _} ->
+          update_message(chat.id, progress_message.message_id, "💔 Failed to get download URL.")
       end
     end
   end
