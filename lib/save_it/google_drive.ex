@@ -126,7 +126,6 @@ defmodule SaveIt.GoogleDrive do
   end
 
   defp handle_response({:ok, %{status: 200, body: body}}) do
-    Logger.info("Successfully uploaded file to Google Drive")
     {:ok, body}
   end
 

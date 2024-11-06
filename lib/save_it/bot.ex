@@ -9,6 +9,7 @@ defmodule SaveIt.Bot do
 
   alias SmallSdk.Telegram
   alias SmallSdk.Cobalt
+  alias SmallSdk.WebDownloader
 
   @bot :save_it_bot
 
@@ -232,7 +233,7 @@ defmodule SaveIt.Bot do
             nil ->
               update_message(chat.id, progress_message.message_id, Enum.slice(@progress, 0..1))
 
-              case FileHelper.download_files(download_urls) do
+              case WebDownloader.download_files(download_urls) do
                 {:ok, files} ->
                   update_message(
                     chat.id,
@@ -258,8 +259,6 @@ defmodule SaveIt.Bot do
               end
 
             downloaded_files ->
-              Logger.info("👍 File already downloaded, don't need to download again")
-
               update_message(chat.id, progress_message.message_id, Enum.slice(@progress, 0..2))
 
               # TODO: bot_send_media_group(chat.id, downloaded_files)
@@ -272,7 +271,7 @@ defmodule SaveIt.Bot do
             nil ->
               update_message(chat.id, progress_message.message_id, Enum.slice(@progress, 0..1))
 
-              case FileHelper.download(download_url) do
+              case WebDownloader.download_file(download_url) do
                 {:ok, file_name, file_content} ->
                   update_message(
                     chat.id,
@@ -295,8 +294,6 @@ defmodule SaveIt.Bot do
               end
 
             downloaded_file ->
-              Logger.info("👍 File already downloaded, don't need to download again")
-
               update_message(chat.id, progress_message.message_id, Enum.slice(@progress, 0..2))
 
               bot_send_file(chat.id, downloaded_file, {:file, downloaded_file})

@@ -133,6 +133,7 @@ defmodule SmallSdk.Typesense do
         raise "Unprocessable Entity"
 
       503 ->
+        # TODO: service monitoring, alerting to IM
         raise "Service Unavailable"
 
       _ ->

@@ -16,12 +16,12 @@ defmodule SmallSdk.Cobalt do
       {:ok, %{"status" => "picker", "picker" => picker_items}} ->
         {:ok, url, Enum.map(picker_items, &Map.get(&1, "url"))}
 
-      {:ok, %{"status" => "error", "text" => msg}} ->
-        Logger.warning("response.body is status error, text: #{msg}")
-        {:error, msg}
+      {:ok, _} ->
+        Logger.warning("cobalt response: #{inspect(res)}")
+        {:error, "Can't get download url using Cobalt API"}
 
       {:error, msg} ->
-        Logger.error("response is error: #{msg}")
+        Logger.error("cobalt error: #{msg}")
         {:error, "Can't get download url using Cobalt API"}
     end
   end

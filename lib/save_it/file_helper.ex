@@ -1,103 +1,8 @@
 defmodule SaveIt.FileHelper do
   require Logger
-  use Tesla
 
   @files_dir "./data/storage/files"
   @urls_dir "./data/storage/urls"
-
-  def download(url) do
-    Logger.info("download started, url: #{url}")
-
-    cond do
-      String.contains?(url, "/api/stream") -> download_stream(url)
-      String.contains?(url, "/tunnel") -> download_file_via_tunnel(url)
-      true -> download_file(url)
-    end
-  end
-
-  # FIXME:TODAY return {:ok, file_name, file_content} | {:error, reason}
-  def download_files(urls) do
-    Logger.info("download_files started, urls: #{inspect(urls)}")
-
-    res =
-      urls
-      |> Enum.map(&download/1)
-      |> Enum.reduce_while([], fn
-        {:ok, file_name, file_content}, acc -> {:cont, [{file_name, file_content} | acc]}
-        {:error, reason}, _ -> {:halt, {:error, reason}}
-      end)
-
-    {:ok, res}
-  end
-
-  defp download_stream(url) do
-    Logger.info("download_stream started, url: #{url}")
-
-    case get(url) do
-      {:ok, %Tesla.Env{status: 200, body: body}} ->
-        file_name = gen_file_name(url) <> ".mp4"
-        {:ok, file_name, body}
-
-      {:ok, %Tesla.Env{status: status}} ->
-        {:error, "Status: #{status}"}
-
-      {:error, reason} ->
-        {:error, "Reason: #{inspect(reason)}"}
-    end
-  end
-
-  defp download_file(url) do
-    Logger.info("download_file started, url: #{url}")
-
-    case get(url) do
-      {:ok, %Tesla.Env{status: 200, body: body, headers: headers}} ->
-        ext =
-          headers
-          |> Enum.find(fn {k, _} -> k == "content-type" end)
-          |> elem(1)
-          |> String.split("/")
-          |> List.last()
-
-        file_name = gen_file_name(url) <> "." <> ext
-        {:ok, file_name, body}
-
-      {:ok, %Tesla.Env{status: status, body: body}} ->
-        Logger.error("download_file failed, status: #{status}, body: #{inspect(body)}")
-        {:error, "Failed to download file"}
-
-      {:error, reason} ->
-        Logger.error("download_file failed, reason: #{inspect(reason)}")
-        {:error, "Failed to download file"}
-    end
-  end
-
-  defp download_file_via_tunnel(url) do
-    Logger.info("download_file_via_tunnel started, url: #{url}")
-
-    case get(url) do
-      {:ok, %Tesla.Env{status: 200, body: body, headers: headers}} ->
-        filename =
-          headers
-          |> Enum.find(fn {k, _} -> k == "content-disposition" end)
-          |> elem(1)
-          |> String.split(";")
-          |> Enum.find(fn x -> String.contains?(x, "filename") end)
-          |> String.split("=")
-          |> List.last()
-          |> String.trim()
-          |> String.replace("\"", "")
-
-        {:ok, filename, body}
-
-      {:ok, %Tesla.Env{status: status, body: body}} ->
-        Logger.error("download_file_via_tunnel failed, status: #{status}, body: #{inspect(body)}")
-        {:error, "Failed to download file"}
-
-      {:error, reason} ->
-        Logger.error("download_file_via_tunnel failed, reason: #{inspect(reason)}")
-        {:error, "Failed to download file"}
-    end
-  end
 
   def set_google_drive_folder_id(chat_id, folder_id) do
     write_file_to_disk("./data/settings/#{chat_id}", "folder_id.txt", folder_id)
@@ -198,9 +103,5 @@ defmodule SaveIt.FileHelper do
       {:error, _} ->
         nil
     end
-  end
-
-  defp gen_file_name(url) do
-    :crypto.hash(:sha256, url) |> Base.url_encode64(padding: false)
   end
 end
