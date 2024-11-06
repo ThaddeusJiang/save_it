@@ -1,10 +1,7 @@
 defmodule SmallSdk.WebDownloader do
   require Logger
 
-  # FIXME:TODAY return {:ok, file_name, file_content} | {:error, reason}
   def download_files(urls) do
-    Logger.info("download_files started, urls: #{inspect(urls)}")
-
     res =
       urls
       |> Enum.map(&download_file/1)
@@ -13,7 +10,10 @@ defmodule SmallSdk.WebDownloader do
         {:error, reason}, _ -> {:halt, {:error, reason}}
       end)
 
-    {:ok, res}
+    case res do
+      {:error, reason} -> {:error, reason}
+      files -> {:ok, files}
+    end
   end
 
   # TODO: have to handle Stream data
