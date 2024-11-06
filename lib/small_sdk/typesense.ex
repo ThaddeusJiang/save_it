@@ -63,11 +63,21 @@ defmodule SmallSdk.Typesense do
     handle_response(res)
   end
 
-  def delete_document!(collection_name, document_id) do
+  def delete_document(collection_name, document_id) do
     req = build_request("/collections/#{collection_name}/documents/#{document_id}")
     res = Req.delete(req)
 
     handle_response(res)
+  end
+
+  # docs: https://typesense.org/docs/27.1/api/documents.html#delete-documents
+  def delete_document_by_query(collection_name, filter_by, opts \\ []) do
+    batch_size = Keyword.get(opts, :batch_size, 100)
+
+    req = build_request("/collections/#{collection_name}/documents")
+
+    Req.delete(req, params: %{"filter_by" => filter_by, "batch_size" => batch_size})
+    |> handle_response()
   end
 
   def create_search_key() do
