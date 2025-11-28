@@ -23,6 +23,7 @@ defmodule SaveIt.MixProject do
     [
       {:ex_gram, "~> 0.53"},
       {:tesla, "~> 1.11"},
+      {:sentry, "~> 10.2.0"},
       {:hackney, "~> 1.12"},
       {:jason, "~> 1.4.1"},
       {:req, "~> 0.5.0"}

@@ -25,7 +25,7 @@ spec:
     [more](https://github.com/ThaddeusJiang/save_it)
 
   services:
-    - name: save_it
+    - name: save_it_bot
       icon: https://raw.githubusercontent.com/ThaddeusJiang/save_it/refs/heads/main/docs/assets/savt_it_bot_logo.jpg
       template: GIT
       spec:
@@ -34,6 +34,9 @@ spec:
           repo: 831394769
           branch: main
           rootDirectory: /
+        volumes:
+          - id: bot-data
+            dir: /data
         env:
           TELEGRAM_BOT_TOKEN:
             default: ""
@@ -65,7 +68,7 @@ spec:
             port: 8108
             type: HTTP
         volumes:
-          - id: data
+          - id: typesense-data
             dir: /data
         instructions:
           - type: PASSWORD

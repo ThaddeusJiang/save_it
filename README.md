@@ -60,8 +60,6 @@ docker compose up
 ```
 
 ```sh
-# Run
-export COBALT_API_URL=<your_cobalt_api_url>
 export TELEGRAM_BOT_TOKEN=<YOUR_TELEGRAM_BOT_TOKEN>
 
 iex -S mix run --no-halt
