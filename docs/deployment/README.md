@@ -1,9 +1,16 @@
 # Deployment
 
-## Env
+[![Deploy on Zeabur](https://zeabur.com/button.svg)](https://zeabur.com/templates/FTAONK)
 
-```sh
-export TELEGRAM_BOT_TOKEN=<TELEGRAM_BOT_TOKEN>
-export COBALT_API_URL=<COBALT_API_URL>
-export SENTRY_DSN=
+## Environment Variables
+
+```shell
+TELEGRAM_BOT_TOKEN=
+COBALT_API_URL=
+TYPESENSE_URL=
+TYPESENSE_API_KEY=
+# optional
+GOOGLE_OAUTH_CLIENT_ID=
+GOOGLE_OAUTH_CLIENT_SECRET=
+SENTRY_DSN=
 ```

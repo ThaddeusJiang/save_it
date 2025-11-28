@@ -4,23 +4,23 @@ kind: Template
 metadata:
   name: SaveIt
 spec:
-  description: SaveIt is a telegram bot that helps you save photos.
+  description: Telegram bot can Save and Search pictures by link.
   icon: https://raw.githubusercontent.com/ThaddeusJiang/save_it/refs/heads/main/docs/assets/savt_it_bot_logo.jpg
   tags:
     - Bot
     - Telegram
-    - Photos Storage
-    - Search Engine
-  coverImage: https://raw.githubusercontent.com/ThaddeusJiang/save_it/refs/heads/main/docs/assets/savt_it_demo.gif
+    - Image Storage
+    - Image Search
+  coverImage: https://github.com/ThaddeusJiang/save_it/blob/main/docs/assets/save_it_demo.gif?raw=true
 
   readme: |-
     # SaveIt
-    A telegram bot can Save photos and Search photos
+    Telegram bot can Save and Search pictures by link.
 
     ##  Features
-    - Save photos via a link
-    - Search photos using semantic search
-    - Find similar photos by photo
+    - Save pictures via a link
+    - Search pictures using semantic search
+    - Find similar pictures by picture
 
     [more](https://github.com/ThaddeusJiang/save_it)
 
