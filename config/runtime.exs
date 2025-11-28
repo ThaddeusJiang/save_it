@@ -11,3 +11,10 @@ config :save_it, :typesense_api_key, System.get_env("TYPESENSE_API_KEY", "xyz")
 # optional
 config :save_it, :google_oauth_client_id, System.get_env("GOOGLE_OAUTH_CLIENT_ID")
 config :save_it, :google_oauth_client_secret, System.get_env("GOOGLE_OAUTH_CLIENT_SECRET")
+
+config :sentry,
+  dsn: System.get_env("SENTRY_DSN"),
+  environment_name: Mix.env(),
+  enable_source_code_context: true,
+  root_source_code_path: File.cwd!(),
+  included_dependencies: [:req, :jason, :hackney]

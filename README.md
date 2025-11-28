@@ -1,29 +1,29 @@
 # Save it
 
-A telegram bot can Save photos and Search photos
+Telegram bot can Save and Search pictures by link.
 
 ## Features
 
-- [x] Save photos via a link
-- [x] Search photos using semantic search
-- [x] Find similar photos by photo
+- [x] Save pictures via a link
+- [x] Search pictures using semantic search
+- [x] Find similar pictures by picture
 
 ## supported services
 
 - [x] https://x.com/
+- [x] https://www.pinterest.com/
 - [x] https://instagram.com/
 - [x] https://www.youtube.com/
-- [x] https://www.pinterest.com/
 
 ## Usage
 
-### Save Photos
+### Save Pictures
 
 Just send the link to the bot.
 
 https://github.com/user-attachments/assets/4a375cab-7124-44f3-994e-0cb026476d39
 
-### Search Photos
+### Search Pictures
 
 messages:
 
@@ -44,7 +44,7 @@ https://t.me/save_it_playground
 
 - [Elixir](https://elixir-lang.org/)
 - [ex_gram](https://github.com/rockneurotiko/ex_gram)
-- [cobalt api](https://github.com/imputnet/cobalt)
+- [cobalt](https://github.com/imputnet/cobalt)
 - [Typesense](https://typesense.org/)
 
 ## Development
@@ -55,14 +55,26 @@ mix deps.get
 ```
 
 ```sh
-# Start typesense
+# Setup
 docker compose up
 ```
 
 ```sh
 # Run
-export COBALT_API_URL=<your_cobalt_api_url>
 export TELEGRAM_BOT_TOKEN=<YOUR_TELEGRAM_BOT_TOKEN>
 
 iex -S mix run --no-halt
 ```
+
+### Update Zeabur Template
+
+```sh
+just update-zeabur-template
+```
+
+https://zeabur.com/docs/template/template-in-code
+
+## Tools
+
+- [zeabur](https://zeabur.com/)
+- [just](https://github.com/casey/just)
