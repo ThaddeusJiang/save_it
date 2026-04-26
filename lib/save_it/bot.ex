@@ -11,6 +11,8 @@ defmodule SaveIt.Bot do
 
   alias SmallSdk.Telegram
   alias SmallSdk.Cobalt
+  alias SmallSdk.BadNews
+  alias SmallSdk.HlsDownloader
   alias SmallSdk.WebDownloader
 
   @bot :save_it_bot
@@ -317,10 +319,15 @@ defmodule SaveIt.Bot do
   end
 
   defp get_download_url(url) do
-    if direct_media_url?(url) do
-      {:ok, url}
-    else
-      Cobalt.get_download_url(url)
+    cond do
+      direct_media_url?(url) ->
+        {:ok, url}
+
+      BadNews.bad_news_url?(url) ->
+        BadNews.get_download_url(url)
+
+      true ->
+        Cobalt.get_download_url(url)
     end
   end
 
@@ -329,6 +336,25 @@ defmodule SaveIt.Bot do
     progress_message_id = progress_message.message_id
 
     case get_download_url(url) do
+      {:ok, m3u8_url, :hls} ->
+        update_message(chat_id, progress_message_id, Enum.slice(@progress, 0..1))
+
+        case HlsDownloader.download(m3u8_url) do
+          {:ok, file_name, file_content} ->
+            update_message(chat_id, progress_message_id, Enum.slice(@progress, 0..2))
+
+            bot_send_file(chat_id, file_name, {:file_content, file_content, file_name})
+
+            delete_message(chat_id, progress_message_id)
+            FileHelper.write_file(file_name, file_content, url)
+            GoogleDrive.upload_file_content(chat_id, file_content, file_name)
+            :ok
+
+          {:error, _reason} ->
+            update_message(chat_id, progress_message_id, "💔 Failed downloading HLS video.")
+            :error
+        end
+
       {:ok, purge_url, download_urls} ->
         case FileHelper.get_downloaded_files(download_urls) do
           nil ->

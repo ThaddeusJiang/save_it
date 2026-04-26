@@ -19,6 +19,7 @@ Save images and videos from internet.
 - [x] https://www.pinterest.com/
 - [x] https://instagram.com/
 - [x] https://www.youtube.com/
+- [x] https://bad.news/
 
 ## Usage
 
@@ -52,6 +53,7 @@ https://github.com/user-attachments/assets/b0dedcc0-3305-42b2-8101-6b0b5d32f17a
 - [Elixir](https://elixir-lang.org/)
 - [ex_gram](https://github.com/rockneurotiko/ex_gram) a powerful Elixir library for building Telegram Bots.
 - [cobalt](https://github.com/imputnet/cobalt) a media downloader.
+- [ffmpeg](https://ffmpeg.org/) for HLS video downloading.
 - [Typesense](https://typesense.org/) Lightning Fast, Open Source Search
 
 
