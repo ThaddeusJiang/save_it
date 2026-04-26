@@ -2,25 +2,21 @@
 apiVersion: zeabur.com/v1
 kind: Template
 metadata:
-  name: SaveIt
+  name: Save what you see
 spec:
-  description: Telegram bot can Save and Search pictures by link.
+  description: Save images and videos from internet.
   icon: https://raw.githubusercontent.com/ThaddeusJiang/save_it/refs/heads/main/docs/assets/savt_it_bot_logo.jpg
   tags:
-    - Bot
-    - Telegram
-    - Image Storage
-    - Image Search
+    - Downloader
+    - Telegram Bot
+    - CLI
   coverImage: https://github.com/ThaddeusJiang/save_it/blob/main/docs/assets/save_it_demo.gif?raw=true
 
   readme: |-
-    # SaveIt
-    Telegram bot can Save and Search pictures by link.
-
-    ##  Features
-    - Save pictures via a link
-    - Search pictures using semantic search
-    - Find similar pictures by picture
+    # Features
+    - Save images and videos by link
+    - Search images and videos using semantic search
+    - Find similar images and videos by picture
 
     [more](https://github.com/ThaddeusJiang/save_it)
 

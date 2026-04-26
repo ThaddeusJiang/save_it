@@ -1,0 +1,13 @@
+[tools]
+elixir = "1.19.5"
+
+[env]
+_.file = '.env'
+
+[tasks.update-zeabur-template]
+description = "Update Zeabur template"
+run = [
+  "echo 'Updating Zeabur template...'",
+  "npx zeabur template update -c FTAONK -f others/zeabur/template.yaml",
+  "echo '✅ https://zeabur.com/templates/FTAONK'",
+]
