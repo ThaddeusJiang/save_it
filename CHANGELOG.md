@@ -7,12 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-04-26
+
 ### Added
 - Support bad.news video URLs with HLS (m3u8) stream downloading via ffmpeg.
 - Auto-select best video quality that fits within Telegram's 50MB upload limit.
 
 ### Changed
 - Added ffmpeg to Dockerfile for HLS video support.
+
+**Full Changelog**: https://github.com/ThaddeusJiang/save_it/compare/v0.2.0...v0.3.0
 
 ## [0.2.0] - 2026-04-26
 
