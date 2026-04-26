@@ -12,6 +12,8 @@ defmodule SmallSdk.BadNews do
     - `{:error, reason}` on failure
   """
   def get_download_url(page_url) do
+    page_url = normalize_url(page_url)
+
     case Req.get(page_url, headers: [{"User-Agent", "Mozilla/5.0"}]) do
       {:ok, %{status: 200, body: body}} ->
         extract_video_info(body)
@@ -62,6 +64,14 @@ defmodule SmallSdk.BadNews do
           _ ->
             {:error, "No video found on bad.news page"}
         end
+    end
+  end
+
+  # Normalize /ajax/topic/{id}/download to /t/{id} (ajax page requires login)
+  defp normalize_url(url) do
+    case Regex.run(~r|/ajax/topic/(\d+)/download|, url) do
+      [_, id] -> @base_url <> "/t/" <> id
+      _ -> url
     end
   end
 
