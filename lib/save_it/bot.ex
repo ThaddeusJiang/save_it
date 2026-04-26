@@ -1,6 +1,8 @@
 defmodule SaveIt.Bot do
   require Logger
 
+  import SaveIt.SmallHelper.UrlHelper, only: [direct_media_url?: 1]
+
   alias SaveIt.FileHelper
   alias SaveIt.GoogleDrive
   alias SaveIt.GoogleOAuth2DeviceFlow
@@ -245,84 +247,13 @@ defmodule SaveIt.Bot do
     urls = extract_urls_from_string(text)
 
     unless Enum.empty?(urls) do
-      {:ok, progress_message} = send_message(chat.id, Enum.at(@progress, 0))
-      url = List.first(urls)
+      has_success? =
+        urls
+        |> Enum.map(&process_url(chat.id, &1))
+        |> Enum.any?(&(&1 == :ok))
 
-      case Cobalt.get_download_url(url) do
-        {:ok, purge_url, download_urls} ->
-          case FileHelper.get_downloaded_files(download_urls) do
-            nil ->
-              update_message(chat.id, progress_message.message_id, Enum.slice(@progress, 0..1))
-
-              case WebDownloader.download_files(download_urls) do
-                {:ok, files} ->
-                  update_message(
-                    chat.id,
-                    progress_message.message_id,
-                    Enum.slice(@progress, 0..2)
-                  )
-
-                  # TODO: send media group
-                  # bot_send_media_group(chat.id, files)
-                  bot_send_files(chat.id, files)
-
-                  delete_messages(chat.id, [message_id, progress_message.message_id])
-                  FileHelper.write_folder(purge_url, files)
-                  # TODO: 给图片添加 emoji
-                  GoogleDrive.upload_files(chat.id, files)
-
-                _ ->
-                  update_message(
-                    chat.id,
-                    progress_message.message_id,
-                    "💔 Failed downloading file."
-                  )
-              end
-
-            downloaded_files ->
-              update_message(chat.id, progress_message.message_id, Enum.slice(@progress, 0..2))
-
-              # TODO: bot_send_media_group(chat.id, downloaded_files)
-              bot_send_filenames(chat.id, downloaded_files)
-              delete_messages(chat.id, [message_id, progress_message.message_id])
-          end
-
-        {:ok, download_url} ->
-          case FileHelper.get_downloaded_file(download_url) do
-            nil ->
-              update_message(chat.id, progress_message.message_id, Enum.slice(@progress, 0..1))
-
-              case WebDownloader.download_file(download_url) do
-                {:ok, file_name, file_content} ->
-                  update_message(
-                    chat.id,
-                    progress_message.message_id,
-                    Enum.slice(@progress, 0..2)
-                  )
-
-                  bot_send_file(chat.id, file_name, {:file_content, file_content, file_name})
-
-                  delete_messages(chat.id, [message_id, progress_message.message_id])
-                  FileHelper.write_file(file_name, file_content, download_url)
-                  GoogleDrive.upload_file_content(chat.id, file_content, file_name)
-
-                _ ->
-                  update_message(
-                    chat.id,
-                    progress_message.message_id,
-                    "💔 Failed downloading file."
-                  )
-              end
-
-            downloaded_file ->
-              update_message(chat.id, progress_message.message_id, Enum.slice(@progress, 0..2))
-
-              bot_send_file(chat.id, downloaded_file, {:file, downloaded_file})
-              delete_messages(chat.id, [message_id, progress_message.message_id])
-          end
-
-        {:error, _} ->
-          update_message(chat.id, progress_message.message_id, "💔 Failed to get download URL.")
+      if has_success? do
+        delete_message(chat.id, message_id)
       end
     end
   end
@@ -385,6 +316,87 @@ defmodule SaveIt.Bot do
     Enum.map(matches, fn [url] -> url end)
   end
 
+  defp get_download_url(url) do
+    if direct_media_url?(url) do
+      {:ok, url}
+    else
+      Cobalt.get_download_url(url)
+    end
+  end
+
+  defp process_url(chat_id, url) do
+    {:ok, progress_message} = send_message(chat_id, Enum.at(@progress, 0))
+    progress_message_id = progress_message.message_id
+
+    case get_download_url(url) do
+      {:ok, purge_url, download_urls} ->
+        case FileHelper.get_downloaded_files(download_urls) do
+          nil ->
+            update_message(chat_id, progress_message_id, Enum.slice(@progress, 0..1))
+
+            case WebDownloader.download_files(download_urls) do
+              {:ok, files} ->
+                update_message(chat_id, progress_message_id, Enum.slice(@progress, 0..2))
+
+                # TODO: send media group
+                # bot_send_media_group(chat.id, files)
+                bot_send_files(chat_id, files)
+
+                delete_message(chat_id, progress_message_id)
+                FileHelper.write_folder(purge_url, files)
+                # TODO: 给图片添加 emoji
+                GoogleDrive.upload_files(chat_id, files)
+                :ok
+
+              _ ->
+                update_message(chat_id, progress_message_id, "💔 Failed downloading file.")
+                :error
+            end
+
+          downloaded_files ->
+            update_message(chat_id, progress_message_id, Enum.slice(@progress, 0..2))
+
+            # TODO: bot_send_media_group(chat.id, downloaded_files)
+            bot_send_filenames(chat_id, downloaded_files)
+            delete_message(chat_id, progress_message_id)
+            :ok
+        end
+
+      {:ok, download_url} ->
+        case FileHelper.get_downloaded_file(download_url) do
+          nil ->
+            update_message(chat_id, progress_message_id, Enum.slice(@progress, 0..1))
+
+            case WebDownloader.download_file(download_url) do
+              {:ok, file_name, file_content} ->
+                update_message(chat_id, progress_message_id, Enum.slice(@progress, 0..2))
+
+                bot_send_file(chat_id, file_name, {:file_content, file_content, file_name})
+
+                delete_message(chat_id, progress_message_id)
+                FileHelper.write_file(file_name, file_content, download_url)
+                GoogleDrive.upload_file_content(chat_id, file_content, file_name)
+                :ok
+
+              _ ->
+                update_message(chat_id, progress_message_id, "💔 Failed downloading file.")
+                :error
+            end
+
+          downloaded_file ->
+            update_message(chat_id, progress_message_id, Enum.slice(@progress, 0..2))
+
+            bot_send_file(chat_id, downloaded_file, {:file, downloaded_file})
+            delete_message(chat_id, progress_message_id)
+            :ok
+        end
+
+      {:error, _} ->
+        update_message(chat_id, progress_message_id, "💔 Failed to get download URL.")
+        :error
+    end
+  end
+
   defp send_message(chat_id, text) do
     ExGram.send_message(chat_id, text)
   end
@@ -399,10 +411,6 @@ defmodule SaveIt.Bot do
 
   defp delete_message(chat_id, message_id) do
     ExGram.delete_message(chat_id, message_id)
-  end
-
-  defp delete_messages(chat_id, message_ids) do
-    Enum.each(message_ids, fn message_id -> delete_message(chat_id, message_id) end)
   end
 
   defp bot_send_files(chat_id, files) do
