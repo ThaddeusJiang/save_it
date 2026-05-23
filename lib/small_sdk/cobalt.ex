@@ -60,7 +60,7 @@ defmodule SmallSdk.Cobalt do
 
   def handle_response({:error, reason}) do
     Logger.error("Request failed: #{inspect(reason)}")
-    raise "Request failed"
+    {:error, "Request failed: #{inspect(reason)}"}
   end
 
   def handle_response!(%{status: status, body: body}) do
