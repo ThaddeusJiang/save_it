@@ -7,26 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-24
+
+### Added
+- feat: Support sending Telegram media groups for multi-item media delivery.
+- chore: Add local Typesense setup guidance and migration utilities for development and operations.
+
+### Changed
+- refactor: Improve bot resilience by degrading gracefully when Typesense calls fail.
+- refactor: Refactor cobalt client error handling to return explicit error tuples instead of raising.
+
+### Fixed
+- fix: Avoid crashes from downstream service errors by handling external failures consistently.
+
+**Full Changelog**: https://github.com/ThaddeusJiang/save_it/compare/v0.3.0...v0.4.0
+
 ## [0.3.0] - 2026-04-26
 
 ### Added
-- Support bad.news video URLs with HLS (m3u8) stream downloading via ffmpeg.
-- Auto-select best video quality that fits within Telegram's 50MB upload limit.
+- feat: Support bad.news video URLs with HLS (m3u8) stream downloading via ffmpeg.
+- feat: Auto-select best video quality that fits within Telegram's 50MB upload limit.
 
 ### Changed
-- Added ffmpeg to Dockerfile for HLS video support.
+- refactor: Added ffmpeg to Dockerfile for HLS video support.
 
 **Full Changelog**: https://github.com/ThaddeusJiang/save_it/compare/v0.2.0...v0.3.0
 
 ## [0.2.0] - 2026-04-26
 
 ### Highlights
-- Added end-to-end media search capability, including photo search and caption search.
-- Improved media ingestion reliability with cobalt v10 upgrade and filename parsing fixes.
-- Added operations and maintenance capabilities such as `/delete` command and Sentry integration.
+- chore: Added end-to-end media search capability, including photo search and caption search.
+- chore: Improved media ingestion reliability with cobalt v10 upgrade and filename parsing fixes.
+- chore: Added operations and maintenance capabilities such as `/delete` command and Sentry integration.
 
 ### Breaking Changes
-- Upgraded cobalt integration from v7 to v10.
+- chore: Upgraded cobalt integration from v7 to v10.
   - Impact: deployments using self-hosted/custom cobalt endpoints may need compatibility verification.
   - Action: validate cobalt v10 API behavior in staging before production rollout.
 
@@ -42,24 +57,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 5. If Sentry is enabled, confirm events are reported correctly in your Sentry project.
 
 ### Added
-- Support direct media URLs and multiple URLs in one message. ([#37](https://github.com/ThaddeusJiang/save_it/pull/37))
-- Add photo search capability. ([#12](https://github.com/ThaddeusJiang/save_it/pull/12))
-- Add caption search capability. ([#21](https://github.com/ThaddeusJiang/save_it/pull/21))
-- Add capability to update photo captions. ([#24](https://github.com/ThaddeusJiang/save_it/pull/24))
-- Add `/delete` command for clearing messages. ([#31](https://github.com/ThaddeusJiang/save_it/pull/31))
+- feat: Support direct media URLs and multiple URLs in one message. ([#37](https://github.com/ThaddeusJiang/save_it/pull/37))
+- feat: Add photo search capability. ([#12](https://github.com/ThaddeusJiang/save_it/pull/12))
+- feat: Add caption search capability. ([#21](https://github.com/ThaddeusJiang/save_it/pull/21))
+- feat: Add capability to update photo captions. ([#24](https://github.com/ThaddeusJiang/save_it/pull/24))
+- feat: Add `/delete` command for clearing messages. ([#31](https://github.com/ThaddeusJiang/save_it/pull/31))
 
 ### Changed
-- Upgrade cobalt integration from v7 to v10. ([#26](https://github.com/ThaddeusJiang/save_it/pull/26))
-- Integrate Sentry for error tracking and logging. ([#35](https://github.com/ThaddeusJiang/save_it/pull/35))
+- refactor: Upgrade cobalt integration from v7 to v10. ([#26](https://github.com/ThaddeusJiang/save_it/pull/26))
+- refactor: Integrate Sentry for error tracking and logging. ([#35](https://github.com/ThaddeusJiang/save_it/pull/35))
 
 ### Fixed
-- Fix missing environment variable handling. ([#16](https://github.com/ThaddeusJiang/save_it/pull/16))
-- Fix Typesense `filter_by` format for `belongs_to_id`. ([#19](https://github.com/ThaddeusJiang/save_it/pull/19))
-- Fix cobalt v10 filename parsing issue. ([#28](https://github.com/ThaddeusJiang/save_it/pull/28))
+- fix: Fix missing environment variable handling. ([#16](https://github.com/ThaddeusJiang/save_it/pull/16))
+- fix: Fix Typesense `filter_by` format for `belongs_to_id`. ([#19](https://github.com/ThaddeusJiang/save_it/pull/19))
+- fix: Fix cobalt v10 filename parsing issue. ([#28](https://github.com/ThaddeusJiang/save_it/pull/28))
 
 ### Chore
-- Add Zeabur template for Typesense. ([#18](https://github.com/ThaddeusJiang/save_it/pull/18))
-- General maintenance updates.
+- chore: Add Zeabur template for Typesense. ([#18](https://github.com/ThaddeusJiang/save_it/pull/18))
+- chore: General maintenance updates.
 
 **Full Changelog**: https://github.com/ThaddeusJiang/save_it/compare/v0.1.0...v0.2.0
 
@@ -97,7 +112,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0] - 2024-10-23
 
 ### Added
-- Save photos from X.com, YouTube, Instagram, and more.
-- Demo video: https://github.com/user-attachments/assets/4a375cab-7124-44f3-994e-0cb026476d39
+- feat: Save photos from X.com, YouTube, Instagram, and more.
+- feat: Demo video: https://github.com/user-attachments/assets/4a375cab-7124-44f3-994e-0cb026476d39
 
 **Full Changelog**: https://github.com/ThaddeusJiang/save_it/commits/v0.1.0
