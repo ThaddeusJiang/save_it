@@ -1,28 +1,53 @@
 services:
+  save_it:
+    profiles: ["prod"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      COBALT_API_URL: "http://cobalt-api:9000"
+      TYPESENSE_URL: "http://typesense:8108"
+    depends_on:
+      cobalt-api:
+        condition: service_started
+      typesense:
+        condition: service_started
+
   cobalt-api:
     image: ghcr.io/imputnet/cobalt:10
-
     init: true
     read_only: true
     restart: unless-stopped
-
     ports:
       - 9001:9000/tcp
     environment:
       API_URL: "http://localhost:9001/"
 
   typesense:
-    image: typesense/typesense:27.1
-
+    image: typesense/typesense:30.2
     restart: on-failure
-
     ports:
-      - "8101:8108"
+      - "8108:8108"
     volumes:
       - ./data/typesense-data:/data
-    command: "--data-dir /data --api-key=xyz --enable-cors"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8101/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
+    command: "--data-dir=/data --api-key=${TYPESENSE_API_KEY:-xyz} --enable-cors"
+
+  typelens:
+    image: ghcr.io/copperline-ai/typelens:1.26.0
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      TYPESENSE_SERVER_NAME: "Local Typesense"
+      TYPESENSE_HOST: "typesense"
+      TYPESENSE_PORT: "8108"
+      TYPESENSE_PROTOCOL: "http"
+      TYPESENSE_API_KEY: "${TYPESENSE_API_KEY:-xyz}"
+      AUTH_USERNAME: "test@example.com"
+      AUTH_PASSWORD: "pass123456"
+    depends_on:
+      typesense:
+        condition: service_started

@@ -12,3 +12,13 @@
 ```
 
 docs: https://typesense.org/docs/27.1/api/api-errors.html#api-errors
+
+## Migrations
+
+```sh
+# Create/update collections (safe to rerun)
+mix ts.migrate
+
+# Reset photos collection
+mix ts.reset
+```
