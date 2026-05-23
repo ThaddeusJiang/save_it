@@ -69,9 +69,27 @@ mix deps.get
 docker compose up
 ```
 
+After startup:
+
+- Typesense: `http://localhost:8108/health`
+- typelens: `http://localhost:3000`
+- typelens auth:
+  - username: `test@example.com`
+  - password: `pass123456`
+
 ```sh
 # Run
 export TELEGRAM_BOT_TOKEN=<YOUR_TELEGRAM_BOT_TOKEN>
 
 iex -S mix run --no-halt
+```
+
+## Typesense migrations
+
+```sh
+# Create/update collections (idempotent)
+mix ts.migrate
+
+# Drop and recreate photos collection
+mix ts.reset
 ```

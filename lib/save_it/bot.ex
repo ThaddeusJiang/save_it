@@ -137,8 +137,7 @@ defmodule SaveIt.Bot do
         send_message(chat.id, "What do you want to search? animal, food, etc.")
 
       _ ->
-        photos = PhotoService.search_photos!(q, belongs_to_id: chat.id)
-
+        photos = safe_typesense_search_photos(q, belongs_to_id: chat.id)
         answer_photos(chat.id, photos)
     end
   end
@@ -175,23 +174,29 @@ defmodule SaveIt.Bot do
     chat_id = chat.id
 
     typesense_photo =
-      PhotoService.create_photo!(%{
+      safe_typesense_create_photo(%{
         image: Base.encode64(photo_file_content),
         caption: "",
         file_id: file.file_id,
         belongs_to_id: chat_id
       })
 
-    photos =
-      PhotoService.search_similar_photos!(
-        typesense_photo["id"],
-        distance_threshold: 0.1,
-        belongs_to_id: chat_id
-      )
+    case typesense_photo do
+      nil ->
+        :ok
 
-    case photos do
-      [] -> nil
-      _ -> answer_photos(chat.id, photos)
+      _ ->
+        photos =
+          safe_typesense_search_similar_photos(
+            typesense_photo["id"],
+            distance_threshold: 0.1,
+            belongs_to_id: chat_id
+          )
+
+        case photos do
+          [] -> nil
+          _ -> answer_photos(chat.id, photos)
+        end
     end
   end
 
@@ -212,35 +217,41 @@ defmodule SaveIt.Bot do
       end
 
     typesense_photo =
-      PhotoService.create_photo!(%{
+      safe_typesense_create_photo(%{
         image: Base.encode64(photo_file_content),
         caption: caption,
         file_id: file.file_id,
         belongs_to_id: chat_id
       })
 
-    case caption do
-      "" ->
-        photos =
-          PhotoService.search_similar_photos!(
-            typesense_photo["id"],
-            distance_threshold: 0.4,
-            belongs_to_id: chat_id
-          )
-
-        answer_photos(chat.id, photos)
+    case typesense_photo do
+      nil ->
+        :ok
 
       _ ->
-        photos =
-          PhotoService.search_similar_photos!(
-            typesense_photo["id"],
-            distance_threshold: 0.1,
-            belongs_to_id: chat_id
-          )
+        case caption do
+          "" ->
+            photos =
+              safe_typesense_search_similar_photos(
+                typesense_photo["id"],
+                distance_threshold: 0.4,
+                belongs_to_id: chat_id
+              )
 
-        case photos do
-          [] -> nil
-          _ -> answer_photos(chat.id, photos)
+            answer_photos(chat.id, photos)
+
+          _ ->
+            photos =
+              safe_typesense_search_similar_photos(
+                typesense_photo["id"],
+                distance_threshold: 0.1,
+                belongs_to_id: chat_id
+              )
+
+            case photos do
+              [] -> nil
+              _ -> answer_photos(chat.id, photos)
+            end
         end
     end
   end
@@ -505,7 +516,7 @@ defmodule SaveIt.Bot do
         image_base64 =
           encode_file_content(file_content)
 
-        PhotoService.create_photo!(%{
+        safe_index_photo(%{
           image: image_base64,
           caption: caption,
           file_id: file_id,
@@ -566,6 +577,49 @@ defmodule SaveIt.Bot do
         Logger.error("No photo found in the message")
         nil
     end
+  end
+
+  defp safe_index_photo(photo_params) do
+    case safe_typesense_create_photo(photo_params) do
+      nil -> :error
+      _ -> :ok
+    end
+  end
+
+  defp safe_typesense_create_photo(photo_params) do
+    PhotoService.create_photo!(photo_params)
+  rescue
+    error ->
+      Logger.error("Typesense create_photo failed: #{Exception.message(error)}")
+      nil
+  catch
+    kind, reason ->
+      Logger.error("Typesense create_photo failed: #{inspect({kind, reason})}")
+      nil
+  end
+
+  defp safe_typesense_search_photos(q, opts) do
+    PhotoService.search_photos!(q, opts)
+  rescue
+    error ->
+      Logger.error("Typesense search_photos failed: #{Exception.message(error)}")
+      []
+  catch
+    kind, reason ->
+      Logger.error("Typesense search_photos failed: #{inspect({kind, reason})}")
+      []
+  end
+
+  defp safe_typesense_search_similar_photos(photo_id, opts) do
+    PhotoService.search_similar_photos!(photo_id, opts)
+  rescue
+    error ->
+      Logger.error("Typesense search_similar_photos failed: #{Exception.message(error)}")
+      []
+  catch
+    kind, reason ->
+      Logger.error("Typesense search_similar_photos failed: #{inspect({kind, reason})}")
+      []
   end
 
   defp login_google(chat) do
