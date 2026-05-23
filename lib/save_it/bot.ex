@@ -440,13 +440,51 @@ defmodule SaveIt.Bot do
   end
 
   defp bot_send_files(chat_id, files) do
-    Enum.each(files, fn {file_name, file_content} ->
-      bot_send_file(chat_id, file_name, {:file_content, file_content, file_name})
-    end)
+    if all_images?(files) and length(files) > 1 do
+      bot_send_media_group(
+        chat_id,
+        Enum.map(files, fn {file_name, file_content} ->
+          {file_name, {:file_content, file_content, file_name}}
+        end)
+      )
+    else
+      Enum.each(files, fn {file_name, file_content} ->
+        bot_send_file(chat_id, file_name, {:file_content, file_content, file_name})
+      end)
+    end
   end
 
   defp bot_send_filenames(chat_id, filenames) do
-    Enum.each(filenames, fn filename -> bot_send_file(chat_id, filename, {:file, filename}) end)
+    if all_images?(filenames) and length(filenames) > 1 do
+      bot_send_media_group(chat_id, Enum.map(filenames, fn filename -> {filename, {:file, filename}} end))
+    else
+      Enum.each(filenames, fn filename -> bot_send_file(chat_id, filename, {:file, filename}) end)
+    end
+  end
+
+  defp bot_send_media_group(chat_id, files) do
+    case Telegram.send_media_group(chat_id, files) do
+      {:ok, messages} ->
+        Enum.zip(files, messages)
+        |> Enum.each(fn {{_file_name, content}, msg} ->
+          file_id = get_file_id(msg)
+          image_base64 = encode_file_content(content)
+
+          PhotoService.create_photo!(%{
+            image: image_base64,
+            caption: "",
+            file_id: file_id,
+            belongs_to_id: chat_id
+          })
+        end)
+
+      {:error, reason} ->
+        Logger.error("Failed to send media group: #{inspect(reason)}")
+
+        Enum.each(files, fn {file_name, content} ->
+          bot_send_file(chat_id, file_name, content)
+        end)
+    end
   end
 
   defp bot_send_file(chat_id, file_name, file_content, opts \\ []) do
@@ -465,10 +503,7 @@ defmodule SaveIt.Bot do
         file_id = get_file_id(msg)
 
         image_base64 =
-          case file_content do
-            {:file, file} -> File.read!(file) |> Base.encode64()
-            {:file_content, file_content, _file_name} -> Base.encode64(file_content)
-          end
+          encode_file_content(file_content)
 
         PhotoService.create_photo!(%{
           image: image_base64,
@@ -492,11 +527,40 @@ defmodule SaveIt.Bot do
     Path.extname(file_name)
   end
 
+  defp all_images?(files) when is_list(files) do
+    Enum.all?(files, fn
+      {file_name, _file_content} ->
+        image_file?(file_name)
+
+      file_name when is_binary(file_name) ->
+        image_file?(file_name)
+    end)
+  end
+
+  defp image_file?(file_name) do
+    file_extension(file_name) in [".png", ".jpg", ".jpeg"]
+  end
+
+  defp encode_file_content({:file, file}) do
+    File.read!(file) |> Base.encode64()
+  end
+
+  defp encode_file_content({:file_content, file_content, _file_name}) do
+    Base.encode64(file_content)
+  end
+
   defp get_file_id(msg) do
-    case msg.photo do
+    photos =
+      cond do
+        is_map(msg) and Map.has_key?(msg, :photo) -> msg.photo
+        is_map(msg) and Map.has_key?(msg, "photo") -> msg["photo"]
+        true -> nil
+      end
+
+    case photos do
       photos when is_list(photos) and length(photos) > 0 ->
         photo = List.last(photos)
-        photo.file_id
+        Map.get(photo, :file_id) || Map.get(photo, "file_id")
 
       _ ->
         Logger.error("No photo found in the message")
