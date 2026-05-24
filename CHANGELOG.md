@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-05-24
+
 ### Added
 - Add an ADR for the Docker packaging decision to document using an Elixir base image instead of `mix release`.
 - Add a reusable `priv/typesense/migrate.exs` script so Typesense schema operations can be shared by mix tasks and manual maintenance scripts.
@@ -20,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix `mix ts.migrate` false failures when Typesense model initialization finishes after the client timeout but the collection was actually created.
 - Fix local media save failures caused by an outdated Typesense `photos` schema that still required `url` and did not include `file_id`.
 - Fix Sentry runtime configuration to use `config_env()` so releases do not call `Mix.env()` at boot.
+
+**Full Changelog**: https://github.com/ThaddeusJiang/save_it/compare/v0.4.0...v0.4.1
 
 ## [0.4.0] - 2026-05-24
 
