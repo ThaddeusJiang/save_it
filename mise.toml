@@ -11,3 +11,9 @@ run = [
   "npx zeabur template update -c FTAONK -f others/zeabur/template.yaml",
   "echo '✅ https://zeabur.com/templates/FTAONK'",
 ]
+
+[tasks.confirm-docker-build]
+description = "Build the production image locally"
+run = [
+  "docker build -t save_it:local .",
+]
