@@ -22,4 +22,4 @@ GOOGLE_OAUTH_CLIENT_SECRET=
 
 - Published image: `ghcr.io/thaddeusjiang/save_it`
 - Zeabur template image tag: `latest`
-- Local acceptance build check: `mise run confirm-docker-build`
+- Local acceptance build check: `mise run build-acceptance-test`

@@ -2,6 +2,8 @@ services:
   save_it:
     profiles: ["prod"]
     image: save_it:ac
+    build:
+      context: .
     restart: unless-stopped
     env_file:
       - .env
