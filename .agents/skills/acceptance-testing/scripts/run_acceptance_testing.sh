@@ -9,16 +9,16 @@ if [[ ! -f ".env" ]]; then
   exit 1
 fi
 
-echo "[1/3] Build image save_it:local"
-docker build -t save_it:local -f Dockerfile .
+echo "[1/3] Build image save_it:ac"
+docker build -t save_it:ac -f Dockerfile .
 
 echo "[2/3] Start dependencies with docker compose"
 docker compose up -d cobalt-api typesense typelens
 
-echo "[3/3] Run save_it:local with .env"
+echo "[3/3] Run save_it:ac with .env"
 docker run --rm --name save_it-preview \
   --env-file .env \
   -e COBALT_API_URL="http://cobalt-api:9000" \
   -e TYPESENSE_URL="http://typesense:8108" \
   --network save_it_default \
-  save_it:local
+  save_it:ac

@@ -12,8 +12,8 @@ run = [
   "echo '✅ https://zeabur.com/templates/FTAONK'",
 ]
 
-[tasks.confirm-docker-build]
-description = "Build the production image locally"
+[tasks.build-acceptance-test]
+description = "Build the acceptance testing image locally"
 run = [
-  "docker build -t save_it:local .",
+  "docker build -t save_it:ac .",
 ]
