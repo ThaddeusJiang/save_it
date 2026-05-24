@@ -1,6 +1,6 @@
 ---
 name: changelog
-description: Maintain and update CHANGELOG.md using Keep a Changelog 1.1.0 conventions with SemVer-friendly release sections, Unreleased workflow, and consistent change categorization.
+description: Maintain and update CHANGELOG.md using Keep a Changelog 1.1.0 conventions with CalVer release sections, Unreleased workflow, and consistent change categorization.
 metadata:
   short-description: Keep a Changelog workflow
 ---
@@ -16,7 +16,7 @@ Use this skill when the user asks to create, update, normalize, or release `CHAN
 - Use reverse chronological order.
 - Keep an `[Unreleased]` section at the top.
 - Use ISO dates: `YYYY-MM-DD`.
-- Follow SemVer version headers: `## [x.y.z] - YYYY-MM-DD`.
+- Follow this repository's CalVer version headers: `## [YYYY.M.PATCH] - YYYY-MM-DD`.
 
 ## Allowed Change Types
 
@@ -68,14 +68,14 @@ Use these sections when needed (omit empty ones):
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+and this project uses [Calendar Versioning](https://calver.org/) with the `YYYY.M.PATCH` scheme for new releases.
 
 ## [Unreleased]
 
 ### Added
 - ...
 
-## [1.2.3] - 2026-04-26
+## [2026.5.1] - 2026-04-26
 
 ### Fixed
 - ...

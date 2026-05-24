@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to create (for example: v0.4.1)"
+        description: "Release tag to create (for example: 2026.5.1 or 2026.5.2-rc.1)"
         required: true
         type: string
 
@@ -18,6 +18,7 @@ concurrency:
 
 jobs:
   release:
+    name: release (${{ inputs.tag }})
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.prepare.outputs.version }}
@@ -31,7 +32,7 @@ jobs:
         env:
           INPUT_TAG: ${{ inputs.tag }}
         run: |
-          echo "version=${INPUT_TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "version=${INPUT_TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Ensure GitHub CLI
         run: gh --version
@@ -42,7 +43,7 @@ jobs:
           RELEASE_BRANCH: ${{ github.ref_name }}
           INPUT_TAG: ${{ inputs.tag }}
         run: |
-          version="${INPUT_TAG#v}"
+          version="${INPUT_TAG}"
 
           awk -v version="$version" '
             $0 ~ "^## \\[" version "\\]" { next_section=1; next }
@@ -56,11 +57,12 @@ jobs:
 
           gh release create "$INPUT_TAG" \
             --target "$RELEASE_BRANCH" \
-            --title "$INPUT_TAG" \
+            --title "save_it $INPUT_TAG" \
             --notes-file release-notes.md \
             --prerelease
 
   docker:
+    name: docker (${{ needs.release.outputs.version }})
     needs: release
     uses: ./.github/workflows/docker-publish.yml
     with:
