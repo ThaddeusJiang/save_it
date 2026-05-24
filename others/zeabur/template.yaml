@@ -2,7 +2,7 @@
 apiVersion: zeabur.com/v1
 kind: Template
 metadata:
-  name: Save what you see
+  name: Save it (telegram bot)
 spec:
   description: Save images and videos from internet.
   icon: https://raw.githubusercontent.com/ThaddeusJiang/save_it/refs/heads/main/docs/assets/savt_it_bot_logo.jpg
@@ -17,6 +17,7 @@ spec:
     - Save images and videos by link
     - Search images and videos using semantic search
     - Find similar images and videos by picture
+    - Explore indexed items in TypeLens
 
     [more](https://github.com/ThaddeusJiang/save_it)
 
@@ -27,6 +28,9 @@ spec:
       spec:
         source:
           image: ghcr.io/thaddeusjiang/save_it:latest
+        dependencies:
+          - cobalt-api
+          - typesense
         volumes:
           - id: bot-data
             dir: /data
@@ -39,9 +43,6 @@ spec:
             expose: false
           TYPESENSE_URL:
             default: http://typesense.zeabur.internal:8108
-            expose: false
-          TYPESENSE_API_KEY:
-            default: ${TYPESENSE_API_KEY}
             expose: false
           GOOGLE_OAUTH_CLIENT_ID:
             default: ""
@@ -64,6 +65,9 @@ spec:
           - id: typesense-data
             dir: /data
         instructions:
+          - title: Typesense Health Check URL
+            content: ${ZEABUR_WEB_URL}/health
+            category: Connection
           - type: PASSWORD
             title: Typesense API Key
             content: ${TYPESENSE_API_KEY}
@@ -77,6 +81,48 @@ spec:
             expose: false
 
         configs: []
+    - name: typelens
+      icon: https://raw.githubusercontent.com/copperline-ai/typelens/main/public/logo.png
+      template: PREBUILT_V2
+      spec:
+        source:
+          image: ghcr.io/copperline-ai/typelens:1.26.0
+        dependencies:
+          - typesense
+        ports:
+          - id: web
+            port: 3000
+            type: HTTP
+        instructions:
+          - title: TypeLens URL
+            content: ${ZEABUR_WEB_URL}
+            category: Connection
+          - title: TypeLens Username
+            content: ${AUTH_USERNAME}
+            category: Credentials
+          - title: TypeLens Password
+            content: ${AUTH_PASSWORD}
+            category: Credentials
+        env:
+          AUTH_USERNAME:
+            default: admin
+            expose: false
+          AUTH_PASSWORD:
+            default: ${PASSWORD}
+            expose: false
+          TYPESENSE_HOST:
+            default: typesense.zeabur.internal
+            expose: false
+          TYPESENSE_PORT:
+            default: "8108"
+            expose: false
+          TYPESENSE_PROTOCOL:
+            default: http
+            expose: false
+          TYPESENSE_SERVER_NAME:
+            default: Save It Typesense
+            expose: false
+        configs: []
     - name: cobalt-api
       icon: https://github.com/imputnet/cobalt/raw/main/web/static/favicon.png
       template: PREBUILT_V2
@@ -89,7 +135,7 @@ spec:
             type: TCP
         env:
           API_URL:
-            default: undefined
+            default: http://cobalt-api.zeabur.internal:9000
             expose: false
 
         configs: []
