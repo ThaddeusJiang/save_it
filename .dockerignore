@@ -1,0 +1,10 @@
+.env
+.elixir_ls
+.git
+.github
+_build
+data
+deps
+erl_crash.dump
+node_modules
+tmp

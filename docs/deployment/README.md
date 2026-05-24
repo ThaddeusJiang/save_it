@@ -22,4 +22,19 @@ GOOGLE_OAUTH_CLIENT_SECRET=
 
 - Published image: `ghcr.io/thaddeusjiang/save_it`
 - Zeabur template image tag: `latest`
-- Local acceptance build check: `mise run confirm-docker-build`
+- Local acceptance build check: `mise run build-acceptance-test`
+- The container now boots from the Elixir release entrypoint: `/app/bin/save_it start`
+
+## Release Commands
+
+- Run Typesense migration in a release container:
+
+```sh
+/app/bin/save_it eval 'SaveIt.Release.ts_migrate()'
+```
+
+- Example with Docker:
+
+```sh
+docker exec -it <container_name> /app/bin/save_it eval 'SaveIt.Release.ts_migrate()'
+```

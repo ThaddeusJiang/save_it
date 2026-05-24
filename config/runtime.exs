@@ -14,7 +14,7 @@ config :save_it, :google_oauth_client_secret, System.get_env("GOOGLE_OAUTH_CLIEN
 
 config :sentry,
   dsn: System.get_env("SENTRY_DSN"),
-  environment_name: Mix.env(),
+  environment_name: config_env(),
   enable_source_code_context: true,
   root_source_code_path: File.cwd!(),
   included_dependencies: [:req, :jason, :hackney]
