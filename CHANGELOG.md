@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Fix `mix ts.migrate` false failures when Typesense model initialization finishes after the client timeout but the collection was actually created.
 - Fix local media save failures caused by an outdated Typesense `photos` schema that still required `url` and did not include `file_id`.
+- Fix Sentry runtime configuration to use `config_env()` so releases do not call `Mix.env()` at boot.
 
 ## [0.4.0] - 2026-05-24
 
