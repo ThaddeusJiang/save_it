@@ -1,9 +1,7 @@
 services:
   save_it:
     profiles: ["prod"]
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: save_it:ac
     restart: unless-stopped
     env_file:
       - .env
