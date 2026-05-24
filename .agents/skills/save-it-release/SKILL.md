@@ -98,7 +98,7 @@ tmpfile="$(mktemp)"
 .agents/skills/save-it-release/scripts/extract_release_notes.sh YYYY.M.PATCH > "$tmpfile"
 gh release create YYYY.M.PATCH \
   --verify-tag \
-  --title "YYYY.M.PATCH" \
+  --title "save_it YYYY.M.PATCH" \
   --notes-file "$tmpfile"
 rm -f "$tmpfile"
 ```

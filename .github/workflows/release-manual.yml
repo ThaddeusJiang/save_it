@@ -57,7 +57,7 @@ jobs:
 
           gh release create "$INPUT_TAG" \
             --target "$RELEASE_BRANCH" \
-            --title "$INPUT_TAG" \
+            --title "save_it $INPUT_TAG" \
             --notes-file release-notes.md \
             --prerelease
 
