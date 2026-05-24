@@ -405,10 +405,15 @@ defmodule SaveIt.Bot do
             update_message(chat_id, progress_message_id, Enum.slice(@progress, 0..1))
 
             case WebDownloader.download_file(download_url) do
-              {:ok, file_name, file_content} ->
+              {:ok, file_name, file_content, source_url} ->
                 update_message(chat_id, progress_message_id, Enum.slice(@progress, 0..2))
 
-                bot_send_file(chat_id, file_name, {:file_content, file_content, file_name})
+                bot_send_file(
+                  chat_id,
+                  file_name,
+                  {:file_content, file_content, file_name},
+                  source_url: source_url
+                )
 
                 delete_message(chat_id, progress_message_id)
                 FileHelper.write_file(file_name, file_content, download_url)
@@ -423,7 +428,7 @@ defmodule SaveIt.Bot do
           downloaded_file ->
             update_message(chat_id, progress_message_id, Enum.slice(@progress, 0..2))
 
-            bot_send_file(chat_id, downloaded_file, {:file, downloaded_file})
+            bot_send_file(chat_id, downloaded_file, {:file, downloaded_file}, source_url: download_url)
             delete_message(chat_id, progress_message_id)
             :ok
         end
@@ -454,13 +459,18 @@ defmodule SaveIt.Bot do
     if all_images?(files) and length(files) > 1 do
       bot_send_media_group(
         chat_id,
-        Enum.map(files, fn {file_name, file_content} ->
-          {file_name, {:file_content, file_content, file_name}}
+        Enum.map(files, fn {file_name, file_content, source_url} ->
+          {file_name, {:file_content, file_content, file_name}, source_url}
         end)
       )
     else
-      Enum.each(files, fn {file_name, file_content} ->
-        bot_send_file(chat_id, file_name, {:file_content, file_content, file_name})
+      Enum.each(files, fn {file_name, file_content, source_url} ->
+        bot_send_file(
+          chat_id,
+          file_name,
+          {:file_content, file_content, file_name},
+          source_url: source_url
+        )
       end)
     end
   end
@@ -477,7 +487,20 @@ defmodule SaveIt.Bot do
     case Telegram.send_media_group(chat_id, files) do
       {:ok, messages} ->
         Enum.zip(files, messages)
-        |> Enum.each(fn {{_file_name, content}, msg} ->
+        |> Enum.each(fn
+          {{_file_name, content, source_url}, msg} ->
+            file_id = get_file_id(msg)
+            image_base64 = encode_file_content(content)
+
+            PhotoService.create_photo!(%{
+              image: image_base64,
+              caption: "",
+              file_id: file_id,
+              url: source_url,
+              belongs_to_id: chat_id
+            })
+
+          {{_file_name, content}, msg} ->
           file_id = get_file_id(msg)
           image_base64 = encode_file_content(content)
 
@@ -492,8 +515,12 @@ defmodule SaveIt.Bot do
       {:error, reason} ->
         Logger.error("Failed to send media group: #{inspect(reason)}")
 
-        Enum.each(files, fn {file_name, content} ->
-          bot_send_file(chat_id, file_name, content)
+        Enum.each(files, fn
+          {file_name, content, source_url} ->
+            bot_send_file(chat_id, file_name, content, source_url: source_url)
+
+          {file_name, content} ->
+            bot_send_file(chat_id, file_name, content)
         end)
     end
   end
@@ -506,6 +533,7 @@ defmodule SaveIt.Bot do
       end
 
     caption = Keyword.get(opts, :caption, "")
+    source_url = Keyword.get(opts, :source_url)
 
     case file_extension(file_name) do
       ext when ext in [".png", ".jpg", ".jpeg"] ->
@@ -520,6 +548,7 @@ defmodule SaveIt.Bot do
           image: image_base64,
           caption: caption,
           file_id: file_id,
+          url: source_url,
           belongs_to_id: chat_id
         })
 
@@ -540,6 +569,9 @@ defmodule SaveIt.Bot do
 
   defp all_images?(files) when is_list(files) do
     Enum.all?(files, fn
+      {file_name, _file_content, _source_url} ->
+        image_file?(file_name)
+
       {file_name, _file_content} ->
         image_file?(file_name)
 

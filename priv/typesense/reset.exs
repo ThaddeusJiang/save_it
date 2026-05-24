@@ -1,3 +1,5 @@
 # mix run priv/typesense/reset.exs
 
-SaveIt.Migration.Typesense.Photo.reset!()
+Code.require_file("migrate.exs", __DIR__)
+
+SaveIt.TypesensePhotoMigration.reset!()

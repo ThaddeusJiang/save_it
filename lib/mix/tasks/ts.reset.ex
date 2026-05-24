@@ -1,17 +1,28 @@
 defmodule Mix.Tasks.Ts.Reset do
   use Mix.Task
 
-  alias SaveIt.Migration.Typesense.Photo
-
   @shortdoc "Reset Typesense photos collection"
 
   @impl Mix.Task
   def run(_args) do
-    Mix.Task.run("app.start")
+    boot_runtime_dependencies!()
+    migration = load_photo_migration!()
 
     Mix.shell().info("resetting photos collection")
-    Photo.reset!()
+    apply(migration, :reset!, [])
 
     Mix.shell().info("Typesense reset done")
+  end
+
+  defp boot_runtime_dependencies! do
+    Mix.Task.run("loadpaths")
+    Mix.Task.run("app.config")
+    Application.ensure_all_started(:req)
+  end
+
+  defp load_photo_migration! do
+    path = Path.join(File.cwd!(), "priv/typesense/migrate.exs")
+    Code.require_file(path)
+    SaveIt.TypesensePhotoMigration
   end
 end

@@ -1,12 +1,12 @@
-defmodule SaveIt.Migration.Typesense.Photo do
+defmodule SaveIt.TypesensePhotoMigration do
   require Logger
-  alias SaveIt.Migration.Typesense
 
+  alias SmallSdk.Typesense
   alias SmallSdk.Typesense, as: TypesenseDataClient
 
   @collection_name "photos"
 
-  def create_photos_20241024!() do
+  def create_photos_20241024! do
     schema = %{
       "name" => @collection_name,
       "fields" => [
@@ -22,7 +22,8 @@ defmodule SaveIt.Migration.Typesense.Photo do
           }
         },
         %{"name" => "caption", "type" => "string", "optional" => true},
-        %{"name" => "url", "type" => "string"},
+        %{"name" => "file_id", "type" => "string"},
+        %{"name" => "url", "type" => "string", "optional" => true},
         %{"name" => "belongs_to_id", "type" => "string"},
         %{"name" => "inserted_at", "type" => "int64"}
       ],
@@ -32,13 +33,23 @@ defmodule SaveIt.Migration.Typesense.Photo do
     Typesense.create_collection!(schema)
   end
 
-  def migrate_photos_20241029!() do
+  def migrate_photos_20241029! do
     Logger.info("updating photos collection")
 
     Typesense.update_collection!(@collection_name, %{
       "fields" => [
         %{"name" => "file_id", "type" => "string", "optional" => true},
         %{"name" => "url", "drop" => true}
+      ]
+    })
+  end
+
+  def migrate_photos_20260524! do
+    Logger.info("adding optional url field back to photos collection")
+
+    Typesense.update_collection!(@collection_name, %{
+      "fields" => [
+        %{"name" => "url", "type" => "string", "optional" => true}
       ]
     })
   end
@@ -67,13 +78,12 @@ defmodule SaveIt.Migration.Typesense.Photo do
     Logger.info("migrated #{count} photos")
   end
 
-  def drop_photos() do
+  def drop_photos do
     Typesense.delete_collection(@collection_name)
   end
 
-  def reset!() do
+  def reset! do
     drop_photos()
     create_photos_20241024!()
-    migrate_photos_20241029!()
   end
 end

@@ -6,7 +6,9 @@ defmodule SmallSdk.WebDownloader do
       urls
       |> Enum.map(&download_file/1)
       |> Enum.reduce_while([], fn
-        {:ok, filename, file_content}, acc -> {:cont, [{filename, file_content} | acc]}
+        {:ok, filename, file_content, source_url}, acc ->
+          {:cont, [{filename, file_content, source_url} | acc]}
+
         {:error, reason}, _ -> {:halt, {:error, reason}}
       end)
 
@@ -37,7 +39,7 @@ defmodule SmallSdk.WebDownloader do
                   parse_filename(url, :content_type, headers)
               end
 
-            {:ok, filename, body}
+            {:ok, filename, body, url}
 
           _ ->
             Logger.error("download_file failed, status: #{status}, body: #{inspect(body)}")
