@@ -23,13 +23,10 @@ spec:
   services:
     - name: save_it_bot
       icon: https://raw.githubusercontent.com/ThaddeusJiang/save_it/refs/heads/main/docs/assets/savt_it_bot_logo.jpg
-      template: GIT
+      template: PREBUILT_V2
       spec:
         source:
-          source: GITHUB
-          repo: 831394769
-          branch: main
-          rootDirectory: /
+          image: ghcr.io/thaddeusjiang/save_it:latest
         volumes:
           - id: bot-data
             dir: /data

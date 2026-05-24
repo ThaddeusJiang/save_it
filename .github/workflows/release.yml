@@ -1,0 +1,47 @@
+# Publish Docker image when a GitHub release is published.
+name: Release
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: release-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      is_prerelease: ${{ steps.prepare.outputs.is_prerelease }}
+      version: ${{ steps.prepare.outputs.version }}
+    steps:
+      - name: Derive image version from release tag
+        id: prepare
+        env:
+          IS_PRERELEASE: ${{ github.event.release.prerelease }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          if [ -z "$version" ]; then
+            echo "Release tag is empty"
+            exit 1
+          fi
+          echo "is_prerelease=${IS_PRERELEASE}" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  docker:
+    needs: prepare
+    uses: ./.github/workflows/docker-publish.yml
+    with:
+      is_prerelease: ${{ needs.prepare.outputs.is_prerelease == 'true' }}
+      version: ${{ needs.prepare.outputs.version }}
+    permissions:
+      contents: read
+      packages: write
+    secrets: inherit

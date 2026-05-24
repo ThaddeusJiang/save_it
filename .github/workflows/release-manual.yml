@@ -1,0 +1,74 @@
+# Manually create and publish a GitHub pre-release from a branch and tag.
+name: Release (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to release from"
+        required: true
+        type: string
+      tag:
+        description: "Release tag to create (for example: v0.4.1)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-manual-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.branch }}
+
+      - name: Ensure GitHub CLI
+        run: gh --version
+
+      - name: Validate branch and tag
+        env:
+          INPUT_BRANCH: ${{ inputs.branch }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          git fetch origin "$INPUT_BRANCH"
+
+          if ! printf '%s' "$INPUT_TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$'; then
+            echo "Tag must look like v0.4.1 or v0.4.1-rc.1: $INPUT_TAG"
+            exit 1
+          fi
+
+          if gh release view "$INPUT_TAG" >/dev/null 2>&1; then
+            echo "Release already exists for tag $INPUT_TAG"
+            exit 1
+          fi
+
+      - name: Create published GitHub pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_BRANCH: ${{ inputs.branch }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          version="${INPUT_TAG#v}"
+
+          awk -v version="$version" '
+            $0 ~ "^## \\[" version "\\]" { next_section=1; next }
+            next_section && /^## \[/ { exit }
+            next_section { print }
+          ' CHANGELOG.md > release-notes.md
+
+          if [ ! -s release-notes.md ]; then
+            printf 'Release %s\n' "$INPUT_TAG" > release-notes.md
+          fi
+
+          gh release create "$INPUT_TAG" \
+            --target "$INPUT_BRANCH" \
+            --title "$INPUT_TAG" \
+            --notes-file release-notes.md \
+            --prerelease

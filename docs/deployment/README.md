@@ -17,3 +17,9 @@ SENTRY_DSN=
 GOOGLE_OAUTH_CLIENT_ID=
 GOOGLE_OAUTH_CLIENT_SECRET=
 ```
+
+## Docker Image
+
+- Published image: `ghcr.io/thaddeusjiang/save_it`
+- Zeabur template image tag: `latest`
+- Local build check: `mise run confirm-docker-build`
