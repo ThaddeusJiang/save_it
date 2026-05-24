@@ -58,11 +58,19 @@ defmodule SaveIt.FileHelper do
   def write_folder(original_url, files) do
     hashed_url = :crypto.hash(:sha256, original_url) |> Base.url_encode64(padding: false)
 
-    Enum.each(files, fn {file_name, file_content} ->
-      write_file_to_disk(Path.join(@files_dir, hashed_url), file_name, file_content)
+    Enum.each(files, fn
+      {file_name, file_content} ->
+        write_file_to_disk(Path.join(@files_dir, hashed_url), file_name, file_content)
+
+      {file_name, file_content, _source_url} ->
+        write_file_to_disk(Path.join(@files_dir, hashed_url), file_name, file_content)
     end)
 
-    write_file_to_disk(@urls_dir, hashed_url, files |> Enum.map(&elem(&1, 0)) |> Enum.join("\n"))
+    write_file_to_disk(
+      @urls_dir,
+      hashed_url,
+      files |> Enum.map(&elem(&1, 0)) |> Enum.join("\n")
+    )
   end
 
   defp write_file_to_disk(dir, file_name, file_content) do

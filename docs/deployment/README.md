@@ -22,4 +22,5 @@ GOOGLE_OAUTH_CLIENT_SECRET=
 
 - Published image: `ghcr.io/thaddeusjiang/save_it`
 - Zeabur template image tag: `latest`
-- Local acceptance build check: `mise run confirm-docker-build`
+- Local acceptance build check: `mise run build-acceptance-test`
+- Local Docker Compose stores Typesense data in the named volume `save_it_typesense_data`, so data is reused across worktrees on the same machine

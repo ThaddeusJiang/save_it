@@ -3,6 +3,36 @@ defmodule SmallSdk.Typesense do
 
   import SaveIt.SmallHelper.UrlHelper, only: [validate_url!: 1]
 
+  @migration_receive_timeout :timer.minutes(5)
+
+  def create_collection!(schema) do
+    req = build_request("/collections", receive_timeout: @migration_receive_timeout)
+    res = Req.post!(req, json: schema)
+
+    handle_response!(res)
+  end
+
+  def update_collection!(collection_name, schema) do
+    req = build_request("/collections/#{collection_name}", receive_timeout: @migration_receive_timeout)
+    res = Req.patch!(req, json: schema)
+
+    handle_response!(res)
+  end
+
+  def list_collections! do
+    req = build_request("/collections", receive_timeout: @migration_receive_timeout)
+    res = Req.get!(req)
+
+    handle_response!(res)
+  end
+
+  def delete_collection(collection_name) do
+    req = build_request("/collections/#{collection_name}", receive_timeout: @migration_receive_timeout)
+    res = Req.delete(req)
+
+    handle_response(res)
+  end
+
   def create_document!(collection_name, document) do
     req = build_request("/collections/#{collection_name}/documents")
     res = Req.post(req, json: document)
@@ -108,12 +138,13 @@ defmodule SmallSdk.Typesense do
     {url, api_key}
   end
 
-  defp build_request(path) do
+  defp build_request(path, opts \\ []) do
     {url, api_key} = get_env()
 
     Req.new(
       base_url: url,
       url: path,
+      receive_timeout: Keyword.get(opts, :receive_timeout),
       headers: [
         {"Content-Type", "application/json"},
         {"X-TYPESENSE-API-KEY", api_key}

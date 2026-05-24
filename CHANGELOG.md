@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add an ADR for the Docker packaging decision to document using an Elixir base image instead of `mix release`.
+- Add a reusable `priv/typesense/migrate.exs` script so Typesense schema operations can be shared by mix tasks and manual maintenance scripts.
+
+### Changed
+- Change the Docker and acceptance workflow to use a multi-stage Elixir-based image, compose-driven validation, and a named Typesense volume reused across local worktrees.
+- Change Typesense photo indexing to keep both Telegram `file_id` and the original download `url`, while treating `url` as optional for uploads without an external source URL.
+- Change Typesense migration tasks to load only runtime config and HTTP dependencies instead of starting the Telegram bot application.
+
+### Fixed
+- Fix `mix ts.migrate` false failures when Typesense model initialization finishes after the client timeout but the collection was actually created.
+- Fix local media save failures caused by an outdated Typesense `photos` schema that still required `url` and did not include `file_id`.
+
 ## [0.4.0] - 2026-05-24
 
 ### Added
