@@ -27,7 +27,7 @@ jobs:
           IS_PRERELEASE: ${{ github.event.release.prerelease }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
-          version="${RELEASE_TAG#v}"
+          version="${RELEASE_TAG}"
           if [ -z "$version" ]; then
             echo "Release tag is empty"
             exit 1

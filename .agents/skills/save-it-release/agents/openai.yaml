@@ -1,0 +1,4 @@
+interface:
+  display_name: "Save It Release"
+  short_description: "Prepare and publish save_it releases"
+  default_prompt: "Use this skill to prepare and publish a save_it release safely."
