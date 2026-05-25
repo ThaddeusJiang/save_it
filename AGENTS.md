@@ -7,7 +7,7 @@ This file provides guidance to coding agents working in this repository.
 - Project: `save_it`
 - Stack: Elixir (Telegram bot), Docker, external downloader/search services
 - Primary goal: ship practical features quickly with controlled complexity
-- Versioning: CalVer `YYYY.M.PATCH` for stable releases, with git tags using the same value without a `v` prefix, and prereleases such as `YYYY.M.PATCH-rc.N`
+- Versioning: CalVer `YYYY.M.D` for stable releases, where the last segment is the calendar day of month (for example `2026.5.25`), with git tags using the same value without a `v` prefix, and prereleases such as `YYYY.M.D-rc.N`
 
 ## Environment and Tooling
 

@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to create (for example: 2026.5.1 or 2026.5.2-rc.1)"
+        description: "Release tag to create (for example: 2026.5.25 or 2026.5.25-rc.1)"
         required: true
         type: string
 

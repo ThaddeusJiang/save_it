@@ -1,6 +1,6 @@
 ---
 name: save-it-release
-description: Prepare, verify, and publish `save_it` releases by updating `mix.exs`, creating the release commit and tag, and publishing a GitHub release. Use when the user asks to cut a stable release, prepare a prerelease, or verify release readiness for this repository. This repository uses CalVer `YYYY.M.PATCH` and prerelease tags such as `YYYY.M.PATCH-rc.N`.
+description: Prepare, verify, and publish `save_it` releases by updating `mix.exs`, creating the release commit and tag, and publishing a GitHub release. Use when the user asks to cut a stable release, prepare a prerelease, or verify release readiness for this repository. This repository uses CalVer `YYYY.M.D` for stable releases and prerelease tags such as `YYYY.M.D-rc.N`.
 ---
 
 # Save It Release
@@ -9,11 +9,11 @@ Use this skill when the task is specifically about the `save_it` release flow.
 
 This repository uses:
 - `mix.exs` `version` as the application version
-- CalVer `YYYY.M.PATCH` for stable versions, for example `2026.5.1`
-- git tags that match the version string directly, for example `2026.5.1`
+- CalVer `YYYY.M.D` for stable versions, where the last segment is the calendar day of month, for example `2026.5.25`
+- git tags that match the version string directly, for example `2026.5.25`
 - GitHub Release publication to trigger `.github/workflows/release.yml`
 - The GitHub release page as the changelog surface for this project
-- `.github/workflows/release-manual.yml` for manual prereleases such as `2026.5.2-rc.1`
+- `.github/workflows/release-manual.yml` for manual prereleases such as `2026.5.25-rc.1`
 
 ## Workflow
 
@@ -42,7 +42,7 @@ Rules:
 Use the helper script for a quick snapshot:
 
 ```bash
-.agents/skills/save-it-release/scripts/check_release_state.sh YYYY.M.PATCH
+.agents/skills/save-it-release/scripts/check_release_state.sh YYYY.M.D
 ```
 
 ## Release Preparation
@@ -52,7 +52,7 @@ When the user asks to prepare a release but not publish it yet:
 1. Update `mix.exs`:
 
 ```elixir
-version: "YYYY.M.PATCH"
+version: "YYYY.M.D"
 ```
 
 2. If the release page needs curated notes, prepare a short English draft for the GitHub release body.
@@ -68,23 +68,23 @@ When the user asks to publish a stable release:
 
 ```bash
 git add mix.exs
-git commit -m "chore(release): bump version to YYYY.M.PATCH"
+git commit -m "chore(release): bump version to YYYY.M.D"
 ```
 
 3. Create and push the stable tag:
 
 ```bash
-git tag -a YYYY.M.PATCH -m "YYYY.M.PATCH"
+git tag -a YYYY.M.D -m "YYYY.M.D"
 git push origin main
-git push origin refs/tags/YYYY.M.PATCH
+git push origin refs/tags/YYYY.M.D
 ```
 
 4. Publish the GitHub release page entry. Prefer generated notes unless the user already prepared custom notes:
 
 ```bash
-gh release create YYYY.M.PATCH \
+gh release create YYYY.M.D \
   --verify-tag \
-  --title "save_it YYYY.M.PATCH" \
+  --title "save_it YYYY.M.D" \
   --generate-notes
 ```
 
@@ -100,11 +100,11 @@ If the user wants more confidence before release, run the acceptance flow from `
 
 When the user asks for a prerelease:
 
-1. Keep the version in the repository's CalVer prerelease form, for example `2026.5.2-rc.1`.
+1. Keep the version in the repository's CalVer prerelease form, for example `2026.5.25-rc.1`.
 2. Prefer the existing GitHub Actions workflow instead of manually crafting a prerelease:
 
 ```bash
-gh workflow run "Release (manual)" -f tag=YYYY.M.PATCH-rc.N
+gh workflow run "Release (manual)" -f tag=YYYY.M.D-rc.N
 ```
 
 3. This workflow publishes a GitHub prerelease and triggers Docker publish with prerelease semantics.
@@ -113,6 +113,7 @@ gh workflow run "Release (manual)" -f tag=YYYY.M.PATCH-rc.N
 
 - Never publish a stable release from a dirty working tree.
 - Never create a stable release if `mix.exs` and the intended tag disagree on the version.
+- Never interpret the final stable version segment as an incrementing monthly patch number; it is the calendar day of month for the release date.
 - Never use a non-CalVer stable version format in this repository unless the project convention is explicitly changed again.
 - Never add a `v` prefix to new release tags in this repository.
 - Never pretend a repository changelog exists for this project. Use the GitHub release page instead.
