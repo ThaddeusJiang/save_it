@@ -19,7 +19,7 @@ Use this skill when the user asks for an acceptance testing flow based on Docker
 ## Commands
 
 ```bash
-mise run build-acceptance-test
+mise run build
 docker compose up -d cobalt-api typesense typelens
 docker compose --profile prod up --build save_it
 ```

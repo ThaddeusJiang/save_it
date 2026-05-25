@@ -18,7 +18,7 @@ and this project uses [Calendar Versioning](https://calver.org/) with the `YYYY.
 ### Changed
 - Add request and result logging around Typesense photo searches to make empty `/search` responses easier to diagnose in production logs.
 - Tune `/search` image semantic retrieval to use a `0.785` vector distance cutoff and log top vector distances for easier relevance calibration.
-- Change `mix quality` to run formatter in check mode only, and split GitHub Actions checks into explicit formatter, compile, Credo, Dialyzer, and test steps within a single job.
+- Change `mix quality` to run formatter in check mode only, keep the main CI focused on tests, and move formatter, compile, Credo, and Dialyzer checks into a separate quality workflow that runs after code lands on `main`.
 
 ## [0.4.1] - 2026-05-24
 
