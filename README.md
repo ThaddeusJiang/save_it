@@ -84,6 +84,22 @@ export TELEGRAM_BOT_TOKEN=<YOUR_TELEGRAM_BOT_TOKEN>
 iex -S mix run --no-halt
 ```
 
+## Code quality
+
+```sh
+# Formatter
+mix format
+
+# Lint
+mix credo --strict
+
+# Static analysis
+mix dialyzer
+
+# Run the common quality suite
+mix quality
+```
+
 ## Typesense migrations
 
 ```sh

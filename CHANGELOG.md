@@ -7,6 +7,9 @@ and this project uses [Calendar Versioning](https://calver.org/) with the `YYYY.
 
 ## [Unreleased]
 
+### Added
+- Add Elixir code quality tooling with `Credo`, `Dialyxir`, and `ExDoc`, plus a `mix quality` alias for common local checks.
+
 ### Fixed
 - Fix Telegram media group uploads for downloaded multi-image posts by accepting file tuples that also carry the source URL metadata.
 - Fix Typesense requests crashing in Finch by omitting `receive_timeout` unless a concrete timeout value is provided.
