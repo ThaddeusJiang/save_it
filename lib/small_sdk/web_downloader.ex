@@ -9,7 +9,8 @@ defmodule SmallSdk.WebDownloader do
         {:ok, filename, file_content, source_url}, acc ->
           {:cont, [{filename, file_content, source_url} | acc]}
 
-        {:error, reason}, _ -> {:halt, {:error, reason}}
+        {:error, reason}, _ ->
+          {:halt, {:error, reason}}
       end)
 
     case res do

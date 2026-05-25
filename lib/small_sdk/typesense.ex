@@ -13,7 +13,11 @@ defmodule SmallSdk.Typesense do
   end
 
   def update_collection!(collection_name, schema) do
-    req = build_request("/collections/#{collection_name}", receive_timeout: @migration_receive_timeout)
+    req =
+      build_request("/collections/#{collection_name}",
+        receive_timeout: @migration_receive_timeout
+      )
+
     res = Req.patch!(req, json: schema)
 
     handle_response!(res)
@@ -27,7 +31,11 @@ defmodule SmallSdk.Typesense do
   end
 
   def delete_collection(collection_name) do
-    req = build_request("/collections/#{collection_name}", receive_timeout: @migration_receive_timeout)
+    req =
+      build_request("/collections/#{collection_name}",
+        receive_timeout: @migration_receive_timeout
+      )
+
     res = Req.delete(req)
 
     handle_response(res)

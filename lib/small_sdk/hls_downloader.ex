@@ -74,11 +74,15 @@ defmodule SmallSdk.HlsDownloader do
 
       audio_url ->
         [
-          "-i", variant.url,
-          "-i", audio_url,
-          "-c", "copy",
+          "-i",
+          variant.url,
+          "-i",
+          audio_url,
+          "-c",
+          "copy",
           "-y",
-          "-loglevel", "warning",
+          "-loglevel",
+          "warning",
           tmp_path
         ]
     end

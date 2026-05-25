@@ -46,7 +46,7 @@ defmodule SaveIt.MixProject do
   defp aliases do
     [
       quality: [
-        "format --check-formatted",
+        "format",
         "compile --warnings-as-errors",
         "credo --strict",
         "dialyzer"

@@ -428,7 +428,10 @@ defmodule SaveIt.Bot do
           downloaded_file ->
             update_message(chat_id, progress_message_id, Enum.slice(@progress, 0..2))
 
-            bot_send_file(chat_id, downloaded_file, {:file, downloaded_file}, source_url: download_url)
+            bot_send_file(chat_id, downloaded_file, {:file, downloaded_file},
+              source_url: download_url
+            )
+
             delete_message(chat_id, progress_message_id)
             :ok
         end
@@ -477,7 +480,10 @@ defmodule SaveIt.Bot do
 
   defp bot_send_filenames(chat_id, filenames) do
     if all_images?(filenames) and length(filenames) > 1 do
-      bot_send_media_group(chat_id, Enum.map(filenames, fn filename -> {filename, {:file, filename}} end))
+      bot_send_media_group(
+        chat_id,
+        Enum.map(filenames, fn filename -> {filename, {:file, filename}} end)
+      )
     else
       Enum.each(filenames, fn filename -> bot_send_file(chat_id, filename, {:file, filename}) end)
     end
@@ -501,15 +507,15 @@ defmodule SaveIt.Bot do
             })
 
           {{_file_name, content}, msg} ->
-          file_id = get_file_id(msg)
-          image_base64 = encode_file_content(content)
+            file_id = get_file_id(msg)
+            image_base64 = encode_file_content(content)
 
-          PhotoService.create_photo!(%{
-            image: image_base64,
-            caption: "",
-            file_id: file_id,
-            belongs_to_id: chat_id
-          })
+            PhotoService.create_photo!(%{
+              image: image_base64,
+              caption: "",
+              file_id: file_id,
+              belongs_to_id: chat_id
+            })
         end)
 
       {:error, reason} ->
