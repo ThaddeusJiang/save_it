@@ -68,7 +68,7 @@ defmodule SaveIt.PhotoService do
           "q" => q,
           "collection" => "photos",
           "prefix" => false,
-          "vector_query" => "image_embedding:([], k: 5, distance_threshold: 0.75)",
+          "vector_query" => "image_embedding:([], k: 20, distance_threshold: 0.785)",
           "filter_by" => "belongs_to_id:#{belongs_to_id}",
           "exclude_fields" => "image_embedding"
         }
@@ -78,6 +78,7 @@ defmodule SaveIt.PhotoService do
     req = build_request("/multi_search")
     res = Req.post(req, json: req_body)
     data = Typesense.handle_response(res)
+    log_search_response("search_photos", %{q: q, belongs_to_id: belongs_to_id}, data)
 
     results = data["results"]
 
@@ -111,6 +112,7 @@ defmodule SaveIt.PhotoService do
     req = build_request("/multi_search")
     res = Req.post(req, json: req_body)
     data = Typesense.handle_response(res)
+    log_search_response("search_similar_photos", %{photo_id: photo_id, belongs_to_id: belongs_to_id}, data)
 
     results = data["results"]
 
@@ -141,6 +143,29 @@ defmodule SaveIt.PhotoService do
         {"Content-Type", "application/json"},
         {"X-TYPESENSE-API-KEY", api_key}
       ]
+    )
+  end
+
+  defp log_search_response(action, metadata, data) do
+    results = Map.get(data, "results", [])
+    hits = results |> List.first(%{}) |> Map.get("hits", [])
+
+    hits_count =
+      length(hits)
+
+    top_vector_distances =
+      hits
+      |> Enum.take(5)
+      |> Enum.map(&Map.get(&1, "vector_distance"))
+
+    Logger.info(
+      "Typesense #{action} response: " <>
+        inspect(%{
+          metadata: metadata,
+          hits_count: hits_count,
+          top_vector_distances: top_vector_distances,
+          results: results
+        })
     )
   end
 end

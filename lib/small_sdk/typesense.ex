@@ -141,15 +141,22 @@ defmodule SmallSdk.Typesense do
   defp build_request(path, opts \\ []) do
     {url, api_key} = get_env()
 
-    Req.new(
+    req_opts = [
       base_url: url,
       url: path,
-      receive_timeout: Keyword.get(opts, :receive_timeout),
       headers: [
         {"Content-Type", "application/json"},
         {"X-TYPESENSE-API-KEY", api_key}
       ]
-    )
+    ]
+
+    req_opts =
+      case Keyword.fetch(opts, :receive_timeout) do
+        {:ok, receive_timeout} -> Keyword.put(req_opts, :receive_timeout, receive_timeout)
+        :error -> req_opts
+      end
+
+    Req.new(req_opts)
   end
 
   def handle_response({:ok, %{status: status, body: body}}) do
