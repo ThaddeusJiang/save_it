@@ -7,6 +7,9 @@ and this project uses [Calendar Versioning](https://calver.org/) with the `YYYY.
 
 ## [Unreleased]
 
+### Added
+- Add Elixir code quality tooling with `Credo`, `Dialyxir`, and `ExDoc`, plus a `mix quality` alias for common local checks.
+
 ### Fixed
 - Fix Telegram media group uploads for downloaded multi-image posts by accepting file tuples that also carry the source URL metadata.
 - Fix Typesense requests crashing in Finch by omitting `receive_timeout` unless a concrete timeout value is provided.
@@ -15,6 +18,7 @@ and this project uses [Calendar Versioning](https://calver.org/) with the `YYYY.
 ### Changed
 - Add request and result logging around Typesense photo searches to make empty `/search` responses easier to diagnose in production logs.
 - Tune `/search` image semantic retrieval to use a `0.785` vector distance cutoff and log top vector distances for easier relevance calibration.
+- Change `mix quality` to run formatter in check mode only, and split GitHub Actions checks into explicit formatter, compile, Credo, Dialyzer, and test steps within a single job.
 
 ## [0.4.1] - 2026-05-24
 

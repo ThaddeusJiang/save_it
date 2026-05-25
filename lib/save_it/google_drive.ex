@@ -1,12 +1,11 @@
 defmodule SaveIt.GoogleDrive do
   @moduledoc """
-  TODO:重要：
-  改善
-  - [ ] 1. 如果没有配置，直接 skip
-  - [ ] 移动至 small_sdk
+  Google Drive integration used by the bot for optional uploads.
 
-  - [ ] list folders
-  - [ ] select folder and save folder_id
+  Future improvements:
+  - Skip uploads early when Drive is not configured.
+  - Move the raw API client into `SmallSdk`.
+  - Support browsing and selecting folders.
   """
   alias SaveIt.FileHelper
   require Logger
@@ -22,7 +21,7 @@ defmodule SaveIt.GoogleDrive do
 
   @upload_type "multipart"
 
-  # TODO: can not list folders, Docs is lie. ref: https://developers.google.com/drive/api/guides/search-files
+  # Google Drive folder listing is limited and may not match the public guide exactly.
   def list_files(chat_id) do
     access_token = FileHelper.get_google_access_token(chat_id)
 

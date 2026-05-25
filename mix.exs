@@ -7,7 +7,17 @@ defmodule SaveIt.MixProject do
       version: "0.4.1",
       elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
-      deps: deps()
+      deps: deps(),
+      aliases: aliases(),
+      dialyzer: [plt_add_apps: [:mix]]
+    ]
+  end
+
+  def cli do
+    [
+      preferred_envs: [
+        quality: :dev
+      ]
     ]
   end
 
@@ -26,7 +36,21 @@ defmodule SaveIt.MixProject do
       {:sentry, "~> 10.2.0"},
       {:hackney, "~> 1.12"},
       {:jason, "~> 1.4.1"},
-      {:req, "~> 0.5.0"}
+      {:req, "~> 0.5.0"},
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:ex_doc, "~> 0.34", only: :dev, runtime: false}
+    ]
+  end
+
+  defp aliases do
+    [
+      quality: [
+        "format",
+        "compile --warnings-as-errors",
+        "credo --strict",
+        "dialyzer"
+      ]
     ]
   end
 end

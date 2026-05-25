@@ -1,4 +1,6 @@
 defmodule SmallSdk.Telegram do
+  @moduledoc false
+
   require Logger
 
   use Tesla
@@ -91,7 +93,7 @@ defmodule SmallSdk.Telegram do
   defp decode_send_media_group_body(%{"ok" => true, "result" => result}), do: {:ok, result}
   defp decode_send_media_group_body(body), do: {:error, {:telegram_api_error, body}}
 
-  defp get_env() do
+  defp get_env do
     bot_token = Application.fetch_env!(:save_it, :telegram_bot_token)
 
     bot_token

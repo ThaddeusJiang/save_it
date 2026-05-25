@@ -1,4 +1,6 @@
 defmodule SaveIt.PhotoService do
+  @moduledoc false
+
   require Logger
   alias SmallSdk.Typesense
 
@@ -112,7 +114,12 @@ defmodule SaveIt.PhotoService do
     req = build_request("/multi_search")
     res = Req.post(req, json: req_body)
     data = Typesense.handle_response(res)
-    log_search_response("search_similar_photos", %{photo_id: photo_id, belongs_to_id: belongs_to_id}, data)
+
+    log_search_response(
+      "search_similar_photos",
+      %{photo_id: photo_id, belongs_to_id: belongs_to_id},
+      data
+    )
 
     results = data["results"]
 
@@ -126,7 +133,7 @@ defmodule SaveIt.PhotoService do
     end
   end
 
-  defp get_env() do
+  defp get_env do
     url = Application.fetch_env!(:save_it, :typesense_url) |> validate_url!()
     api_key = Application.fetch_env!(:save_it, :typesense_api_key)
 

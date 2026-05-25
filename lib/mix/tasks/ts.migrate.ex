@@ -1,4 +1,6 @@
 defmodule Mix.Tasks.Ts.Migrate do
+  @moduledoc false
+
   use Mix.Task
 
   alias Req.TransportError
@@ -29,7 +31,7 @@ defmodule Mix.Tasks.Ts.Migrate do
     case photos_collection() do
       nil ->
         Mix.shell().info("creating photos collection")
-        apply(migration, :create_photos_20241024!, [])
+        invoke_migration!(migration, :create_photos_20241024!)
 
       _collection ->
         Mix.shell().info("photos collection already exists, skipping create")
@@ -42,11 +44,11 @@ defmodule Mix.Tasks.Ts.Migrate do
         :ok
 
       collection ->
-        if not has_field?(collection, "file_id") do
-          Mix.shell().info("applying photos migration 20241029")
-          apply(migration, :migrate_photos_20241029!, [])
-        else
+        if has_field?(collection, "file_id") do
           Mix.shell().info("photos migration already applied, skipping")
+        else
+          Mix.shell().info("applying photos migration 20241029")
+          invoke_migration!(migration, :migrate_photos_20241029!)
         end
     end
   end
@@ -57,11 +59,11 @@ defmodule Mix.Tasks.Ts.Migrate do
         :ok
 
       collection ->
-        if not has_field?(collection, "url") do
-          Mix.shell().info("restoring optional photos url field")
-          apply(migration, :migrate_photos_20260524!, [])
-        else
+        if has_field?(collection, "url") do
           Mix.shell().info("photos url field already present, skipping")
+        else
+          Mix.shell().info("restoring optional photos url field")
+          invoke_migration!(migration, :migrate_photos_20260524!)
         end
     end
   end
@@ -109,6 +111,10 @@ defmodule Mix.Tasks.Ts.Migrate do
     Exception.message(error)
     |> String.downcase()
     |> String.contains?("timeout")
+  end
+
+  defp invoke_migration!(migration, function_name) do
+    Function.capture(migration, function_name, 0).()
   end
 
   defp load_photo_migration! do

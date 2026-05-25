@@ -1,4 +1,6 @@
 defmodule Mix.Tasks.Ts.Reset do
+  @moduledoc false
+
   use Mix.Task
 
   @shortdoc "Reset Typesense photos collection"
@@ -9,7 +11,7 @@ defmodule Mix.Tasks.Ts.Reset do
     migration = load_photo_migration!()
 
     Mix.shell().info("resetting photos collection")
-    apply(migration, :reset!, [])
+    Function.capture(migration, :reset!, 0).()
 
     Mix.shell().info("Typesense reset done")
   end

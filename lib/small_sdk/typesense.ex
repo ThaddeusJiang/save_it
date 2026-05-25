@@ -1,4 +1,6 @@
 defmodule SmallSdk.Typesense do
+  @moduledoc false
+
   require Logger
 
   import SaveIt.SmallHelper.UrlHelper, only: [validate_url!: 1]
@@ -13,7 +15,11 @@ defmodule SmallSdk.Typesense do
   end
 
   def update_collection!(collection_name, schema) do
-    req = build_request("/collections/#{collection_name}", receive_timeout: @migration_receive_timeout)
+    req =
+      build_request("/collections/#{collection_name}",
+        receive_timeout: @migration_receive_timeout
+      )
+
     res = Req.patch!(req, json: schema)
 
     handle_response!(res)
@@ -27,7 +33,11 @@ defmodule SmallSdk.Typesense do
   end
 
   def delete_collection(collection_name) do
-    req = build_request("/collections/#{collection_name}", receive_timeout: @migration_receive_timeout)
+    req =
+      build_request("/collections/#{collection_name}",
+        receive_timeout: @migration_receive_timeout
+      )
+
     res = Req.delete(req)
 
     handle_response(res)
@@ -110,7 +120,7 @@ defmodule SmallSdk.Typesense do
     |> handle_response()
   end
 
-  def create_search_key() do
+  def create_search_key do
     {url, _} = get_env()
     req = build_request("/keys")
 
@@ -131,7 +141,7 @@ defmodule SmallSdk.Typesense do
     }
   end
 
-  defp get_env() do
+  defp get_env do
     url = Application.fetch_env!(:save_it, :typesense_url) |> validate_url!()
     api_key = Application.fetch_env!(:save_it, :typesense_api_key)
 
@@ -187,7 +197,7 @@ defmodule SmallSdk.Typesense do
         raise "Unprocessable Entity"
 
       503 ->
-        # TODO: service monitoring, alerting to IM
+        # Service monitoring and alerting should happen at the deployment layer.
         raise "Service Unavailable"
 
       _ ->

@@ -1,4 +1,6 @@
 defmodule SaveIt.SmallHelper.UrlHelper do
+  @moduledoc false
+
   @media_extensions MapSet.new([
                       "jpg",
                       "jpeg",
