@@ -107,9 +107,17 @@ mix quality
 ## Typesense migrations
 
 ```sh
-# Create/update collections (idempotent)
+# Apply pending Typesense migrations
 mix ts.migrate
 
-# Drop and recreate photos collection
+# Roll back the latest applied migration
+mix ts.rollback
+
+# Roll back a specific migration version
+mix ts.rollback 20260524000000
+
+# Drop and recreate Typesense collections plus migration history
 mix ts.reset
 ```
+
+Typesense schema changes live under [`priv/typesense/migrations/`](./priv/typesense/migrations) as ordered `up`/`down` migration files. Legacy ad-hoc `priv/typesense/*.exs` runner scripts have been removed; use the mix tasks above instead.
