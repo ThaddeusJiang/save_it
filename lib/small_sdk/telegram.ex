@@ -12,7 +12,8 @@ defmodule SmallSdk.Telegram do
     {media_entries, multipart} =
       files
       |> Enum.with_index()
-      |> Enum.reduce({[], Tesla.Multipart.new()}, fn {{_file_name, content}, index}, {media_acc, mp} ->
+      |> Enum.reduce({[], Tesla.Multipart.new()}, fn {file, index}, {media_acc, mp} ->
+        {_file_name, content} = media_group_file_parts(file)
         part_name = "media#{index}"
 
         media = %{
@@ -50,6 +51,9 @@ defmodule SmallSdk.Telegram do
         {:error, error}
     end
   end
+
+  defp media_group_file_parts({file_name, content, _source_url}), do: {file_name, content}
+  defp media_group_file_parts({file_name, content}), do: {file_name, content}
 
   def download_file_content(file_path) when is_binary(file_path) do
     bot_token = get_env()
