@@ -24,10 +24,6 @@ echo "[mix.exs version]"
 rg -n "version:\\s*\"${version}\"" mix.exs || true
 
 echo
-echo "[changelog section]"
-rg -n "^## \\[${version}\\] - " CHANGELOG.md || true
-
-echo
 echo "[local tag]"
 git rev-parse --verify "${tag}" >/dev/null 2>&1 && echo "exists" || echo "missing"
 

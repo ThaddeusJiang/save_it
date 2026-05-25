@@ -31,7 +31,8 @@ When new tasks or constraints appear:
 - Update task checklist.
 - Update acceptance checklist.
 - Update related docs when relevant.
-- Update `CHANGELOG.md` promptly for every user-visible behavior change, operational workflow change, or release-note-worthy fix as part of the same task.
+- Do not maintain a repository `CHANGELOG.md` in this project. Check change history on the GitHub release page instead.
+- When a project-level decision changes team workflow or release handling, update the relevant ADRs, docs, and release tooling as part of the same task.
 - Treat these updates as part of the current task, not optional follow-up.
 
 ## Docker Image Policy
