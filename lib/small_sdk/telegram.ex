@@ -14,8 +14,8 @@ defmodule SmallSdk.Telegram do
     {media_entries, multipart} =
       files
       |> Enum.with_index()
-      |> Enum.reduce({[], Tesla.Multipart.new()}, fn {{_file_name, content}, index},
-                                                     {media_acc, mp} ->
+      |> Enum.reduce({[], Tesla.Multipart.new()}, fn {file, index}, {media_acc, mp} ->
+        {_file_name, content} = media_group_file_parts(file)
         part_name = "media#{index}"
 
         media = %{

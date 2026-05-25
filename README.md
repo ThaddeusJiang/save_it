@@ -42,6 +42,10 @@ messages:
 
 https://github.com/user-attachments/assets/b0dedcc0-3305-42b2-8101-6b0b5d32f17a
 
+### Known limitations
+
+- `/search` can still return occasional false positives for short semantic queries such as `/search girl`. This is a known limitation of the current Typesense image embedding model, and `save_it` does not plan to solve it locally.
+
 ## Self hosting
 
 ## One-Click for Zeabur 
