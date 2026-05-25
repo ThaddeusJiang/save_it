@@ -338,8 +338,10 @@ defmodule SaveIt.BotTest do
 
     defp parse_content_length_header(line) do
       case String.split(line, ":", parts: 2) do
-        [name, value] when String.downcase(name) == "content-length" ->
-          value |> String.trim() |> String.to_integer()
+        [name, value] ->
+          if String.downcase(name) == "content-length" do
+            value |> String.trim() |> String.to_integer()
+          end
 
         _ ->
           nil
