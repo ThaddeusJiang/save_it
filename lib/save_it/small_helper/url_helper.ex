@@ -34,6 +34,18 @@ defmodule SaveIt.SmallHelper.UrlHelper do
     end
   end
 
+  def normalize_optional_url(url) when is_binary(url) do
+    case URI.parse(url) do
+      %URI{scheme: scheme, host: host} when scheme in ["http", "https"] and is_binary(host) ->
+        url
+
+      _ ->
+        nil
+    end
+  end
+
+  def normalize_optional_url(_), do: nil
+
   def direct_media_url?(url) when is_binary(url) do
     case URI.parse(url) do
       %URI{scheme: scheme, host: host} = uri

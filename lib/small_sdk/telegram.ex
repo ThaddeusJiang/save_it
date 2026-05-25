@@ -54,6 +54,9 @@ defmodule SmallSdk.Telegram do
     end
   end
 
+  defp media_group_file_parts({file_name, content, _source_url, _download_url}),
+    do: {file_name, content}
+
   defp media_group_file_parts({file_name, content, _source_url}), do: {file_name, content}
   defp media_group_file_parts({file_name, content}), do: {file_name, content}
 

@@ -4,7 +4,7 @@ defmodule SaveIt.PhotoService do
   require Logger
   alias SmallSdk.Typesense
 
-  import SaveIt.SmallHelper.UrlHelper, only: [validate_url!: 1]
+  import SaveIt.SmallHelper.UrlHelper, only: [normalize_optional_url: 1, validate_url!: 1]
 
   def create_photo!(
         %{
@@ -13,6 +13,7 @@ defmodule SaveIt.PhotoService do
       ) do
     photo_create_input =
       photo_params
+      |> normalize_photo_urls()
       |> Map.put(:belongs_to_id, Integer.to_string(belongs_to_id))
       |> Map.put(:inserted_at, DateTime.utc_now() |> DateTime.to_unix())
 
@@ -174,5 +175,21 @@ defmodule SaveIt.PhotoService do
           results: results
         })
     )
+  end
+
+  defp normalize_photo_urls(photo_params) do
+    [:url, :download_url]
+    |> Enum.reduce(photo_params, fn field, acc ->
+      case Map.fetch(acc, field) do
+        {:ok, url} ->
+          case normalize_optional_url(url) do
+            nil -> Map.delete(acc, field)
+            normalized_url -> Map.put(acc, field, normalized_url)
+          end
+
+        :error ->
+          acc
+      end
+    end)
   end
 end
