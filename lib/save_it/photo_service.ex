@@ -114,7 +114,12 @@ defmodule SaveIt.PhotoService do
     req = build_request("/multi_search")
     res = Req.post(req, json: req_body)
     data = Typesense.handle_response(res)
-    log_search_response("search_similar_photos", %{photo_id: photo_id, belongs_to_id: belongs_to_id}, data)
+
+    log_search_response(
+      "search_similar_photos",
+      %{photo_id: photo_id, belongs_to_id: belongs_to_id},
+      data
+    )
 
     results = data["results"]
 

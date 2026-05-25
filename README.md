@@ -100,7 +100,7 @@ mix credo --strict
 # Static analysis
 mix dialyzer
 
-# Run the common quality suite
+# Run the common quality suite (check-only, no file rewrites)
 mix quality
 ```
 
