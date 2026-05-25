@@ -9,6 +9,7 @@ and this project uses [Calendar Versioning](https://calver.org/) with the `YYYY.
 
 ### Added
 - Add Elixir code quality tooling with `Credo`, `Dialyxir`, and `ExDoc`, plus a `mix quality` alias for common local checks.
+- Add explicit Typesense migration version tracking plus `mix ts.rollback`, so each schema migration now has a corresponding rollback path.
 
 ### Fixed
 - Fix Telegram media group uploads for downloaded multi-image posts by accepting file tuples that also carry the source URL metadata.
@@ -20,6 +21,8 @@ and this project uses [Calendar Versioning](https://calver.org/) with the `YYYY.
 - Tune `/search` image semantic retrieval to use a `0.785` vector distance cutoff and log top vector distances for easier relevance calibration.
 - Change `mix quality` to run formatter in check mode only, keep the main CI focused on tests, and move formatter, compile, Credo, and Dialyzer checks into a separate quality workflow that runs after code lands on `main`.
 - Enable ANSI color mapping for runtime Elixir logs so container output can render level-based colors in terminals that support ANSI escape sequences.
+- Change Typesense schema maintenance from ad-hoc reconciliation to ordered `up`/`down` migrations that can bootstrap existing collections from live schema state.
+- Remove legacy `priv/typesense/*.exs` compatibility scripts now that Typesense migrations live entirely behind ordered mix tasks and versioned migration files.
 
 ## [0.4.1] - 2026-05-24
 
