@@ -178,18 +178,18 @@ defmodule SaveIt.PhotoService do
   end
 
   defp normalize_photo_urls(photo_params) do
-    [:url, :download_url]
-    |> Enum.reduce(photo_params, fn field, acc ->
-      case Map.fetch(acc, field) do
-        {:ok, url} ->
-          case normalize_optional_url(url) do
-            nil -> Map.delete(acc, field)
-            normalized_url -> Map.put(acc, field, normalized_url)
-          end
-
-        :error ->
-          acc
-      end
-    end)
+    Enum.reduce([:url, :download_url], photo_params, &normalize_photo_url_field/2)
   end
+
+  defp normalize_photo_url_field(field, acc) do
+    case Map.fetch(acc, field) do
+      {:ok, url} -> put_normalized_photo_url(acc, field, normalize_optional_url(url))
+      :error -> acc
+    end
+  end
+
+  defp put_normalized_photo_url(acc, field, nil), do: Map.delete(acc, field)
+
+  defp put_normalized_photo_url(acc, field, normalized_url),
+    do: Map.put(acc, field, normalized_url)
 end

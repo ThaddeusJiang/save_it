@@ -325,24 +325,25 @@ defmodule SaveIt.BotTest do
       {header_data, body_prefix} = split_headers(initial_data)
       [request_line | header_lines] = String.split(header_data, "\r\n", trim: true)
       [method, path, _http_version] = String.split(request_line, " ")
-
-      content_length =
-        header_lines
-        |> Enum.find_value(0, fn line ->
-          case String.split(line, ":", parts: 2) do
-            [name, value] ->
-              if String.downcase(name) == "content-length" do
-                value |> String.trim() |> String.to_integer()
-              end
-
-            _ ->
-              nil
-          end
-        end)
+      content_length = parse_content_length(header_lines)
 
       body = read_body(socket, body_prefix, content_length)
 
       {String.downcase(method) |> String.to_atom(), path, body}
+    end
+
+    defp parse_content_length(header_lines) do
+      Enum.find_value(header_lines, 0, &parse_content_length_header/1)
+    end
+
+    defp parse_content_length_header(line) do
+      case String.split(line, ":", parts: 2) do
+        [name, value] when String.downcase(name) == "content-length" ->
+          value |> String.trim() |> String.to_integer()
+
+        _ ->
+          nil
+      end
     end
 
     defp split_headers(data) do

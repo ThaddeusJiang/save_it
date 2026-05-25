@@ -3,6 +3,8 @@ defmodule SmallSdk.HlsDownloader do
 
   require Logger
 
+  alias SaveIt.DownloadedFile
+
   # Telegram bot API file upload limit is 50MB
   @max_file_size 49 * 1024 * 1024
 
@@ -10,7 +12,7 @@ defmodule SmallSdk.HlsDownloader do
   Download an HLS (m3u8) stream and convert it to mp4 using ffmpeg.
   Automatically selects a variant that fits within Telegram's 50MB limit.
 
-  Returns `{:ok, filename, binary_content}` or `{:error, reason}`.
+  Returns `{:ok, %SaveIt.DownloadedFile{}}` or `{:error, reason}`.
   """
   def download(m3u8_url) do
     base_url = extract_base_url(m3u8_url)
@@ -47,7 +49,7 @@ defmodule SmallSdk.HlsDownloader do
               download_best_variant(rest, original_url)
 
             {:ok, content} when byte_size(content) > 0 ->
-              {:ok, filename, content}
+              {:ok, %DownloadedFile{file_name: filename, file_content: content}}
 
             {:ok, _} ->
               {:error, "ffmpeg produced an empty file"}

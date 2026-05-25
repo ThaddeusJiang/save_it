@@ -3,6 +3,8 @@ defmodule SaveIt.FileHelper do
 
   require Logger
 
+  alias SaveIt.DownloadedFile
+
   @files_dir "./data/storage/files"
   @urls_dir "./data/storage/urls"
 
@@ -61,6 +63,9 @@ defmodule SaveIt.FileHelper do
     hashed_url = :crypto.hash(:sha256, original_url) |> Base.url_encode64(padding: false)
 
     Enum.each(files, fn
+      %DownloadedFile{file_name: file_name, file_content: file_content} ->
+        write_file_to_disk(Path.join(@files_dir, hashed_url), file_name, file_content)
+
       {file_name, file_content} ->
         write_file_to_disk(Path.join(@files_dir, hashed_url), file_name, file_content)
 
@@ -71,7 +76,11 @@ defmodule SaveIt.FileHelper do
     write_file_to_disk(
       @urls_dir,
       hashed_url,
-      Enum.map_join(files, "\n", &elem(&1, 0))
+      Enum.map_join(files, "\n", fn
+        %DownloadedFile{file_name: file_name} -> file_name
+        {file_name, _file_content} -> file_name
+        {file_name, _file_content, _source_url} -> file_name
+      end)
     )
   end
 

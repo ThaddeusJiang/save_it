@@ -7,6 +7,7 @@ defmodule SaveIt.GoogleDrive do
   - Move the raw API client into `SmallSdk`.
   - Support browsing and selecting folders.
   """
+  alias SaveIt.DownloadedFile
   alias SaveIt.FileHelper
   require Logger
   use Tesla
@@ -52,10 +53,7 @@ defmodule SaveIt.GoogleDrive do
     folder_id = FileHelper.get_google_drive_folder_id(chat_id)
 
     Enum.map(files, fn
-      {file_name, file_content} ->
-        upload_file(file_name, file_content, folder_id, access_token)
-
-      {file_name, file_content, _source_url} ->
+      %DownloadedFile{file_name: file_name, file_content: file_content} ->
         upload_file(file_name, file_content, folder_id, access_token)
     end)
   end

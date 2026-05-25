@@ -5,6 +5,8 @@ defmodule SaveIt.Bot do
 
   import SaveIt.SmallHelper.UrlHelper, only: [direct_media_url?: 1]
 
+  alias SaveIt.DownloadContext
+  alias SaveIt.DownloadedFile
   alias SaveIt.FileHelper
   alias SaveIt.GoogleDrive
   alias SaveIt.GoogleOAuth2DeviceFlow
@@ -347,152 +349,121 @@ defmodule SaveIt.Bot do
 
   defp process_url(chat_id, url) do
     {:ok, progress_message} = send_message(chat_id, Enum.at(@progress, 0))
-    progress_message_id = progress_message.message_id
+
+    context = %DownloadContext{
+      chat_id: chat_id,
+      progress_message_id: progress_message.message_id,
+      original_url: url
+    }
 
     case get_download_url(url) do
       {:ok, m3u8_url, :hls} ->
-        handle_hls_download(chat_id, progress_message_id, url, m3u8_url)
+        handle_hls_download(%{context | cache_url: url}, m3u8_url)
 
       {:ok, purge_url, download_urls} ->
-        handle_multi_file_download(chat_id, progress_message_id, url, purge_url, download_urls)
+        handle_multi_file_download(%{context | purge_url: purge_url}, download_urls)
 
       {:ok, download_url} ->
-        handle_single_file_download(chat_id, progress_message_id, url, download_url)
+        handle_single_file_download(%{
+          context
+          | download_url: download_url,
+            cache_url: download_url
+        })
 
       {:error, _} ->
-        update_message(chat_id, progress_message_id, "💔 Failed to get download URL.")
+        update_message(chat_id, context.progress_message_id, "💔 Failed to get download URL.")
         :error
     end
   end
 
-  defp handle_hls_download(chat_id, progress_message_id, original_url, m3u8_url) do
-    update_message(chat_id, progress_message_id, Enum.slice(@progress, 0..1))
+  defp handle_hls_download(%DownloadContext{} = context, m3u8_url) do
+    update_message(context.chat_id, context.progress_message_id, Enum.slice(@progress, 0..1))
 
     case HlsDownloader.download(m3u8_url) do
-      {:ok, file_name, file_content} ->
-        update_message(chat_id, progress_message_id, Enum.slice(@progress, 0..2))
-        bot_send_file(chat_id, file_name, {:file_content, file_content, file_name})
-
-        finalize_single_download(
-          chat_id,
-          progress_message_id,
-          file_name,
-          file_content,
-          original_url
-        )
+      {:ok, %DownloadedFile{} = file} ->
+        update_message(context.chat_id, context.progress_message_id, Enum.slice(@progress, 0..2))
+        bot_send_downloaded_file(context.chat_id, file)
+        finalize_single_download(context, file)
 
       {:error, _reason} ->
-        update_message(chat_id, progress_message_id, "💔 Failed downloading HLS video.")
+        update_message(
+          context.chat_id,
+          context.progress_message_id,
+          "💔 Failed downloading HLS video."
+        )
+
         :error
     end
   end
 
-  defp handle_multi_file_download(
-         chat_id,
-         progress_message_id,
-         original_url,
-         purge_url,
-         download_urls
-       ) do
-    case FileHelper.get_downloaded_files(purge_url) do
+  defp handle_multi_file_download(%DownloadContext{} = context, download_urls) do
+    case FileHelper.get_downloaded_files(context.purge_url) do
       nil ->
-        download_and_store_files(
-          chat_id,
-          progress_message_id,
-          original_url,
-          purge_url,
-          download_urls
-        )
+        download_and_store_files(context, download_urls)
 
       downloaded_files ->
-        update_message(chat_id, progress_message_id, Enum.slice(@progress, 0..2))
-        bot_send_filenames(chat_id, downloaded_files, source_url: original_url)
-        delete_message(chat_id, progress_message_id)
+        update_message(context.chat_id, context.progress_message_id, Enum.slice(@progress, 0..2))
+        bot_send_filenames(context.chat_id, downloaded_files, source_url: context.original_url)
+        delete_message(context.chat_id, context.progress_message_id)
         :ok
     end
   end
 
-  defp download_and_store_files(
-         chat_id,
-         progress_message_id,
-         original_url,
-         purge_url,
-         download_urls
-       ) do
-    update_message(chat_id, progress_message_id, Enum.slice(@progress, 0..1))
+  defp download_and_store_files(%DownloadContext{} = context, download_urls) do
+    update_message(context.chat_id, context.progress_message_id, Enum.slice(@progress, 0..1))
 
     case WebDownloader.download_files(download_urls) do
       {:ok, files} ->
-        update_message(chat_id, progress_message_id, Enum.slice(@progress, 0..2))
-        bot_send_files(chat_id, files, source_url: original_url)
-        delete_message(chat_id, progress_message_id)
-        FileHelper.write_folder(purge_url, files)
-        GoogleDrive.upload_files(chat_id, files)
+        update_message(context.chat_id, context.progress_message_id, Enum.slice(@progress, 0..2))
+        bot_send_files(context.chat_id, files, source_url: context.original_url)
+        delete_message(context.chat_id, context.progress_message_id)
+        FileHelper.write_folder(context.purge_url, files)
+        GoogleDrive.upload_files(context.chat_id, files)
         :ok
 
       _ ->
-        update_message(chat_id, progress_message_id, "💔 Failed downloading file.")
+        update_message(context.chat_id, context.progress_message_id, "💔 Failed downloading file.")
         :error
     end
   end
 
-  defp handle_single_file_download(chat_id, progress_message_id, original_url, download_url) do
-    case FileHelper.get_downloaded_file(download_url) do
+  defp handle_single_file_download(%DownloadContext{} = context) do
+    case FileHelper.get_downloaded_file(context.download_url) do
       nil ->
-        download_and_store_file(chat_id, progress_message_id, original_url, download_url)
+        download_and_store_file(context)
 
       downloaded_file ->
-        update_message(chat_id, progress_message_id, Enum.slice(@progress, 0..2))
+        update_message(context.chat_id, context.progress_message_id, Enum.slice(@progress, 0..2))
 
-        bot_send_file(chat_id, downloaded_file, {:file, downloaded_file},
-          source_url: original_url,
-          download_url: download_url
+        bot_send_file(context.chat_id, downloaded_file, {:file, downloaded_file},
+          source_url: context.original_url,
+          download_url: context.download_url
         )
 
-        delete_message(chat_id, progress_message_id)
+        delete_message(context.chat_id, context.progress_message_id)
         :ok
     end
   end
 
-  defp download_and_store_file(chat_id, progress_message_id, original_url, download_url) do
-    update_message(chat_id, progress_message_id, Enum.slice(@progress, 0..1))
+  defp download_and_store_file(%DownloadContext{} = context) do
+    update_message(context.chat_id, context.progress_message_id, Enum.slice(@progress, 0..1))
 
-    case WebDownloader.download_file(download_url) do
-      {:ok, file_name, file_content, _source_url} ->
-        update_message(chat_id, progress_message_id, Enum.slice(@progress, 0..2))
-
-        bot_send_file(
-          chat_id,
-          file_name,
-          {:file_content, file_content, file_name},
-          source_url: original_url,
-          download_url: download_url
-        )
-
-        finalize_single_download(
-          chat_id,
-          progress_message_id,
-          file_name,
-          file_content,
-          download_url
-        )
+    case WebDownloader.download_file(context.download_url) do
+      {:ok, %DownloadedFile{} = file} ->
+        update_message(context.chat_id, context.progress_message_id, Enum.slice(@progress, 0..2))
+        bot_send_downloaded_file(context.chat_id, file, source_url: context.original_url)
+        finalize_single_download(context, file)
 
       _ ->
-        update_message(chat_id, progress_message_id, "💔 Failed downloading file.")
+        update_message(context.chat_id, context.progress_message_id, "💔 Failed downloading file.")
         :error
     end
   end
 
-  defp finalize_single_download(
-         chat_id,
-         progress_message_id,
-         file_name,
-         file_content,
-         download_url
-       ) do
-    delete_message(chat_id, progress_message_id)
-    FileHelper.write_file(file_name, file_content, download_url)
-    GoogleDrive.upload_file_content(chat_id, file_content, file_name)
+  defp finalize_single_download(%DownloadContext{} = context, %DownloadedFile{} = file) do
+    delete_message(context.chat_id, context.progress_message_id)
+    FileHelper.write_file(file.file_name, file.file_content, context.cache_url)
+    GoogleDrive.upload_file_content(context.chat_id, file.file_content, file.file_name)
     :ok
   end
 
@@ -518,21 +489,25 @@ defmodule SaveIt.Bot do
     if all_images?(files) and length(files) > 1 do
       bot_send_media_group(
         chat_id,
-        Enum.map(files, fn {file_name, file_content, download_url} ->
-          {file_name, {:file_content, file_content, file_name}, source_url, download_url}
+        Enum.map(files, fn %DownloadedFile{} = file ->
+          {file.file_name, {:file_content, file.file_content, file.file_name}, source_url,
+           file.download_url}
         end)
       )
     else
-      Enum.each(files, fn {file_name, file_content, download_url} ->
-        bot_send_file(
-          chat_id,
-          file_name,
-          {:file_content, file_content, file_name},
-          source_url: source_url,
-          download_url: download_url
-        )
+      Enum.each(files, fn %DownloadedFile{} = file ->
+        bot_send_downloaded_file(chat_id, file, source_url: source_url)
       end)
     end
+  end
+
+  defp bot_send_downloaded_file(chat_id, %DownloadedFile{} = file, opts \\ []) do
+    bot_send_file(
+      chat_id,
+      file.file_name,
+      {:file_content, file.file_content, file.file_name},
+      Keyword.put_new(opts, :download_url, file.download_url)
+    )
   end
 
   defp bot_send_filenames(chat_id, filenames, opts) do
@@ -657,6 +632,9 @@ defmodule SaveIt.Bot do
 
   defp all_images?(files) when is_list(files) do
     Enum.all?(files, fn
+      %DownloadedFile{file_name: file_name} ->
+        image_file?(file_name)
+
       {file_name, _file_content, _source_url} ->
         image_file?(file_name)
 

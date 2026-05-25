@@ -3,13 +3,15 @@ defmodule SmallSdk.WebDownloader do
 
   require Logger
 
+  alias SaveIt.DownloadedFile
+
   def download_files(urls) do
     res =
       urls
       |> Enum.map(&download_file/1)
       |> Enum.reduce_while([], fn
-        {:ok, filename, file_content, source_url}, acc ->
-          {:cont, [{filename, file_content, source_url} | acc]}
+        {:ok, %DownloadedFile{} = file}, acc ->
+          {:cont, [file | acc]}
 
         {:error, reason}, _ ->
           {:halt, {:error, reason}}
@@ -32,7 +34,13 @@ defmodule SmallSdk.WebDownloader do
 
       {:ok, %{status: status, body: body, headers: headers}} when status in 200..209 ->
         filename = parse_filename_for_url(url, headers)
-        {:ok, filename, body, url}
+
+        {:ok,
+         %DownloadedFile{
+           file_name: filename,
+           file_content: body,
+           download_url: url
+         }}
 
       {:ok, %{status: status, body: body}} ->
         Logger.error("download_file failed, status: #{status}, body: #{inspect(body)}")
