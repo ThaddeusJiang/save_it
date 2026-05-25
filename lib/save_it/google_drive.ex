@@ -51,8 +51,12 @@ defmodule SaveIt.GoogleDrive do
     access_token = FileHelper.get_google_access_token(chat_id)
     folder_id = FileHelper.get_google_drive_folder_id(chat_id)
 
-    Enum.map(files, fn {file_name, file_content} ->
-      upload_file(file_name, file_content, folder_id, access_token)
+    Enum.map(files, fn
+      {file_name, file_content} ->
+        upload_file(file_name, file_content, folder_id, access_token)
+
+      {file_name, file_content, _source_url} ->
+        upload_file(file_name, file_content, folder_id, access_token)
     end)
   end
 

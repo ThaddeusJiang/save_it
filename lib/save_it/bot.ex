@@ -354,10 +354,10 @@ defmodule SaveIt.Bot do
         handle_hls_download(chat_id, progress_message_id, url, m3u8_url)
 
       {:ok, purge_url, download_urls} ->
-        handle_multi_file_download(chat_id, progress_message_id, purge_url, download_urls)
+        handle_multi_file_download(chat_id, progress_message_id, url, purge_url, download_urls)
 
       {:ok, download_url} ->
-        handle_single_file_download(chat_id, progress_message_id, download_url)
+        handle_single_file_download(chat_id, progress_message_id, url, download_url)
 
       {:error, _} ->
         update_message(chat_id, progress_message_id, "💔 Failed to get download URL.")
@@ -387,26 +387,44 @@ defmodule SaveIt.Bot do
     end
   end
 
-  defp handle_multi_file_download(chat_id, progress_message_id, purge_url, download_urls) do
-    case FileHelper.get_downloaded_files(download_urls) do
+  defp handle_multi_file_download(
+         chat_id,
+         progress_message_id,
+         original_url,
+         purge_url,
+         download_urls
+       ) do
+    case FileHelper.get_downloaded_files(purge_url) do
       nil ->
-        download_and_store_files(chat_id, progress_message_id, purge_url, download_urls)
+        download_and_store_files(
+          chat_id,
+          progress_message_id,
+          original_url,
+          purge_url,
+          download_urls
+        )
 
       downloaded_files ->
         update_message(chat_id, progress_message_id, Enum.slice(@progress, 0..2))
-        bot_send_filenames(chat_id, downloaded_files)
+        bot_send_filenames(chat_id, downloaded_files, source_url: original_url)
         delete_message(chat_id, progress_message_id)
         :ok
     end
   end
 
-  defp download_and_store_files(chat_id, progress_message_id, purge_url, download_urls) do
+  defp download_and_store_files(
+         chat_id,
+         progress_message_id,
+         original_url,
+         purge_url,
+         download_urls
+       ) do
     update_message(chat_id, progress_message_id, Enum.slice(@progress, 0..1))
 
     case WebDownloader.download_files(download_urls) do
       {:ok, files} ->
         update_message(chat_id, progress_message_id, Enum.slice(@progress, 0..2))
-        bot_send_files(chat_id, files)
+        bot_send_files(chat_id, files, source_url: original_url)
         delete_message(chat_id, progress_message_id)
         FileHelper.write_folder(purge_url, files)
         GoogleDrive.upload_files(chat_id, files)
@@ -418,16 +436,17 @@ defmodule SaveIt.Bot do
     end
   end
 
-  defp handle_single_file_download(chat_id, progress_message_id, download_url) do
+  defp handle_single_file_download(chat_id, progress_message_id, original_url, download_url) do
     case FileHelper.get_downloaded_file(download_url) do
       nil ->
-        download_and_store_file(chat_id, progress_message_id, download_url)
+        download_and_store_file(chat_id, progress_message_id, original_url, download_url)
 
       downloaded_file ->
         update_message(chat_id, progress_message_id, Enum.slice(@progress, 0..2))
 
         bot_send_file(chat_id, downloaded_file, {:file, downloaded_file},
-          source_url: download_url
+          source_url: original_url,
+          download_url: download_url
         )
 
         delete_message(chat_id, progress_message_id)
@@ -435,18 +454,19 @@ defmodule SaveIt.Bot do
     end
   end
 
-  defp download_and_store_file(chat_id, progress_message_id, download_url) do
+  defp download_and_store_file(chat_id, progress_message_id, original_url, download_url) do
     update_message(chat_id, progress_message_id, Enum.slice(@progress, 0..1))
 
     case WebDownloader.download_file(download_url) do
-      {:ok, file_name, file_content, source_url} ->
+      {:ok, file_name, file_content, _source_url} ->
         update_message(chat_id, progress_message_id, Enum.slice(@progress, 0..2))
 
         bot_send_file(
           chat_id,
           file_name,
           {:file_content, file_content, file_name},
-          source_url: source_url
+          source_url: original_url,
+          download_url: download_url
         )
 
         finalize_single_download(
@@ -492,34 +512,41 @@ defmodule SaveIt.Bot do
     ExGram.delete_message(chat_id, message_id)
   end
 
-  defp bot_send_files(chat_id, files) do
+  defp bot_send_files(chat_id, files, opts) do
+    source_url = Keyword.get(opts, :source_url)
+
     if all_images?(files) and length(files) > 1 do
       bot_send_media_group(
         chat_id,
-        Enum.map(files, fn {file_name, file_content, source_url} ->
-          {file_name, {:file_content, file_content, file_name}, source_url}
+        Enum.map(files, fn {file_name, file_content, download_url} ->
+          {file_name, {:file_content, file_content, file_name}, source_url, download_url}
         end)
       )
     else
-      Enum.each(files, fn {file_name, file_content, source_url} ->
+      Enum.each(files, fn {file_name, file_content, download_url} ->
         bot_send_file(
           chat_id,
           file_name,
           {:file_content, file_content, file_name},
-          source_url: source_url
+          source_url: source_url,
+          download_url: download_url
         )
       end)
     end
   end
 
-  defp bot_send_filenames(chat_id, filenames) do
+  defp bot_send_filenames(chat_id, filenames, opts) do
+    source_url = Keyword.get(opts, :source_url)
+
     if all_images?(filenames) and length(filenames) > 1 do
       bot_send_media_group(
         chat_id,
-        Enum.map(filenames, fn filename -> {filename, {:file, filename}} end)
+        Enum.map(filenames, fn filename -> {filename, {:file, filename}, source_url} end)
       )
     else
-      Enum.each(filenames, fn filename -> bot_send_file(chat_id, filename, {:file, filename}) end)
+      Enum.each(filenames, fn filename ->
+        bot_send_file(chat_id, filename, {:file, filename}, source_url: source_url)
+      end)
     end
   end
 
@@ -528,6 +555,19 @@ defmodule SaveIt.Bot do
       {:ok, messages} ->
         Enum.zip(files, messages)
         |> Enum.each(fn
+          {{_file_name, content, source_url, download_url}, msg} ->
+            file_id = get_file_id(msg)
+            image_base64 = encode_file_content(content)
+
+            PhotoService.create_photo!(%{
+              image: image_base64,
+              caption: "",
+              file_id: file_id,
+              url: source_url,
+              download_url: download_url,
+              belongs_to_id: chat_id
+            })
+
           {{_file_name, content, source_url}, msg} ->
             file_id = get_file_id(msg)
             image_base64 = encode_file_content(content)
@@ -556,6 +596,12 @@ defmodule SaveIt.Bot do
         Logger.error("Failed to send media group: #{inspect(reason)}")
 
         Enum.each(files, fn
+          {file_name, content, source_url, download_url} ->
+            bot_send_file(chat_id, file_name, content,
+              source_url: source_url,
+              download_url: download_url
+            )
+
           {file_name, content, source_url} ->
             bot_send_file(chat_id, file_name, content, source_url: source_url)
 
@@ -574,6 +620,7 @@ defmodule SaveIt.Bot do
 
     caption = Keyword.get(opts, :caption, "")
     source_url = Keyword.get(opts, :source_url)
+    download_url = Keyword.get(opts, :download_url)
 
     case file_extension(file_name) do
       ext when ext in [".png", ".jpg", ".jpeg"] ->
@@ -589,6 +636,7 @@ defmodule SaveIt.Bot do
           caption: caption,
           file_id: file_id,
           url: source_url,
+          download_url: download_url,
           belongs_to_id: chat_id
         })
 
