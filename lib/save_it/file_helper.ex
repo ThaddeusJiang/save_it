@@ -1,4 +1,6 @@
 defmodule SaveIt.FileHelper do
+  @moduledoc false
+
   require Logger
 
   @files_dir "./data/storage/files"
@@ -69,7 +71,7 @@ defmodule SaveIt.FileHelper do
     write_file_to_disk(
       @urls_dir,
       hashed_url,
-      files |> Enum.map(&elem(&1, 0)) |> Enum.join("\n")
+      Enum.map_join(files, "\n", &elem(&1, 0))
     )
   end
 

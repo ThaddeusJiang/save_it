@@ -1,4 +1,6 @@
 defmodule SaveIt.PhotoService do
+  @moduledoc false
+
   require Logger
   alias SmallSdk.Typesense
 
@@ -126,7 +128,7 @@ defmodule SaveIt.PhotoService do
     end
   end
 
-  defp get_env() do
+  defp get_env do
     url = Application.fetch_env!(:save_it, :typesense_url) |> validate_url!()
     api_key = Application.fetch_env!(:save_it, :typesense_api_key)
 

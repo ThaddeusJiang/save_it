@@ -1,4 +1,6 @@
 defmodule SmallSdk.BadNews do
+  @moduledoc false
+
   require Logger
 
   @base_url "https://bad.news"

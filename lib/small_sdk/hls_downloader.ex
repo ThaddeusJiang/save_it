@@ -1,4 +1,6 @@
 defmodule SmallSdk.HlsDownloader do
+  @moduledoc false
+
   require Logger
 
   # Telegram bot API file upload limit is 50MB
@@ -102,8 +104,9 @@ defmodule SmallSdk.HlsDownloader do
     # Parse audio tracks: GROUP-ID -> absolute URL
     audio_map =
       lines
-      |> Enum.filter(&String.starts_with?(&1, "#EXT-X-MEDIA:"))
-      |> Enum.filter(&String.contains?(&1, "TYPE=AUDIO"))
+      |> Enum.filter(
+        &(String.starts_with?(&1, "#EXT-X-MEDIA:") and String.contains?(&1, "TYPE=AUDIO"))
+      )
       |> Enum.reduce(%{}, fn line, acc ->
         group_id = extract_attr(line, "GROUP-ID")
         uri = extract_attr(line, "URI")

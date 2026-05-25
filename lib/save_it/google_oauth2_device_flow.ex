@@ -1,4 +1,6 @@
 defmodule SaveIt.GoogleOAuth2DeviceFlow do
+  @moduledoc false
+
   require Logger
   use Tesla
 
@@ -49,7 +51,7 @@ defmodule SaveIt.GoogleOAuth2DeviceFlow do
     |> handle_response()
   end
 
-  defp get_env() do
+  defp get_env do
     client_id = Application.fetch_env!(:save_it, :google_oauth_client_id)
     client_secret = Application.fetch_env!(:save_it, :google_oauth_client_secret)
 

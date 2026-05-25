@@ -1,4 +1,6 @@
 defmodule SmallSdk.Cobalt do
+  @moduledoc false
+
   require Logger
 
   import SaveIt.SmallHelper.UrlHelper, only: [validate_url!: 1]
@@ -26,7 +28,7 @@ defmodule SmallSdk.Cobalt do
     end
   end
 
-  defp get_env() do
+  defp get_env do
     api_url = Application.fetch_env!(:save_it, :cobalt_api_url) |> validate_url!()
 
     {api_url}
