@@ -8,6 +8,17 @@ config :save_it, :cobalt_api_url, System.get_env("COBALT_API_URL", "http://local
 config :save_it, :typesense_url, System.get_env("TYPESENSE_URL", "http://localhost:8108")
 config :save_it, :typesense_api_key, System.get_env("TYPESENSE_API_KEY", "xyz")
 
+config :logger, :default_formatter,
+  format: "$time $metadata[$level] $message\n",
+  metadata: [],
+  colors: [
+    enabled: true,
+    debug: :cyan,
+    info: :green,
+    warning: :yellow,
+    error: :red
+  ]
+
 # optional
 config :save_it, :google_oauth_client_id, System.get_env("GOOGLE_OAUTH_CLIENT_ID")
 config :save_it, :google_oauth_client_secret, System.get_env("GOOGLE_OAUTH_CLIENT_SECRET")

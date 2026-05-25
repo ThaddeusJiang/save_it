@@ -20,6 +20,7 @@ and this project uses [Calendar Versioning](https://calver.org/) with the `YYYY.
 - Add request and result logging around Typesense photo searches to make empty `/search` responses easier to diagnose in production logs.
 - Tune `/search` image semantic retrieval to use a `0.785` vector distance cutoff and log top vector distances for easier relevance calibration.
 - Change `mix quality` to run formatter in check mode only, keep the main CI focused on tests, and move formatter, compile, Credo, and Dialyzer checks into a separate quality workflow that runs after code lands on `main`.
+- Enable ANSI color mapping for runtime Elixir logs so container output can render level-based colors in terminals that support ANSI escape sequences.
 - Change Typesense schema maintenance from ad-hoc reconciliation to ordered `up`/`down` migrations that can bootstrap existing collections from live schema state.
 - Remove legacy `priv/typesense/*.exs` compatibility scripts now that Typesense migrations live entirely behind ordered mix tasks and versioned migration files.
 
