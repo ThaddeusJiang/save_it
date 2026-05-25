@@ -1,6 +1,6 @@
 ---
 name: save-it-release
-description: Prepare, verify, and publish `save_it` releases by updating `CHANGELOG.md` and `mix.exs`, creating the release commit and tag, and publishing a GitHub release with notes extracted from the changelog. Use when the user asks to cut a stable release, prepare a prerelease, or verify release readiness for this repository. This repository uses CalVer `YYYY.M.PATCH` and prerelease tags such as `YYYY.M.PATCH-rc.N`.
+description: Prepare, verify, and publish `save_it` releases by updating `mix.exs`, creating the release commit and tag, and publishing a GitHub release. Use when the user asks to cut a stable release, prepare a prerelease, or verify release readiness for this repository. This repository uses CalVer `YYYY.M.PATCH` and prerelease tags such as `YYYY.M.PATCH-rc.N`.
 ---
 
 # Save It Release
@@ -8,19 +8,19 @@ description: Prepare, verify, and publish `save_it` releases by updating `CHANGE
 Use this skill when the task is specifically about the `save_it` release flow.
 
 This repository uses:
-- `CHANGELOG.md` as the source of release notes
 - `mix.exs` `version` as the application version
 - CalVer `YYYY.M.PATCH` for stable versions, for example `2026.5.1`
 - git tags that match the version string directly, for example `2026.5.1`
 - GitHub Release publication to trigger `.github/workflows/release.yml`
+- The GitHub release page as the changelog surface for this project
 - `.github/workflows/release-manual.yml` for manual prereleases such as `2026.5.2-rc.1`
 
 ## Workflow
 
 1. Read the current release state.
 2. Decide whether this is release preparation, stable release publication, or manual prerelease publication.
-3. Align `CHANGELOG.md` and `mix.exs`.
-4. Verify release notes and git state.
+3. Align `mix.exs` and the target release tag.
+4. Verify release metadata and git state.
 5. Execute the matching release path.
 6. Report the exact tag, commit, release URL, and workflow status.
 
@@ -49,41 +49,29 @@ Use the helper script for a quick snapshot:
 
 When the user asks to prepare a release but not publish it yet:
 
-1. Update `CHANGELOG.md`.
-- Keep `[Unreleased]` at the top.
-- Move shipped items into `## [YYYY.M.PATCH] - YYYY-MM-DD`.
-- Add the compare link for the new version.
-- Keep entries user-facing and in English.
-2. Update `mix.exs`:
+1. Update `mix.exs`:
 
 ```elixir
 version: "YYYY.M.PATCH"
 ```
 
-3. Show the diff for `CHANGELOG.md` and `mix.exs`.
+2. If the release page needs curated notes, prepare a short English draft for the GitHub release body.
+3. Show the diff for `mix.exs`.
 4. Do not tag or publish unless the user explicitly asks to release.
-
-If changelog drafting is still needed, also use `.agents/skills/changelog/SKILL.md`.
 
 ## Stable Release Publication
 
 When the user asks to publish a stable release:
 
-1. Confirm the released version exists in both `CHANGELOG.md` and `mix.exs`.
-2. Extract release notes with:
+1. Confirm the released version exists in `mix.exs`.
+2. Commit release metadata changes using the repository convention:
 
 ```bash
-.agents/skills/save-it-release/scripts/extract_release_notes.sh YYYY.M.PATCH
-```
-
-3. Commit release metadata changes using the repository convention:
-
-```bash
-git add CHANGELOG.md mix.exs
+git add mix.exs
 git commit -m "chore(release): bump version to YYYY.M.PATCH"
 ```
 
-4. Create and push the stable tag:
+3. Create and push the stable tag:
 
 ```bash
 git tag -a YYYY.M.PATCH -m "YYYY.M.PATCH"
@@ -91,19 +79,16 @@ git push origin main
 git push origin refs/tags/YYYY.M.PATCH
 ```
 
-5. Publish the GitHub release from the extracted notes:
+4. Publish the GitHub release page entry. Prefer generated notes unless the user already prepared custom notes:
 
 ```bash
-tmpfile="$(mktemp)"
-.agents/skills/save-it-release/scripts/extract_release_notes.sh YYYY.M.PATCH > "$tmpfile"
 gh release create YYYY.M.PATCH \
   --verify-tag \
   --title "save_it YYYY.M.PATCH" \
-  --notes-file "$tmpfile"
-rm -f "$tmpfile"
+  --generate-notes
 ```
 
-6. Check whether the `Release` workflow was triggered:
+5. Check whether the `Release` workflow was triggered:
 
 ```bash
 gh run list --limit 5
@@ -127,23 +112,20 @@ gh workflow run "Release (manual)" -f tag=YYYY.M.PATCH-rc.N
 ## Guardrails
 
 - Never publish a stable release from a dirty working tree.
-- Never create a stable release if `mix.exs` and `CHANGELOG.md` disagree on the version.
+- Never create a stable release if `mix.exs` and the intended tag disagree on the version.
 - Never use a non-CalVer stable version format in this repository unless the project convention is explicitly changed again.
 - Never add a `v` prefix to new release tags in this repository.
-- Never invent release notes from raw commit history when the matching changelog section is missing.
+- Never pretend a repository changelog exists for this project. Use the GitHub release page instead.
 - Never recreate an existing tag or GitHub release.
 - Never use the manual prerelease workflow for a normal stable release when direct GitHub release publication is intended.
 
 ## Related Files
 
-- `CHANGELOG.md`
 - `mix.exs`
 - `.github/workflows/release.yml`
 - `.github/workflows/release-manual.yml`
-- `.agents/skills/changelog/SKILL.md`
 - `.agents/skills/acceptance-testing/SKILL.md`
 
 ## Resources
 
-- `scripts/extract_release_notes.sh`
 - `scripts/check_release_state.sh`

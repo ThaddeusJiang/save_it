@@ -43,22 +43,10 @@ jobs:
           RELEASE_BRANCH: ${{ github.ref_name }}
           INPUT_TAG: ${{ inputs.tag }}
         run: |
-          version="${INPUT_TAG}"
-
-          awk -v version="$version" '
-            $0 ~ "^## \\[" version "\\]" { next_section=1; next }
-            next_section && /^## \[/ { exit }
-            next_section { print }
-          ' CHANGELOG.md > release-notes.md
-
-          if [ ! -s release-notes.md ]; then
-            printf 'Release %s\n' "$INPUT_TAG" > release-notes.md
-          fi
-
           gh release create "$INPUT_TAG" \
             --target "$RELEASE_BRANCH" \
             --title "save_it $INPUT_TAG" \
-            --notes-file release-notes.md \
+            --generate-notes \
             --prerelease
 
   docker:
