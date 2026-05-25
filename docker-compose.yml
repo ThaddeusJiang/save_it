@@ -24,7 +24,7 @@ services:
     ports:
       - 9001:9000/tcp
     environment:
-      API_URL: "http://localhost:9001/"
+      API_URL: "http://cobalt-api:9000/"
 
   typesense:
     image: typesense/typesense:30.2

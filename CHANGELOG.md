@@ -10,6 +10,7 @@ and this project uses [Calendar Versioning](https://calver.org/) with the `YYYY.
 ### Fixed
 - Fix Telegram media group uploads for downloaded multi-image posts by accepting file tuples that also carry the source URL metadata.
 - Fix Typesense requests crashing in Finch by omitting `receive_timeout` unless a concrete timeout value is provided.
+- Fix Docker Compose Cobalt tunnel downloads by returning an internal service URL instead of `localhost`, which is unreachable from the `save_it` container.
 
 ### Changed
 - Add request and result logging around Typesense photo searches to make empty `/search` responses easier to diagnose in production logs.
