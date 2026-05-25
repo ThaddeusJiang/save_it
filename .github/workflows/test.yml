@@ -1,4 +1,4 @@
-name: Elixir CI
+name: Elixir Test
 
 on:
   push:
@@ -9,21 +9,23 @@ on:
       - main
 
 jobs:
-  checks:
+  test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Set up Elixir
-        uses: erlef/setup-beam@v1
+        uses: erlef/setup-beam@8d44588995e53ce789721e96227122a67826542d # v1.24.0
         with:
           elixir-version: "1.17"
           otp-version: "27.0"
 
       - name: Cache dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: deps
           key: ${{ runner.os }}-mix-${{ hashFiles('mix.lock') }}
@@ -35,18 +37,6 @@ jobs:
           mix local.hex --force
           mix local.rebar --force
           mix deps.get
-
-      - name: Check formatting
-        run: mix format --check-formatted
-
-      - name: Check compilation warnings
-        run: mix compile --warnings-as-errors
-
-      - name: Run Credo
-        run: mix credo --strict
-
-      - name: Run Dialyzer
-        run: mix dialyzer
 
       - name: Run tests
         run: mix test

@@ -12,7 +12,31 @@ run = [
   "echo '✅ https://zeabur.com/templates/FTAONK'",
 ]
 
-[tasks.build-acceptance-test]
+[tasks.up]
+description = "Up containers"
+run = [
+    "docker compose up -d"
+]
+
+[tasks.dev]
+description = "Run dev"
+run = [
+    "iex -S mix run --no-halt"
+]
+
+[tasks.start]
+description = "Run start"
+run = [
+    "docker compose --profile prod up -d --build"
+]
+
+[tasks.stop]
+description = "Stop start"
+run = [
+    "docker compose --profile prod down"
+]
+
+[tasks.build]
 description = "Build the acceptance testing image locally"
 run = [
   "docker build -t save_it:ac .",
