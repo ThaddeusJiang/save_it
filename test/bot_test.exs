@@ -16,6 +16,7 @@ defmodule SaveIt.BotTest do
     Application.put_env(:ex_gram, :adapter, ExGram.Adapter.Test)
     Application.put_env(:ex_gram, :token, "test-token")
     Application.put_env(:save_it, :cobalt_api_url, base_url)
+    Application.put_env(:save_it, :telegram_bot_token, "test-token")
     Application.put_env(:save_it, :typesense_url, base_url)
     Application.put_env(:save_it, :typesense_api_key, "test-typesense-key")
 
@@ -136,6 +137,40 @@ defmodule SaveIt.BotTest do
            ]
   end
 
+  test "returns details for a replied photo", _context do
+    ExGramTestAdapter.backdoor_request("/sendMessage", %{message_id: 30})
+
+    chat_id = 12_345
+    original_url = "https://x.com/example/status/1?utm_source=telegram"
+    download_url = "#{base_test_server_url()}/downloaded/photo.jpg"
+
+    message = %{
+      chat: %{id: chat_id},
+      reply_to_message: %{
+        date: 1_717_200_000,
+        photo: [
+          %{file_id: "small-photo-file-id"},
+          %{file_id: "telegram-photo-file-id"}
+        ]
+      }
+    }
+
+    assert {:ok, %{message_id: 30}} = Bot.handle({:command, :detail, message}, nil)
+
+    assert_receive {:test_http_request, :get, search_path, ""}
+    assert String.starts_with?(search_path, "/collections/photos/documents/search?")
+    assert search_path =~ "file_id%3A%3Dtelegram-photo-file-id"
+    assert search_path =~ "belongs_to_id%3A%3D12345"
+
+    request_body = sent_message_body()
+
+    assert request_body.chat_id == chat_id
+    assert request_body.text =~ "Sent at: 2024-06-01 00:00:00 UTC"
+    assert request_body.text =~ "Original URL: #{original_url}"
+    assert request_body.text =~ "Download URL: #{download_url}"
+    assert request_body.text =~ "File ID: telegram-photo-file-id"
+  end
+
   defp cleanup_cached_file(download_url, cached_file_name) do
     hashed_url = :crypto.hash(:sha256, download_url) |> Base.url_encode64(padding: false)
     url_cache_path = Path.join(["./data/storage/urls", hashed_url])
@@ -147,6 +182,20 @@ defmodule SaveIt.BotTest do
 
   defp base_test_server_url do
     Application.fetch_env!(:save_it, :typesense_url)
+  end
+
+  defp sent_message_body do
+    %{calls: calls} = :sys.get_state(ExGram.Adapter.Test)
+
+    calls
+    |> Enum.reverse()
+    |> Enum.find_value(fn
+      {:post, path, body} ->
+        if String.ends_with?(path, "/sendMessage"), do: body
+
+      _ ->
+        nil
+    end)
   end
 
   defp cleanup_cached_folder(cache_key_url) do
@@ -279,6 +328,24 @@ defmodule SaveIt.BotTest do
         unexpected ->
           raise "Unexpected cobalt request body: #{inspect(unexpected)}"
       end
+    end
+
+    defp response_for("/collections/photos/documents/search?" <> _query, port, _body) do
+      json_response(%{
+        "hits" => [
+          %{
+            "document" => %{
+              "id" => "typesense-photo-id",
+              "caption" => "",
+              "file_id" => "telegram-photo-file-id",
+              "url" => "https://x.com/example/status/1?utm_source=telegram",
+              "download_url" => "http://127.0.0.1:#{port}/downloaded/photo.jpg",
+              "belongs_to_id" => "12345",
+              "inserted_at" => 1_717_200_000
+            }
+          }
+        ]
+      })
     end
 
     defp response_for("/collections/photos/documents", _port, _body) do
