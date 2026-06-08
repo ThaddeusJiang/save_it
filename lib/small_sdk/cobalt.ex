@@ -12,6 +12,9 @@ defmodule SmallSdk.Cobalt do
     res = Req.post(req, json: %{url: url})
 
     case handle_response(res) do
+      {:ok, %{"status" => "tunnel", "url" => download_url}} ->
+        {:ok, normalize_tunnel_url(download_url)}
+
       {:ok, %{"url" => download_url}} ->
         {:ok, download_url}
 
@@ -45,6 +48,22 @@ defmodule SmallSdk.Cobalt do
         {"Content-Type", "application/json"}
       ]
     )
+  end
+
+  defp normalize_tunnel_url(download_url) do
+    {api_url} = get_env()
+    tunnel_uri = URI.parse(download_url)
+    api_uri = URI.parse(api_url)
+
+    case {tunnel_uri, api_uri} do
+      {%URI{path: "/tunnel"} = tunnel_uri, %URI{scheme: scheme, host: host, port: port}}
+      when is_binary(scheme) and is_binary(host) ->
+        %URI{tunnel_uri | scheme: scheme, host: host, port: port}
+        |> URI.to_string()
+
+      _ ->
+        download_url
+    end
   end
 
   @doc """
