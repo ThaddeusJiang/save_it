@@ -37,6 +37,7 @@ defmodule SaveIt.Bot do
   command("search", description: "Search photos")
   command("similar", description: "Find similar photos")
   command("delete", description: "Delete message")
+  command("detail", description: "Show photo details")
 
   command("login", description: "Login")
   command("code", description: "Get code for login")
@@ -147,6 +148,20 @@ defmodule SaveIt.Bot do
 
   def handle({:command, :similar, %{chat: chat, photo: nil}}, _context) do
     send_message(chat.id, "Upload a photo with /similar for finding similar photos.")
+  end
+
+  def handle({:command, :detail, %{chat: chat, reply_to_message: nil}}, _context) do
+    send_message(chat.id, "reply a photo with /detail command.")
+  end
+
+  def handle({:command, :detail, %{chat: chat, reply_to_message: reply_to_message}}, _context) do
+    case Map.get(reply_to_message, :photo) do
+      [_ | _] = photos ->
+        handle_detail_command(chat.id, reply_to_message, photos)
+
+      _ ->
+        send_message(chat.id, "reply a photo with /detail command.")
+    end
   end
 
   def handle({:command, :delete, %{chat: chat, reply_to_message: nil}}, _ctx) do
@@ -756,5 +771,55 @@ defmodule SaveIt.Bot do
     end
 
     delete_message(chat_id, message_id)
+  end
+
+  defp handle_detail_command(chat_id, reply_to_message, photos) do
+    file_id = photos |> List.last() |> Map.get(:file_id)
+
+    case safe_typesense_get_photo(file_id, chat_id) do
+      nil ->
+        send_message(chat_id, "Photo details not found.")
+
+      photo ->
+        send_message(chat_id, detail_message(reply_to_message, photo, file_id))
+    end
+  end
+
+  defp detail_message(reply_to_message, photo, file_id) do
+    [
+      "Sent at: #{format_unix_time(Map.get(reply_to_message, :date))}",
+      "Original URL: #{detail_value(photo, "url")}",
+      "Download URL: #{detail_value(photo, "download_url")}",
+      "File ID: #{file_id}",
+      "Typesense ID: #{detail_value(photo, "id")}"
+    ]
+    |> Enum.join("\n")
+  end
+
+  defp detail_value(photo, key) do
+    case Map.get(photo, key) do
+      value when is_binary(value) and value != "" -> value
+      _ -> "N/A"
+    end
+  end
+
+  defp format_unix_time(timestamp) when is_integer(timestamp) do
+    timestamp
+    |> DateTime.from_unix!()
+    |> Calendar.strftime("%Y-%m-%d %H:%M:%S UTC")
+  end
+
+  defp format_unix_time(_timestamp), do: "N/A"
+
+  defp safe_typesense_get_photo(file_id, belongs_to_id) do
+    PhotoService.get_photo(file_id, belongs_to_id)
+  rescue
+    error ->
+      Logger.error("Typesense get_photo failed: #{Exception.message(error)}")
+      nil
+  catch
+    kind, reason ->
+      Logger.error("Typesense get_photo failed: #{inspect({kind, reason})}")
+      nil
   end
 end

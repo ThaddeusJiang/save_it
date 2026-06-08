@@ -21,6 +21,7 @@ run = [
 [tasks.dev]
 description = "Run dev"
 run = [
+    "mix ts.migrate",
     "iex -S mix run --no-halt"
 ]
 
