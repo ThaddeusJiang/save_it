@@ -40,6 +40,8 @@ messages:
 /similar photo
 ```
 
+When `/similar` finds matches, the bot sends `Similar photos found.` with the matching photos. Multiple matches are returned as a Telegram media group.
+
 https://github.com/user-attachments/assets/b0dedcc0-3305-42b2-8101-6b0b5d32f17a
 
 ### Known limitations

@@ -28,6 +28,8 @@ defmodule SaveIt.Bot do
     "Have fun! 🎉"
   ]
 
+  @similar_photos_found_message "Similar photos found."
+
   use ExGram.Bot,
     name: @bot,
     setup_commands: true
@@ -211,10 +213,7 @@ defmodule SaveIt.Bot do
             belongs_to_id: chat_id
           )
 
-        case photos do
-          [] -> nil
-          _ -> answer_photos(chat.id, photos)
-        end
+        answer_similar_photos_if_any(chat.id, photos)
     end
   end
 
@@ -256,7 +255,7 @@ defmodule SaveIt.Bot do
                 belongs_to_id: chat_id
               )
 
-            answer_photos(chat.id, photos)
+            answer_similar_photos(chat.id, photos)
 
           _ ->
             photos =
@@ -266,7 +265,7 @@ defmodule SaveIt.Bot do
                 belongs_to_id: chat_id
               )
 
-            answer_photos_if_any(chat.id, photos)
+            answer_similar_photos_if_any(chat.id, photos)
         end
     end
   end
@@ -315,6 +314,20 @@ defmodule SaveIt.Bot do
     send_message(chat_id, "No photos found.")
   end
 
+  defp answer_photos(chat_id, [photo]) do
+    case ExGram.send_photo(chat_id, photo["file_id"],
+           caption: photo["caption"],
+           show_caption_above_media: true
+         ) do
+      {:ok, _response} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.error("Failed to send photo: #{inspect(reason)}")
+        send_message(chat_id, "Failed to send photos.")
+    end
+  end
+
   defp answer_photos(chat_id, similar_photos) do
     media =
       Enum.map(similar_photos, fn photo ->
@@ -336,10 +349,19 @@ defmodule SaveIt.Bot do
     end
   end
 
-  defp answer_photos_if_any(_chat_id, []), do: nil
+  defp answer_similar_photos(chat_id, []) do
+    answer_photos(chat_id, [])
+  end
 
-  defp answer_photos_if_any(chat_id, photos) when is_list(photos),
-    do: answer_photos(chat_id, photos)
+  defp answer_similar_photos(chat_id, photos) when is_list(photos) do
+    send_message(chat_id, @similar_photos_found_message)
+    answer_photos(chat_id, photos)
+  end
+
+  defp answer_similar_photos_if_any(_chat_id, []), do: nil
+
+  defp answer_similar_photos_if_any(chat_id, photos) when is_list(photos),
+    do: answer_similar_photos(chat_id, photos)
 
   defp extract_urls_from_string(str) do
     regex = ~r/http[s]?:\/\/[^\s]+/

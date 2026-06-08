@@ -137,6 +137,91 @@ defmodule SaveIt.BotTest do
            ]
   end
 
+  test "announces similar photos and sends multiple results as one media group", _context do
+    Application.put_env(:tesla, SmallSdk.Telegram, adapter: __MODULE__.TelegramDownloadAdapter)
+
+    ExGramTestAdapter.backdoor_request("/getFile", %{
+      file_id: "uploaded-photo-file-id",
+      file_path: "photos/uploaded.jpg"
+    })
+
+    ExGramTestAdapter.backdoor_request("/sendMessage", %{message_id: 30})
+
+    ExGramTestAdapter.backdoor_request("/sendMediaGroup", [
+      %{message_id: 31},
+      %{message_id: 32}
+    ])
+
+    message = %{
+      chat: %{id: 12_345},
+      caption: "/similar",
+      photo: [%{file_id: "uploaded-photo-file-id"}]
+    }
+
+    assert :ok = Bot.handle({:message, message}, nil)
+
+    calls = exgram_calls()
+
+    assert {:post, "/bottest-token/sendMessage",
+            %{chat_id: 12_345, text: "Similar photos found."}} in calls
+
+    media_group_calls =
+      Enum.filter(calls, fn
+        {:post, "/bottest-token/sendMediaGroup", _body} -> true
+        _ -> false
+      end)
+
+    assert [
+             {:post, "/bottest-token/sendMediaGroup", %{chat_id: 12_345, media: media}}
+           ] = media_group_calls
+
+    assert Enum.map(media, & &1.media) == ["similar-file-1", "similar-file-2"]
+    assert Enum.map(media, & &1.caption) == ["first similar", "second similar"]
+  end
+
+  test "announces similar photos and sends one result as one photo", _context do
+    Application.put_env(:tesla, SmallSdk.Telegram, adapter: __MODULE__.TelegramDownloadAdapter)
+
+    ExGramTestAdapter.backdoor_request("/getFile", %{
+      file_id: "uploaded-photo-file-id",
+      file_path: "photos/uploaded.jpg"
+    })
+
+    ExGramTestAdapter.backdoor_request("/sendMessage", %{message_id: 40})
+
+    ExGramTestAdapter.backdoor_request("/sendPhoto", %{
+      message_id: 41,
+      photo: [%{file_id: "single-similar-file"}]
+    })
+
+    message = %{
+      chat: %{id: 12_346},
+      caption: "/similar",
+      photo: [%{file_id: "uploaded-photo-file-id"}]
+    }
+
+    assert :ok = Bot.handle({:message, message}, nil)
+
+    calls = exgram_calls()
+
+    assert {:post, "/bottest-token/sendMessage",
+            %{chat_id: 12_346, text: "Similar photos found."}} in calls
+
+    assert Enum.any?(calls, fn
+             {:post, "/bottest-token/sendPhoto",
+              %{chat_id: 12_346, photo: "single-similar-file", caption: "single similar"}} ->
+               true
+
+             _ ->
+               false
+           end)
+
+    refute Enum.any?(calls, fn
+             {:post, "/bottest-token/sendMediaGroup", _body} -> true
+             _ -> false
+           end)
+  end
+
   test "returns details for a replied photo", _context do
     ExGramTestAdapter.backdoor_request("/sendMessage", %{message_id: 30})
 
@@ -220,6 +305,12 @@ defmodule SaveIt.BotTest do
   defp restore_env(app, key, nil), do: Application.delete_env(app, key)
   defp restore_env(app, key, value), do: Application.put_env(app, key, value)
 
+  defp exgram_calls do
+    ExGram.Adapter.Test
+    |> :sys.get_state()
+    |> Map.fetch!(:calls)
+  end
+
   defmodule TelegramMediaGroupAdapter do
     @behaviour Tesla.Adapter
 
@@ -240,6 +331,22 @@ defmodule SaveIt.BotTest do
                %{"photo" => [%{"file_id" => "group-file-4"}]}
              ]
            }
+       }}
+    end
+  end
+
+  defmodule TelegramDownloadAdapter do
+    @behaviour Tesla.Adapter
+
+    @impl Tesla.Adapter
+    def call(%Tesla.Env{method: :get} = env, _opts) do
+      send(self(), {:telegram_download_request, env})
+
+      {:ok,
+       %Tesla.Env{
+         env
+         | status: 200,
+           body: <<255, 216, 255, 224, 0, 16, 74, 70, 73, 70>>
        }}
     end
   end
@@ -352,6 +459,18 @@ defmodule SaveIt.BotTest do
       json_response(%{"id" => "typesense-photo-id"})
     end
 
+    defp response_for("/multi_search", _port, body) do
+      %{"searches" => [%{"filter_by" => filter_by}]} = Jason.decode!(body)
+
+      json_response(%{
+        "results" => [
+          %{
+            "hits" => similar_hits(filter_by)
+          }
+        ]
+      })
+    end
+
     defp response_for("/downloaded/" <> _file_name, _port, _body) do
       jpeg = <<255, 216, 255, 224, 0, 16, 74, 70, 73, 70>>
 
@@ -372,6 +491,34 @@ defmodule SaveIt.BotTest do
       connection: close\r
       \r
       """
+    end
+
+    defp similar_hits("belongs_to_id:12346") do
+      [
+        %{
+          "document" => %{
+            "file_id" => "single-similar-file",
+            "caption" => "single similar"
+          }
+        }
+      ]
+    end
+
+    defp similar_hits(_filter_by) do
+      [
+        %{
+          "document" => %{
+            "file_id" => "similar-file-1",
+            "caption" => "first similar"
+          }
+        },
+        %{
+          "document" => %{
+            "file_id" => "similar-file-2",
+            "caption" => "second similar"
+          }
+        }
+      ]
     end
 
     defp json_response(body) do
