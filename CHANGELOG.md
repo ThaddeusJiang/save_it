@@ -8,6 +8,10 @@ before the CalVer migration retain their original version labels.
 
 ## [Unreleased]
 
+### Fixed
+
+- Prevent oversized files from being uploaded to Telegram Bot API.
+
 ## [2026.6.9] - 2026-06-09
 
 ### Added
