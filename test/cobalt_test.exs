@@ -178,17 +178,22 @@ defmodule SmallSdk.CobaltTest do
 
     defp parse_content_length(header_lines) do
       header_lines
-      |> Enum.find_value(0, fn header ->
-        case String.split(header, ":", parts: 2) do
-          [name, value] ->
-            if String.downcase(name) == "content-length" do
-              String.trim(value) |> String.to_integer()
-            end
+      |> Enum.find_value(0, &content_length_from_header/1)
+    end
 
-          _ ->
-            nil
-        end
-      end)
+    defp content_length_from_header(header) do
+      case String.split(header, ":", parts: 2) do
+        ["content-length", value] ->
+          String.trim(value) |> String.to_integer()
+
+        [name, value] ->
+          if String.downcase(name) == "content-length" do
+            String.trim(value) |> String.to_integer()
+          end
+
+        _ ->
+          nil
+      end
     end
 
     defp read_body(socket, body_prefix, content_length) do
