@@ -42,6 +42,15 @@ export TELEGRAM_BOT_TOKEN=<YOUR_TELEGRAM_BOT_TOKEN>
 iex -S mix run --no-halt
 ```
 
+## Reset Local Data
+
+Reset local Docker services and runtime data from the repository root:
+
+```bash
+docker compose down --volumes
+rm -rf data
+```
+
 ## Local Checks
 
 Prefer the smallest relevant check for the change:
