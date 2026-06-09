@@ -29,6 +29,8 @@ defmodule SaveIt.Bot do
   ]
 
   @similar_photos_found_message "Similar photos found."
+  @telegram_upload_max_file_size 50 * 1024 * 1024
+  @telegram_file_too_large_message "💔 File is too large for Telegram Bot API upload."
 
   use ExGram.Bot,
     name: @bot,
@@ -634,6 +636,25 @@ defmodule SaveIt.Bot do
     source_url = Keyword.get(opts, :source_url)
     download_url = Keyword.get(opts, :download_url)
 
+    cond do
+      telegram_upload_too_large?(content) ->
+        send_message(chat_id, @telegram_file_too_large_message)
+        {:error, :telegram_file_too_large}
+
+      true ->
+        do_bot_send_file(chat_id, file_name, content,
+          caption: caption,
+          source_url: source_url,
+          download_url: download_url
+        )
+    end
+  end
+
+  defp do_bot_send_file(chat_id, file_name, content, opts) do
+    caption = Keyword.fetch!(opts, :caption)
+    source_url = Keyword.get(opts, :source_url)
+    download_url = Keyword.get(opts, :download_url)
+
     case file_extension(file_name) do
       ext when ext in [".png", ".jpg", ".jpeg"] ->
         {:ok, msg} = ExGram.send_photo(chat_id, content, caption: caption)
@@ -641,7 +662,7 @@ defmodule SaveIt.Bot do
         file_id = get_file_id(msg)
 
         image_base64 =
-          encode_file_content(file_content)
+          encode_file_content(content)
 
         safe_index_photo(%{
           image: image_base64,
@@ -660,6 +681,17 @@ defmodule SaveIt.Bot do
 
       _ ->
         ExGram.send_document(chat_id, content, caption: caption)
+    end
+  end
+
+  defp telegram_upload_too_large?({:file_content, file_content, _file_name}) do
+    byte_size(file_content) > @telegram_upload_max_file_size
+  end
+
+  defp telegram_upload_too_large?({:file, file_path}) do
+    case File.stat(file_path) do
+      {:ok, %{size: size}} -> size > @telegram_upload_max_file_size
+      {:error, _reason} -> false
     end
   end
 
