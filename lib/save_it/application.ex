@@ -11,12 +11,17 @@ defmodule SaveIt.Application do
       config: %{metadata: [:file, :line]}
     })
 
-    token = Application.fetch_env!(:save_it, :telegram_bot_token)
+    children =
+      if Application.get_env(:save_it, :start_telegram_bot, true) do
+        token = Application.fetch_env!(:save_it, :telegram_bot_token)
 
-    children = [
-      ExGram,
-      {SaveIt.Bot, [method: :polling, token: token]}
-    ]
+        [
+          ExGram,
+          {SaveIt.Bot, [method: :polling, token: token]}
+        ]
+      else
+        []
+      end
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options

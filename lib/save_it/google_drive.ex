@@ -20,7 +20,8 @@ defmodule SaveIt.GoogleDrive do
 
   plug(Tesla.Middleware.JSON)
 
-  @upload_type "multipart"
+  @upload_type "resumable"
+  @chunk_size 8 * 1024 * 1024
 
   # Google Drive folder listing is limited and may not match the public guide exactly.
   def list_files(chat_id) do
@@ -64,19 +65,7 @@ defmodule SaveIt.GoogleDrive do
       parents: [folder_id]
     }
 
-    boundary = "foo_bar_baz"
-    multipart_body = build_multipart_body(metadata, file_content, boundary)
-
-    headers = [
-      {"Authorization", "Bearer #{access_token}"},
-      {"Content-Type", "multipart/related; boundary=#{boundary}"}
-    ]
-
-    post("/upload/drive/v3/files", multipart_body,
-      query: [uploadType: @upload_type],
-      headers: headers
-    )
-    |> handle_response()
+    upload_resumable({:binary, file_content}, metadata, byte_size(file_content), access_token)
   end
 
   def upload_file(chat_id, file_path) do
@@ -90,36 +79,110 @@ defmodule SaveIt.GoogleDrive do
       parents: [folder_id]
     }
 
-    file_content = File.read!(file_path)
-    boundary = "foo_bar_baz"
-    multipart_body = build_multipart_body(metadata, file_content, boundary)
+    %{size: size} = File.stat!(file_path)
+
+    upload_resumable({:file, file_path}, metadata, size, access_token)
+  end
+
+  defp upload_resumable(source, metadata, total_size, access_token) do
+    with {:ok, session_url} <- create_resumable_session(metadata, total_size, access_token) do
+      case upload_chunks(source, session_url, total_size, access_token, 0) do
+        {:ok, body} = result ->
+          Logger.info(
+            "Google Drive upload succeeded, file_name: #{metadata.name}, body: #{inspect(body)}"
+          )
+
+          result
+
+        result ->
+          result
+      end
+    end
+  end
+
+  defp create_resumable_session(metadata, total_size, access_token) do
+    encoded_metadata = Jason.encode!(metadata)
 
     headers = [
       {"Authorization", "Bearer #{access_token}"},
-      {"Content-Type", "multipart/related; boundary=#{boundary}"},
-      {"Content-Length", "*/*"}
-      # {"Content-Length", byte_size(multipart_body) |> Integer.to_string()}
+      {"Content-Type", "application/json; charset=UTF-8"},
+      {"X-Upload-Content-Type", "application/octet-stream"},
+      {"X-Upload-Content-Length", Integer.to_string(total_size)},
+      {"Content-Length", Integer.to_string(byte_size(encoded_metadata))}
     ]
 
-    post("/upload/drive/v3/files", multipart_body,
-      query: [uploadType: @upload_type],
-      headers: headers
-    )
-    |> handle_response()
+    case post("/upload/drive/v3/files", encoded_metadata,
+           query: [uploadType: @upload_type],
+           headers: headers
+         ) do
+      {:ok, %{status: status, headers: headers}} when status in 200..299 ->
+        case header_value(headers, "location") do
+          nil -> {:error, :missing_resumable_upload_location}
+          session_url -> {:ok, session_url}
+        end
+
+      response ->
+        handle_response(response)
+    end
   end
 
-  defp build_multipart_body(metadata, file_content, boundary) do
-    """
-    --#{boundary}
-    Content-Type: application/json; charset=UTF-8
+  defp upload_chunks(_source, _session_url, total_size, _access_token, offset)
+       when offset >= total_size do
+    {:error, :unexpected_resumable_upload_completion}
+  end
 
-    #{Jason.encode!(metadata)}
-    --#{boundary}
-    Content-Type: application/octet-stream
+  defp upload_chunks(source, session_url, total_size, access_token, offset) do
+    chunk = read_chunk!(source, offset, min(@chunk_size, total_size - offset))
+    chunk_size = byte_size(chunk)
+    next_offset = offset + chunk_size
 
-    #{file_content}
-    --#{boundary}--
-    """
+    headers = [
+      {"Authorization", "Bearer #{access_token}"},
+      {"Content-Length", Integer.to_string(chunk_size)},
+      {"Content-Range", "bytes #{offset}-#{next_offset - 1}/#{total_size}"}
+    ]
+
+    case put(session_url, chunk, headers: headers) do
+      {:ok, %{status: 308, headers: headers}} ->
+        upload_chunks(source, session_url, total_size, access_token, next_offset(headers))
+
+      {:ok, %{status: status} = response} when status in [200, 201] ->
+        handle_response({:ok, response})
+
+      response ->
+        handle_response(response)
+    end
+  end
+
+  defp read_chunk!({:binary, file_content}, offset, chunk_size) do
+    binary_part(file_content, offset, chunk_size)
+  end
+
+  defp read_chunk!({:file, file_path}, offset, chunk_size) do
+    File.open!(file_path, [:read], fn file ->
+      {:ok, ^offset} = :file.position(file, offset)
+      IO.binread(file, chunk_size)
+    end)
+  end
+
+  defp header_value(headers, name) do
+    Enum.find_value(headers, fn {key, value} ->
+      if String.downcase(key) == name, do: value
+    end)
+  end
+
+  defp next_offset(headers) do
+    case header_value(headers, "range") do
+      nil ->
+        0
+
+      "bytes=" <> range ->
+        range
+        |> String.split("-", parts: 2)
+        |> List.last()
+        |> String.to_integer()
+        |> Kernel.+(1)
+    end
   end
 
   defp handle_response({:ok, %{status: 200, body: %{"files" => files}}}) do
@@ -127,6 +190,10 @@ defmodule SaveIt.GoogleDrive do
   end
 
   defp handle_response({:ok, %{status: 200, body: body}}) do
+    {:ok, body}
+  end
+
+  defp handle_response({:ok, %{status: 201, body: body}}) do
     {:ok, body}
   end
 

@@ -10,6 +10,9 @@ before the CalVer migration retain their original version labels.
 
 ### Fixed
 
+- Disable Telegram bot startup in the test environment to avoid polling conflicts.
+- Preserve downloaded filenames from `Content-Disposition` before uploading files to Google Drive.
+- Use Google Drive resumable uploads so large files can be uploaded in chunks.
 - Prevent oversized files from being uploaded to Telegram Bot API.
 
 ## [2026.6.9] - 2026-06-09

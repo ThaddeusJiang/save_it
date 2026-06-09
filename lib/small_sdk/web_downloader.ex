@@ -53,11 +53,8 @@ defmodule SmallSdk.WebDownloader do
   end
 
   defp parse_filename_for_url(url, headers) do
-    if String.contains?(url, "/tunnel") do
-      parse_filename(url, :content_disposition, headers)
-    else
+    parse_filename(url, :content_disposition, headers) ||
       parse_filename(url, :content_type, headers)
-    end
   end
 
   defp parse_filename(url, :content_type, headers) do
@@ -72,21 +69,32 @@ defmodule SmallSdk.WebDownloader do
   end
 
   defp parse_filename(_url, :content_disposition, headers) do
-    filename =
-      headers
-      |> Map.get("content-disposition")
-      |> List.first()
-      |> String.split(";")
-      |> Enum.find(fn x -> String.contains?(x, "filename") end)
-      |> String.split("=")
-      |> List.last()
-      |> String.trim()
-      |> String.replace("\"", "")
-
-    filename
+    headers
+    |> Map.get("content-disposition", [])
+    |> List.first()
+    |> filename_from_content_disposition()
   end
 
   defp gen_file_name(url) do
     :crypto.hash(:sha256, url) |> Base.url_encode64(padding: false)
+  end
+
+  defp filename_from_content_disposition(nil), do: nil
+
+  defp filename_from_content_disposition(content_disposition) do
+    content_disposition
+    |> String.split(";")
+    |> Enum.find(fn value -> String.contains?(value, "filename") end)
+    |> case do
+      nil ->
+        nil
+
+      filename ->
+        filename
+        |> String.split("=", parts: 2)
+        |> List.last()
+        |> String.trim()
+        |> String.replace("\"", "")
+    end
   end
 end
