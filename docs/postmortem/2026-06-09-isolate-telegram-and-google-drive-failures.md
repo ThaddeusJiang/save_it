@@ -10,7 +10,7 @@ The bot assumed Telegram file sends succeeded by pattern matching on `{:ok, mess
 
 ## Fix applied
 
-Telegram sends now return `:ok` or `{:error, reason}` without crashing the download handler. The original user message is deleted only after at least one URL completes successfully through Telegram. Google Drive uploads now skip early when the user is not logged in, and logged-in upload failures update the existing progress message without affecting the Telegram delivery. Telegram and Google Drive delivery are implemented as separate functions and started with independent tasks. Their results are handled by channel-specific functions before progress-message updates are summarized with reason lines such as `Send to telegram failed, ...` and `Send to google drive failed, ...`.
+Telegram sends now return `:ok` or `{:error, reason}` without crashing the download handler. The original user message is deleted only after at least one URL completes successfully through Telegram. Google Drive uploads now skip early when the user is not logged in, and logged-in upload failures update the existing progress message without affecting the Telegram delivery. Telegram and Google Drive delivery now live in independent modules, `SaveIt.TelegramDelivery` and `SaveIt.GoogleDriveDelivery`, and each module owns its own send, result handling, failure normalization, and user-facing error message. The bot only starts both module tasks, waits for their outcomes, and updates the shared progress message with reason lines such as `Send to telegram failed, ...` and `Send to google drive failed, ...`.
 
 ## What we learned
 

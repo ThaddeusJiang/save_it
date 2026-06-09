@@ -8,10 +8,11 @@ defmodule SaveIt.Bot do
   alias SaveIt.DownloadContext
   alias SaveIt.DownloadedFile
   alias SaveIt.FileHelper
-  alias SaveIt.GoogleDrive
+  alias SaveIt.GoogleDriveDelivery
   alias SaveIt.GoogleOAuth2DeviceFlow
 
   alias SaveIt.PhotoService
+  alias SaveIt.TelegramDelivery
 
   alias SmallSdk.BadNews
   alias SmallSdk.Cobalt
@@ -29,9 +30,6 @@ defmodule SaveIt.Bot do
   ]
 
   @similar_photos_found_message "Similar photos found."
-  @telegram_upload_max_file_size 50 * 1024 * 1024
-  @telegram_file_too_large_message "💔 File is too large for Telegram Bot API upload."
-  @telegram_file_too_large_reason "file is too large for Telegram Bot API upload."
 
   use ExGram.Bot,
     name: @bot,
@@ -443,18 +441,9 @@ defmodule SaveIt.Bot do
       downloaded_files ->
         update_message(context.chat_id, context.progress_message_id, Enum.slice(@progress, 0..2))
 
-        case bot_send_filenames(context.chat_id, downloaded_files,
-               source_url: context.original_url,
-               report_too_large: false
-             ) do
-          :ok ->
-            delete_message(context.chat_id, context.progress_message_id)
-            :ok
-
-          {:error, reason} ->
-            update_delivery_progress_message(context, [telegram_delivery_error_message(reason)])
-            :error
-        end
+        finish_delivery(context, [
+          TelegramDelivery.deliver_cached_files(context, downloaded_files)
+        ])
     end
   end
 
@@ -480,19 +469,9 @@ defmodule SaveIt.Bot do
       downloaded_file ->
         update_message(context.chat_id, context.progress_message_id, Enum.slice(@progress, 0..2))
 
-        case bot_send_file(context.chat_id, downloaded_file, {:file, downloaded_file},
-               source_url: context.original_url,
-               download_url: context.download_url,
-               report_too_large: false
-             ) do
-          :ok ->
-            delete_message(context.chat_id, context.progress_message_id)
-            :ok
-
-          {:error, reason} ->
-            update_delivery_progress_message(context, [telegram_delivery_error_message(reason)])
-            :error
-        end
+        finish_delivery(context, [
+          TelegramDelivery.deliver_cached_file(context, downloaded_file)
+        ])
     end
   end
 
@@ -510,137 +489,29 @@ defmodule SaveIt.Bot do
     end
   end
 
-  defp cache_single_download(%DownloadContext{} = context, %DownloadedFile{} = file) do
-    FileHelper.write_file(file.file_name, file.file_content, context.cache_url)
-    :ok
-  end
-
   defp deliver_downloaded_file(%DownloadContext{} = context, %DownloadedFile{} = file) do
-    telegram_task =
-      Task.async(fn ->
-        send_downloaded_file_to_telegram(context, file)
-      end)
-
-    google_drive_task =
-      Task.async(fn ->
-        send_downloaded_file_to_google_drive(context, file)
-      end)
-
-    telegram_result = Task.await(telegram_task, :infinity)
-
-    if telegram_result == :ok do
-      cache_single_download(context, file)
-    end
-
-    google_drive_result = Task.await(google_drive_task, :infinity)
-
-    finish_delivery(
-      context,
-      handle_telegram_delivery_result(telegram_result),
-      handle_google_drive_delivery_result(google_drive_result)
-    )
+    [
+      TelegramDelivery.async_downloaded_file(context, file),
+      GoogleDriveDelivery.async_downloaded_file(context, file)
+    ]
+    |> Task.await_many(:infinity)
+    |> then(&finish_delivery(context, &1))
   end
 
   defp deliver_downloaded_files(%DownloadContext{} = context, files) do
-    telegram_task =
-      Task.async(fn ->
-        send_downloaded_files_to_telegram(context, files)
-      end)
-
-    google_drive_task =
-      Task.async(fn ->
-        send_downloaded_files_to_google_drive(context, files)
-      end)
-
-    telegram_result = Task.await(telegram_task, :infinity)
-
-    if telegram_result == :ok do
-      safe_delivery_result(fn ->
-        FileHelper.write_folder(context.purge_url, files)
-        :ok
-      end)
-    end
-
-    google_drive_result = Task.await(google_drive_task, :infinity)
-
-    finish_delivery(
-      context,
-      handle_telegram_delivery_result(telegram_result),
-      handle_google_drive_delivery_result(google_drive_result)
-    )
+    [
+      TelegramDelivery.async_downloaded_files(context, files),
+      GoogleDriveDelivery.async_downloaded_files(context, files)
+    ]
+    |> Task.await_many(:infinity)
+    |> then(&finish_delivery(context, &1))
   end
 
-  defp send_downloaded_file_to_telegram(%DownloadContext{} = context, %DownloadedFile{} = file) do
-    safe_delivery_result(fn ->
-      bot_send_downloaded_file(context.chat_id, file,
-        source_url: context.original_url,
-        report_too_large: false
-      )
-    end)
-  end
-
-  defp send_downloaded_files_to_telegram(%DownloadContext{} = context, files) do
-    safe_delivery_result(fn ->
-      bot_send_files(context.chat_id, files,
-        source_url: context.original_url,
-        report_too_large: false
-      )
-    end)
-  end
-
-  defp send_downloaded_file_to_google_drive(
-         %DownloadContext{} = context,
-         %DownloadedFile{} = file
-       ) do
-    safe_delivery_result(fn ->
-      upload_file_to_google_drive(context.chat_id, file)
-    end)
-  end
-
-  defp send_downloaded_files_to_google_drive(%DownloadContext{} = context, files) do
-    safe_delivery_result(fn ->
-      upload_files_to_google_drive(context.chat_id, files)
-    end)
-  end
-
-  defp safe_delivery_result(delivery_fun) do
-    delivery_fun.()
-  rescue
-    error -> {:error, error}
-  catch
-    :exit, reason -> {:error, {:exit, reason}}
-    kind, reason -> {:error, {kind, reason}}
-  end
-
-  defp handle_telegram_delivery_result(:ok) do
-    %{status: :ok, error_messages: []}
-  end
-
-  defp handle_telegram_delivery_result({:error, reason}) do
-    %{status: :error, error_messages: [telegram_delivery_error_message(reason)]}
-  end
-
-  defp handle_google_drive_delivery_result(:ok) do
-    %{error_messages: []}
-  end
-
-  defp handle_google_drive_delivery_result({:error, {:google_drive_upload_failed, reason}}) do
-    %{error_messages: [google_drive_error_message(reason)]}
-  end
-
-  defp handle_google_drive_delivery_result({:error, reason}) do
-    %{error_messages: [google_drive_error_message(reason)]}
-  end
-
-  defp finish_delivery(
-         %DownloadContext{} = context,
-         %{status: telegram_status, error_messages: telegram_error_messages},
-         %{error_messages: google_drive_error_messages}
-       ) do
-    error_messages = telegram_error_messages ++ google_drive_error_messages
+  defp finish_delivery(%DownloadContext{} = context, delivery_outcomes) do
+    error_messages = Enum.flat_map(delivery_outcomes, & &1.error_messages)
     update_or_delete_progress_message(context, error_messages)
 
-    telegram_status
+    telegram_delivery_status(delivery_outcomes)
   end
 
   defp update_or_delete_progress_message(%DownloadContext{} = context, []) do
@@ -659,63 +530,12 @@ defmodule SaveIt.Bot do
     )
   end
 
-  defp telegram_delivery_error_message(:telegram_file_too_large),
-    do: telegram_error_message(@telegram_file_too_large_reason)
-
-  defp telegram_delivery_error_message(reason), do: telegram_error_message(reason)
-
-  defp telegram_error_message(reason),
-    do: "Send to telegram failed, #{format_error_reason(reason)}"
-
-  defp google_drive_error_message(reason),
-    do: "Send to google drive failed, #{format_error_reason(reason)}"
-
-  defp format_error_reason(%{body: %{"error" => %{"message" => message}}})
-       when is_binary(message),
-       do: message
-
-  defp format_error_reason(%{body: %{"message" => message}}) when is_binary(message), do: message
-
-  defp format_error_reason(%{status: status, body: body}) do
-    body_reason = format_error_reason(%{body: body})
-
-    if body_reason == inspect(body) do
-      "status #{status}, #{body_reason}"
-    else
-      body_reason
-    end
-  end
-
-  defp format_error_reason(%{message: message}) when is_binary(message), do: message
-  defp format_error_reason(%{body: body}), do: format_error_reason(body)
-
-  defp format_error_reason(results) when is_list(results) do
-    Enum.find_value(results, inspect(results), fn
-      {:error, reason} -> format_error_reason(reason)
-      _ -> nil
-    end)
-  end
-
-  defp format_error_reason(reason) when is_binary(reason), do: reason
-
-  defp format_error_reason(reason) when is_atom(reason),
-    do: reason |> Atom.to_string() |> String.replace("_", " ")
-
-  defp format_error_reason(reason), do: inspect(reason)
-
-  defp upload_file_to_google_drive(chat_id, %DownloadedFile{} = file) do
-    case GoogleDrive.upload_file_content(chat_id, file.file_content, file.file_name) do
-      {:ok, _body} -> :ok
-      {:error, :google_drive_not_logged_in} -> :ok
-      {:error, reason} -> {:error, {:google_drive_upload_failed, reason}}
-    end
-  end
-
-  defp upload_files_to_google_drive(chat_id, files) do
-    case GoogleDrive.upload_files(chat_id, files) do
-      {:ok, _results} -> :ok
-      {:error, :google_drive_not_logged_in} -> :ok
-      {:error, reason} -> {:error, {:google_drive_upload_failed, reason}}
+  defp telegram_delivery_status(delivery_outcomes) do
+    delivery_outcomes
+    |> Enum.find(&(&1.channel == :telegram))
+    |> case do
+      %{status: :ok} -> :ok
+      _ -> :error
     end
   end
 
@@ -733,277 +553,6 @@ defmodule SaveIt.Bot do
 
   defp delete_message(chat_id, message_id) do
     ExGram.delete_message(chat_id, message_id)
-  end
-
-  defp bot_send_files(chat_id, files, opts) do
-    source_url = Keyword.get(opts, :source_url)
-    report_too_large = Keyword.get(opts, :report_too_large, true)
-
-    if all_images?(files) and length(files) > 1 do
-      bot_send_media_group(
-        chat_id,
-        Enum.map(files, fn %DownloadedFile{} = file ->
-          {file.file_name, {:file_content, file.file_content, file.file_name}, source_url,
-           file.download_url}
-        end)
-      )
-    else
-      Enum.each(files, fn %DownloadedFile{} = file ->
-        bot_send_downloaded_file(chat_id, file,
-          source_url: source_url,
-          report_too_large: report_too_large
-        )
-      end)
-    end
-  end
-
-  defp bot_send_downloaded_file(chat_id, %DownloadedFile{} = file, opts) do
-    bot_send_file(
-      chat_id,
-      file.file_name,
-      {:file_content, file.file_content, file.file_name},
-      Keyword.put_new(opts, :download_url, file.download_url)
-    )
-  end
-
-  defp bot_send_filenames(chat_id, filenames, opts) do
-    source_url = Keyword.get(opts, :source_url)
-    report_too_large = Keyword.get(opts, :report_too_large, true)
-
-    if all_images?(filenames) and length(filenames) > 1 do
-      bot_send_media_group(
-        chat_id,
-        Enum.map(filenames, fn filename -> {filename, {:file, filename}, source_url} end)
-      )
-    else
-      Enum.each(filenames, fn filename ->
-        bot_send_file(chat_id, filename, {:file, filename},
-          source_url: source_url,
-          report_too_large: report_too_large
-        )
-      end)
-    end
-  end
-
-  defp bot_send_media_group(chat_id, files) do
-    case Telegram.send_media_group(chat_id, files) do
-      {:ok, messages} ->
-        Enum.zip(files, messages)
-        |> Enum.each(fn
-          {{_file_name, content, source_url, download_url}, msg} ->
-            file_id = get_file_id(msg)
-            image_base64 = encode_file_content(content)
-
-            PhotoService.create_photo!(%{
-              image: image_base64,
-              caption: "",
-              file_id: file_id,
-              url: source_url,
-              download_url: download_url,
-              belongs_to_id: chat_id
-            })
-
-          {{_file_name, content, source_url}, msg} ->
-            file_id = get_file_id(msg)
-            image_base64 = encode_file_content(content)
-
-            PhotoService.create_photo!(%{
-              image: image_base64,
-              caption: "",
-              file_id: file_id,
-              url: source_url,
-              belongs_to_id: chat_id
-            })
-
-          {{_file_name, content}, msg} ->
-            file_id = get_file_id(msg)
-            image_base64 = encode_file_content(content)
-
-            PhotoService.create_photo!(%{
-              image: image_base64,
-              caption: "",
-              file_id: file_id,
-              belongs_to_id: chat_id
-            })
-        end)
-
-      {:error, reason} ->
-        Logger.error("Failed to send media group: #{inspect(reason)}")
-
-        Enum.each(files, fn
-          {file_name, content, source_url, download_url} ->
-            bot_send_file(chat_id, file_name, content,
-              source_url: source_url,
-              download_url: download_url,
-              report_too_large: false
-            )
-
-          {file_name, content, source_url} ->
-            bot_send_file(chat_id, file_name, content,
-              source_url: source_url,
-              report_too_large: false
-            )
-
-          {file_name, content} ->
-            bot_send_file(chat_id, file_name, content, report_too_large: false)
-        end)
-    end
-  end
-
-  defp bot_send_file(chat_id, file_name, file_content, opts) do
-    content =
-      case file_content do
-        {:file, file} -> {:file, file}
-        {:file_content, file_content, file_name} -> {:file_content, file_content, file_name}
-      end
-
-    caption = Keyword.get(opts, :caption, "")
-    source_url = Keyword.get(opts, :source_url)
-    download_url = Keyword.get(opts, :download_url)
-    report_too_large = Keyword.get(opts, :report_too_large, true)
-
-    cond do
-      telegram_upload_too_large?(content) ->
-        if report_too_large do
-          send_message(chat_id, @telegram_file_too_large_message)
-        end
-
-        {:error, :telegram_file_too_large}
-
-      true ->
-        do_bot_send_file(chat_id, file_name, content,
-          caption: caption,
-          source_url: source_url,
-          download_url: download_url
-        )
-    end
-  end
-
-  defp do_bot_send_file(chat_id, file_name, content, opts) do
-    caption = Keyword.fetch!(opts, :caption)
-    source_url = Keyword.get(opts, :source_url)
-    download_url = Keyword.get(opts, :download_url)
-
-    case file_extension(file_name) do
-      ext when ext in [".png", ".jpg", ".jpeg"] ->
-        with {:ok, msg} <-
-               safe_send(fn -> ExGram.send_photo(chat_id, content, caption: caption) end) do
-          file_id = get_file_id(msg)
-
-          image_base64 =
-            encode_file_content(content)
-
-          safe_index_photo(%{
-            image: image_base64,
-            caption: caption,
-            file_id: file_id,
-            url: source_url,
-            download_url: download_url,
-            belongs_to_id: chat_id
-          })
-        end
-
-      ".mp4" ->
-        normalize_send_result(
-          safe_send(fn ->
-            ExGram.send_video(chat_id, content, supports_streaming: true, caption: caption)
-          end)
-        )
-
-      ".gif" ->
-        normalize_send_result(
-          safe_send(fn -> ExGram.send_animation(chat_id, content, caption: caption) end)
-        )
-
-      _ ->
-        normalize_send_result(
-          safe_send(fn -> ExGram.send_document(chat_id, content, caption: caption) end)
-        )
-    end
-  end
-
-  defp safe_send(send_fun) do
-    send_fun.()
-  rescue
-    error ->
-      Logger.error("Failed to send file to Telegram: #{Exception.message(error)}")
-      {:error, error}
-  catch
-    kind, reason ->
-      Logger.error("Failed to send file to Telegram: #{inspect({kind, reason})}")
-      {:error, reason}
-  end
-
-  defp normalize_send_result({:ok, _message}), do: :ok
-  defp normalize_send_result({:error, reason}), do: {:error, reason}
-
-  defp telegram_upload_too_large?({:file_content, file_content, _file_name}) do
-    byte_size(file_content) > @telegram_upload_max_file_size
-  end
-
-  defp telegram_upload_too_large?({:file, file_path}) do
-    case File.stat(file_path) do
-      {:ok, %{size: size}} -> size > @telegram_upload_max_file_size
-      {:error, _reason} -> false
-    end
-  end
-
-  defp file_extension(file_name) do
-    Path.extname(file_name)
-  end
-
-  defp all_images?(files) when is_list(files) do
-    Enum.all?(files, fn
-      %DownloadedFile{file_name: file_name} ->
-        image_file?(file_name)
-
-      {file_name, _file_content, _source_url} ->
-        image_file?(file_name)
-
-      {file_name, _file_content} ->
-        image_file?(file_name)
-
-      file_name when is_binary(file_name) ->
-        image_file?(file_name)
-    end)
-  end
-
-  defp image_file?(file_name) do
-    file_extension(file_name) in [".png", ".jpg", ".jpeg"]
-  end
-
-  defp encode_file_content({:file, file}) do
-    File.read!(file) |> Base.encode64()
-  end
-
-  defp encode_file_content({:file_content, file_content, _file_name}) do
-    Base.encode64(file_content)
-  end
-
-  defp get_file_id(msg) do
-    photos =
-      cond do
-        is_map(msg) and Map.has_key?(msg, :photo) -> msg.photo
-        is_map(msg) and Map.has_key?(msg, "photo") -> msg["photo"]
-        true -> nil
-      end
-
-    case photos do
-      [_ | _] = photos ->
-        photo = List.last(photos)
-        Map.get(photo, :file_id) || Map.get(photo, "file_id")
-
-      _ ->
-        Logger.error("No photo found in the message")
-        nil
-    end
-  end
-
-  defp safe_index_photo(photo_params) do
-    case safe_typesense_create_photo(photo_params) do
-      nil -> :error
-      _ -> :ok
-    end
   end
 
   defp safe_typesense_create_photo(photo_params) do
