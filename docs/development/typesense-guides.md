@@ -1,4 +1,4 @@
-# Typesense
+# Typesense Guides
 
 ## Typesense API Errors
 

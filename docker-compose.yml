@@ -1,10 +1,8 @@
 services:
   save_it:
     profiles: ["prod"]
-    image: save_it:ac
-    build:
-      context: .
-    restart: unless-stopped
+    image: ghcr.io/thaddeusjiang/save_it:latest
+    restart: on-failure
     env_file:
       - .env
     environment:
@@ -20,7 +18,7 @@ services:
     image: ghcr.io/imputnet/cobalt:10
     init: true
     read_only: true
-    restart: unless-stopped
+    restart: on-failure
     ports:
       - 9001:9000/tcp
     environment:
@@ -33,11 +31,11 @@ services:
       - "8108:8108"
     volumes:
       - save_it_typesense_data:/data
-    command: "--data-dir=/data --api-key=${TYPESENSE_API_KEY:-xyz} --enable-cors"
+    command: "--data-dir=/data --api-key=xyz --enable-cors"
 
   typelens:
     image: ghcr.io/copperline-ai/typelens:1.26.0
-    restart: unless-stopped
+    restart: on-failure
     ports:
       - "3000:3000"
     environment:
@@ -45,10 +43,25 @@ services:
       TYPESENSE_HOST: "typesense"
       TYPESENSE_PORT: "8108"
       TYPESENSE_PROTOCOL: "http"
-      TYPESENSE_API_KEY: "${TYPESENSE_API_KEY:-xyz}"
+      TYPESENSE_API_KEY: "xyz"
       AUTH_USERNAME: "test@example.com"
       AUTH_PASSWORD: "pass123456"
     depends_on:
+      typesense:
+        condition: service_started
+
+  save_it_e2e:
+    profiles: ["e2e"]
+    image: save_it:e2e
+    restart: on-failure
+    env_file:
+      - .env
+    environment:
+      COBALT_API_URL: "http://cobalt-api:9000"
+      TYPESENSE_URL: "http://typesense:8108"
+    depends_on:
+      cobalt-api:
+        condition: service_started
       typesense:
         condition: service_started
 

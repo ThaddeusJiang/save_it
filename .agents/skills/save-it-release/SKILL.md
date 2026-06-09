@@ -9,11 +9,18 @@ Use this skill when the task is specifically about the `save_it` release flow.
 
 This repository uses:
 - `mix.exs` `version` as the application version
-- CalVer `YYYY.M.D` for stable versions, where the last segment is the calendar day of month, for example `2026.5.25`
+- Versioning: CalVer `YYYY.M.D` for stable releases, where the last segment is the calendar day of month (for example `2026.5.25`), with git tags using the same value without a `v` prefix, and hotfix such as `YYYY.M.D-hotfix.N`
 - git tags that match the version string directly, for example `2026.5.25`
 - GitHub Release publication to trigger `.github/workflows/release.yml`
 - The GitHub release page as the changelog surface for this project
-- `.github/workflows/release-manual.yml` for manual prereleases such as `2026.5.25-rc.1`
+- `.github/workflows/release-manual.yml` for manual releases
+
+## Release Rules
+
+- The bump version commit message must be exactly `version`.
+- The release tag must be created on the bump version commit.
+- GitHub Releases may use generated notes.
+- Any release with breaking changes must include upgrade guides covering deployment and release steps for the new version.
 
 ## Workflow
 
@@ -68,7 +75,7 @@ When the user asks to publish a stable release:
 
 ```bash
 git add mix.exs
-git commit -m "chore(release): bump version to YYYY.M.D"
+git commit -m "version"
 ```
 
 3. Create and push the stable tag:
@@ -119,6 +126,17 @@ gh workflow run "Release (manual)" -f tag=YYYY.M.D-rc.N
 - Never pretend a repository changelog exists for this project. Use the GitHub release page instead.
 - Never recreate an existing tag or GitHub release.
 - Never use the manual prerelease workflow for a normal stable release when direct GitHub release publication is intended.
+
+## Acceptance Checklist
+
+Before finishing, verify all items:
+
+- [ ] Requirement is implemented end-to-end.
+- [ ] Scope is minimal and aligned with project goal.
+- [ ] Existing behavior is not unintentionally broken.
+- [ ] Commands/tests needed for confidence were run, or skipped with reason.
+- [ ] Relevant docs/checklists are updated if scope or constraints changed.
+- [ ] Output is clear for direct handoff.
 
 ## Related Files
 

@@ -28,7 +28,7 @@ run = [
 [tasks.start]
 description = "Run start"
 run = [
-    "docker compose --profile prod up -d --build"
+    "docker compose --profile prod up -d"
 ]
 
 [tasks.stop]
@@ -40,5 +40,5 @@ run = [
 [tasks.build]
 description = "Build the acceptance testing image locally"
 run = [
-  "docker build -t save_it:ac .",
+  "docker build -t save_it:e2e .",
 ]

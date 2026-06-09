@@ -2,54 +2,44 @@
 
 This file provides guidance to coding agents working in this repository.
 
-## Project Snapshot
+## Project 
 
-- Project: `save_it`
-- Stack: Elixir (Telegram bot), Docker, external downloader/search services
-- Primary goal: ship practical features quickly with controlled complexity
-- Versioning: CalVer `YYYY.M.D` for stable releases, where the last segment is the calendar day of month (for example `2026.5.25`), with git tags using the same value without a `v` prefix, and prereleases such as `YYYY.M.D-rc.N`
+`save_it` is an Elixir Telegram bot that downloads and saves images and videos from the internet, then supports semantic and image-based search through Typesense.
 
-## Environment and Tooling
+Directory overview:
 
-Prefer these commands and tools:
+```text
+.
+├── .agents/                 # Repository-local agent workflow skills.
+│   └── skills/
+├── .claude/                 # Local Claude configuration.
+├── .github/                 # GitHub repository automation.
+│   └── workflows/           # GitHub Actions workflow definitions.
+├── config/                  # Mix and runtime application configuration.
+├── docs/                    # Project documentation.
+│   ├── adr/                 # Accepted ADRs; treat them as implementation constraints.
+│   ├── assets/              # Documentation images and media assets.
+│   ├── deployment/          # Deployment documentation.
+│   ├── dev-logs/            # Development log notes.
+│   └── development/         # Development guides, including Typesense notes.
+├── lib/                     # Application source code.
+│   ├── mix/                 # Custom Mix tasks, including Typesense migration tasks.
+│   ├── save_it/             # Main application, bot, download, Google Drive, helper, and migration modules.
+│   └── small_sdk/           # Small external service clients and download helpers.
+├── others/                  # Supporting operational documents and deployment files.
+│   ├── postmortem/          # Postmortems for non-trivial bugs or incidents.
+│   └── zeabur/              # Zeabur deployment support files.
+├── priv/                    # Private runtime resources.
+│   └── typesense/           # Typesense schema migrations.
+└── test/                    # ExUnit tests for application and SDK behavior.
+    └── small_sdk/
+```
 
-1. Environment setup
-- `mise trust`
-- `mise install`
-- If `mise.toml` is missing in current directory, run in parent directory.
+## Agent Skills
 
-2. Repository commands
-- Install deps: `mix deps.get`
-- Start local dependencies: `docker compose up`
-- Run app: `iex -S mix run --no-halt`
-- Run tests: `mix test`
-
-## Change Management
-
-When new tasks or constraints appear:
-
-- Update task checklist.
-- Update acceptance checklist.
-- Update related docs when relevant.
-- Do not maintain a repository `CHANGELOG.md` in this project. Check change history on the GitHub release page instead.
-- When a project-level decision changes team workflow or release handling, update the relevant ADRs, docs, and release tooling as part of the same task.
-- Treat these updates as part of the current task, not optional follow-up.
-
-## Docker Image Policy
-
-- Use pinned image versions in `docker-compose.yml`.
-- Do not use floating tags like `latest`.
-
-## Acceptance Checklist
-
-Before finishing, verify all items:
-
-- [ ] Requirement is implemented end-to-end.
-- [ ] Scope is minimal and aligned with project goal.
-- [ ] Existing behavior is not unintentionally broken.
-- [ ] Commands/tests needed for confidence were run, or skipped with reason.
-- [ ] Relevant docs/checklists are updated if scope or constraints changed.
-- [ ] Output is clear for direct handoff.
+- Use `.agents/skills/save-it-development/SKILL.md` for local setup, dev server startup, local checks, Typesense migrations, and commit workflow.
+- Use `.agents/skills/acceptance-testing/SKILL.md` for Docker-based acceptance testing.
+- Use `.agents/skills/save-it-release/SKILL.md` for release preparation, verification, and publication.
 
 ## Postmortems
 
@@ -58,3 +48,8 @@ When solving a non-trivial bug or issue, create `others/postmortem/YYYY-MM-DD-ti
 - Root cause
 - Fix applied
 - What we learned
+
+## Others
+
+- **Always** use fixed versions for dependencies.
+- **Never** maintain a repository `CHANGELOG.md` in this project. Check change history on the GitHub release page instead.
