@@ -158,6 +158,24 @@ defmodule SaveIt.BotTest do
             %{chat_id: chat_id, message_id: original_message_id}} in exgram_calls()
   end
 
+  test "keeps Telegram delivery successful when photo indexing fails", _context do
+    original_url = "https://x.com/example/status/1?utm_source=telegram"
+    chat_id = 12_351
+    original_message_id = 106
+
+    Application.put_env(:save_it, :typesense_url, "http://127.0.0.1:1")
+
+    message = %{
+      chat: %{id: chat_id},
+      message_id: original_message_id
+    }
+
+    assert {:ok, true} = Bot.handle({:text, original_url, message}, nil)
+
+    assert {:post, "/bottest-token/deleteMessage",
+            %{chat_id: chat_id, message_id: original_message_id}} in exgram_calls()
+  end
+
   test "updates progress message when Google Drive upload fails for a logged-in user", _context do
     original_url = "https://x.com/example/status/1?utm_source=telegram"
     chat_id = 12_347

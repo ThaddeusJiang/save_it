@@ -16,6 +16,7 @@ before the CalVer migration retain their original version labels.
 
 - Run Telegram and Google Drive delivery through independent modules in parallel while updating the progress message with channel-specific failure reasons instead of sending extra error messages.
 - Prevent oversized files from being uploaded to Telegram Bot API.
+- Keep successful Telegram delivery from being treated as failed when photo indexing later errors.
 
 ## [2026.6.9] - 2026-06-09
 
