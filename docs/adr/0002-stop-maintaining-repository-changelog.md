@@ -1,5 +1,7 @@
 # Stop Maintaining Repository Changelog
 
+Superseded by [ADR 0003: Maintain Repository Changelog](0003-maintain-repository-changelog.md).
+
 ## Context and Problem Statement
 
 `save_it` is a small project optimized for shipping practical features with controlled complexity. Maintaining a hand-written repository `CHANGELOG.md` adds a second release-writing workflow on top of pull requests, git history, ADRs, and the GitHub release page.
