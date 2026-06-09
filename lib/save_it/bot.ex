@@ -452,7 +452,7 @@ defmodule SaveIt.Bot do
             :ok
 
           {:error, reason} ->
-            update_delivery_progress_message(context, [delivery_error_message(reason)])
+            update_delivery_progress_message(context, [telegram_delivery_error_message(reason)])
             :error
         end
     end
@@ -490,7 +490,7 @@ defmodule SaveIt.Bot do
             :ok
 
           {:error, reason} ->
-            update_delivery_progress_message(context, [delivery_error_message(reason)])
+            update_delivery_progress_message(context, [telegram_delivery_error_message(reason)])
             :error
         end
     end
@@ -534,7 +534,11 @@ defmodule SaveIt.Bot do
 
     google_drive_result = Task.await(google_drive_task, :infinity)
 
-    handle_delivery_results(context, telegram_result, google_drive_result)
+    finish_delivery(
+      context,
+      handle_telegram_delivery_result(telegram_result),
+      handle_google_drive_delivery_result(google_drive_result)
+    )
   end
 
   defp deliver_downloaded_files(%DownloadContext{} = context, files) do
@@ -559,7 +563,11 @@ defmodule SaveIt.Bot do
 
     google_drive_result = Task.await(google_drive_task, :infinity)
 
-    handle_delivery_results(context, telegram_result, google_drive_result)
+    finish_delivery(
+      context,
+      handle_telegram_delivery_result(telegram_result),
+      handle_google_drive_delivery_result(google_drive_result)
+    )
   end
 
   defp send_downloaded_file_to_telegram(%DownloadContext{} = context, %DownloadedFile{} = file) do
@@ -604,22 +612,43 @@ defmodule SaveIt.Bot do
     kind, reason -> {:error, {kind, reason}}
   end
 
-  defp handle_delivery_results(%DownloadContext{} = context, telegram_result, google_drive_result) do
-    error_messages =
-      [telegram_result, google_drive_result]
-      |> Enum.map(&delivery_error_message/1)
-      |> Enum.reject(&is_nil/1)
+  defp handle_telegram_delivery_result(:ok) do
+    %{status: :ok, error_messages: []}
+  end
 
-    if error_messages == [] do
-      delete_message(context.chat_id, context.progress_message_id)
-    else
-      update_delivery_progress_message(context, error_messages)
-    end
+  defp handle_telegram_delivery_result({:error, reason}) do
+    %{status: :error, error_messages: [telegram_delivery_error_message(reason)]}
+  end
 
-    case telegram_result do
-      :ok -> :ok
-      {:error, _reason} -> :error
-    end
+  defp handle_google_drive_delivery_result(:ok) do
+    %{error_messages: []}
+  end
+
+  defp handle_google_drive_delivery_result({:error, {:google_drive_upload_failed, reason}}) do
+    %{error_messages: [google_drive_error_message(reason)]}
+  end
+
+  defp handle_google_drive_delivery_result({:error, reason}) do
+    %{error_messages: [google_drive_error_message(reason)]}
+  end
+
+  defp finish_delivery(
+         %DownloadContext{} = context,
+         %{status: telegram_status, error_messages: telegram_error_messages},
+         %{error_messages: google_drive_error_messages}
+       ) do
+    error_messages = telegram_error_messages ++ google_drive_error_messages
+    update_or_delete_progress_message(context, error_messages)
+
+    telegram_status
+  end
+
+  defp update_or_delete_progress_message(%DownloadContext{} = context, []) do
+    delete_message(context.chat_id, context.progress_message_id)
+  end
+
+  defp update_or_delete_progress_message(%DownloadContext{} = context, error_messages) do
+    update_delivery_progress_message(context, error_messages)
   end
 
   defp update_delivery_progress_message(%DownloadContext{} = context, error_messages) do
@@ -630,18 +659,10 @@ defmodule SaveIt.Bot do
     )
   end
 
-  defp delivery_error_message(:ok), do: nil
-
-  defp delivery_error_message(:telegram_file_too_large),
+  defp telegram_delivery_error_message(:telegram_file_too_large),
     do: telegram_error_message(@telegram_file_too_large_reason)
 
-  defp delivery_error_message({:error, {:google_drive_upload_failed, reason}}),
-    do: google_drive_error_message(reason)
-
-  defp delivery_error_message({:error, :telegram_file_too_large}),
-    do: telegram_error_message(@telegram_file_too_large_reason)
-
-  defp delivery_error_message({:error, reason}), do: telegram_error_message(reason)
+  defp telegram_delivery_error_message(reason), do: telegram_error_message(reason)
 
   defp telegram_error_message(reason),
     do: "Send to telegram failed, #{format_error_reason(reason)}"
