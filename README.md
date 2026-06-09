@@ -51,6 +51,10 @@ https://github.com/user-attachments/assets/b0dedcc0-3305-42b2-8101-6b0b5d32f17a
 
 ## Self hosting
 
+Google Drive upload is optional for self-hosted deployments. To enable it, configure
+Google OAuth environment variables and then log in from Telegram. See
+[Google Drive Guide](./docs/google-drive.md).
+
 ## Option 1: One-Click for Zeabur 
 
 [![Deploy on zeabur](https://zeabur.com/button.svg)](https://zeabur.com/zh-CN/templates/FTAONK)

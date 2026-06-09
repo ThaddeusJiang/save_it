@@ -12,10 +12,16 @@ defmodule SaveIt.BotTest do
     previous_ex_gram = Application.get_all_env(:ex_gram)
     previous_save_it = Application.get_all_env(:save_it)
     previous_small_sdk_telegram = Application.get_env(:tesla, SmallSdk.Telegram)
+    previous_google_drive = Application.get_env(:tesla, SaveIt.GoogleDrive)
+
+    unless Process.whereis(SaveIt.Delivery) do
+      start_supervised!(SaveIt.Delivery)
+    end
 
     Application.put_env(:ex_gram, :adapter, ExGram.Adapter.Test)
     Application.put_env(:ex_gram, :token, "test-token")
     Application.put_env(:save_it, :cobalt_api_url, base_url)
+    Application.put_env(:save_it, :test_pid, self())
     Application.put_env(:save_it, :telegram_bot_token, "test-token")
     Application.put_env(:save_it, :typesense_url, base_url)
     Application.put_env(:save_it, :typesense_api_key, "test-typesense-key")
@@ -44,6 +50,7 @@ defmodule SaveIt.BotTest do
       end
 
       restore_env(:tesla, SmallSdk.Telegram, previous_small_sdk_telegram)
+      restore_env(:tesla, SaveIt.GoogleDrive, previous_google_drive)
       restore_env(:ex_gram, previous_ex_gram)
       restore_env(:save_it, previous_save_it)
     end)
@@ -135,6 +142,131 @@ defmodule SaveIt.BotTest do
              "group-file-3",
              "group-file-4"
            ]
+  end
+
+  test "keeps the original user message when sending to Telegram fails", _context do
+    original_url = "https://x.com/example/status/1?utm_source=telegram"
+    chat_id = 12_345
+    original_message_id = 101
+
+    ExGramTestAdapter.backdoor_request("/sendPhoto", {:error, :telegram_failed})
+
+    message = %{
+      chat: %{id: chat_id},
+      message_id: original_message_id
+    }
+
+    assert is_nil(Bot.handle({:text, original_url, message}, nil))
+
+    refute {:post, "/bottest-token/deleteMessage",
+            %{chat_id: chat_id, message_id: original_message_id}} in exgram_calls()
+  end
+
+  test "updates progress message when Google Drive upload fails for a logged-in user", _context do
+    original_url = "https://x.com/example/status/1?utm_source=telegram"
+    chat_id = 12_347
+
+    FileHelper.set_google_access_token(chat_id, "google-access-token")
+    FileHelper.set_google_drive_folder_id(chat_id, "google-folder-id")
+    Application.put_env(:tesla, SaveIt.GoogleDrive, adapter: __MODULE__.GoogleDriveFailureAdapter)
+
+    on_exit(fn ->
+      cleanup_google_settings(chat_id)
+    end)
+
+    message = %{
+      chat: %{id: chat_id},
+      message_id: 102
+    }
+
+    assert {:ok, true} = Bot.handle({:text, original_url, message}, nil)
+
+    refute {:post, "/bottest-token/sendMessage",
+            %{chat_id: chat_id, text: "💔 Failed to upload file to Google Drive."}} in exgram_calls()
+
+    refute {:post, "/bottest-token/sendMessage",
+            %{chat_id: chat_id, text: "Send to google drive failed, upload failed"}} in exgram_calls()
+
+    assert edited_message_body().text ==
+             "Searching 🔎\nDownloading 💦\nUploading 💭\nSend to google drive failed, upload failed"
+  end
+
+  test "updates progress message when Telegram upload is too large", %{base_url: base_url} do
+    direct_url = base_url <> "/downloaded/oversized.mp4"
+    chat_id = 12_350
+    cached_file_name = "oversized.mp4"
+
+    write_oversized_cached_file(direct_url, cached_file_name)
+
+    on_exit(fn ->
+      cleanup_cached_file(direct_url, cached_file_name)
+    end)
+
+    message = %{
+      chat: %{id: chat_id},
+      message_id: 105
+    }
+
+    assert is_nil(Bot.handle({:text, direct_url, message}, nil))
+
+    refute {:post, "/bottest-token/sendMessage",
+            %{chat_id: chat_id, text: "💔 File is too large for Telegram Bot API upload."}} in exgram_calls()
+
+    refute {:post, "/bottest-token/sendMessage",
+            %{
+              chat_id: chat_id,
+              text: "Send to telegram failed, file is too large for Telegram Bot API upload."
+            }} in exgram_calls()
+
+    assert edited_message_body().text ==
+             "Searching 🔎\nDownloading 💦\nUploading 💭\nSend to telegram failed, file is too large for Telegram Bot API upload."
+  end
+
+  test "starts Telegram and Google Drive delivery in parallel after download", _context do
+    original_url = "https://x.com/example/status/1?utm_source=telegram"
+    chat_id = 12_349
+
+    FileHelper.set_google_access_token(chat_id, "google-access-token")
+    FileHelper.set_google_drive_folder_id(chat_id, "google-folder-id")
+    Application.put_env(:ex_gram, :adapter, __MODULE__.BlockingTelegramAdapter)
+    Application.put_env(:save_it, :test_pid, self())
+    Application.put_env(:tesla, SaveIt.GoogleDrive, adapter: __MODULE__.GoogleDriveSuccessAdapter)
+
+    on_exit(fn ->
+      cleanup_google_settings(chat_id)
+    end)
+
+    message = %{
+      chat: %{id: chat_id},
+      message_id: 104
+    }
+
+    task = Task.async(fn -> Bot.handle({:text, original_url, message}, nil) end)
+
+    assert_receive {:telegram_send_started, telegram_request_pid}
+    assert_receive {:google_drive_request, _env}, 200
+
+    send(telegram_request_pid, :release_telegram_send)
+
+    assert {:ok, true} = Task.await(task)
+  end
+
+  test "does not notify Telegram when Google Drive upload is skipped for a user without Google login",
+       _context do
+    original_url = "https://x.com/example/status/1?utm_source=telegram"
+    chat_id = 12_348
+
+    cleanup_google_settings(chat_id)
+
+    message = %{
+      chat: %{id: chat_id},
+      message_id: 103
+    }
+
+    assert {:ok, true} = Bot.handle({:text, original_url, message}, nil)
+
+    refute {:post, "/bottest-token/sendMessage",
+            %{chat_id: chat_id, text: "💔 Failed to upload file to Google Drive."}} in exgram_calls()
   end
 
   test "announces similar photos and sends multiple results as one media group", _context do
@@ -283,6 +415,30 @@ defmodule SaveIt.BotTest do
     end)
   end
 
+  defp edited_message_body do
+    %{calls: calls} = :sys.get_state(ExGram.Adapter.Test)
+
+    calls
+    |> Enum.reverse()
+    |> Enum.find_value(fn
+      {:post, path, body} ->
+        if String.ends_with?(path, "/editMessageText"), do: body
+
+      _ ->
+        nil
+    end)
+  end
+
+  defp write_oversized_cached_file(download_url, cached_file_name) do
+    FileHelper.write_file(cached_file_name, <<0>>, download_url)
+
+    file_path = Path.join(["./data/storage/files", cached_file_name])
+    {:ok, file} = File.open(file_path, [:write, :binary])
+    {:ok, _position} = :file.position(file, 50 * 1024 * 1024)
+    :ok = IO.binwrite(file, <<0>>)
+    :ok = File.close(file)
+  end
+
   defp cleanup_cached_folder(cache_key_url) do
     hashed_url = :crypto.hash(:sha256, cache_key_url) |> Base.url_encode64(padding: false)
     url_cache_path = Path.join(["./data/storage/urls", hashed_url])
@@ -290,6 +446,10 @@ defmodule SaveIt.BotTest do
 
     File.rm(url_cache_path)
     File.rm_rf(files_dir_path)
+  end
+
+  defp cleanup_google_settings(chat_id) do
+    File.rm_rf(Path.join(["./data/settings", to_string(chat_id)]))
   end
 
   defp restore_env(app, env) do
@@ -316,7 +476,7 @@ defmodule SaveIt.BotTest do
 
     @impl Tesla.Adapter
     def call(%Tesla.Env{} = env, _opts) do
-      send(self(), {:telegram_media_group_request, env})
+      send(Application.fetch_env!(:save_it, :test_pid), {:telegram_media_group_request, env})
 
       {:ok,
        %Tesla.Env{
@@ -348,6 +508,71 @@ defmodule SaveIt.BotTest do
          | status: 200,
            body: <<255, 216, 255, 224, 0, 16, 74, 70, 73, 70>>
        }}
+    end
+  end
+
+  defmodule GoogleDriveFailureAdapter do
+    @behaviour Tesla.Adapter
+
+    @impl Tesla.Adapter
+    def call(%Tesla.Env{} = env, _opts) do
+      send(self(), {:google_drive_request, env})
+
+      {:ok,
+       %Tesla.Env{
+         env
+         | status: 500,
+           body: %{"error" => %{"message" => "upload failed"}}
+       }}
+    end
+  end
+
+  defmodule GoogleDriveSuccessAdapter do
+    @behaviour Tesla.Adapter
+
+    @impl Tesla.Adapter
+    def call(%Tesla.Env{} = env, _opts) do
+      send(Application.fetch_env!(:save_it, :test_pid), {:google_drive_request, env})
+
+      {:ok,
+       %Tesla.Env{
+         env
+         | status: 200,
+           body: %{"id" => "google-drive-file-id"}
+       }}
+    end
+  end
+
+  defmodule BlockingTelegramAdapter do
+    @behaviour ExGram.Adapter
+
+    @impl ExGram.Adapter
+    def request(:post, "/bottest-token/sendMessage", _body) do
+      {:ok, %{message_id: 10}}
+    end
+
+    def request(:post, "/bottest-token/editMessageText", _body) do
+      {:ok, %{message_id: 10}}
+    end
+
+    def request(:post, "/bottest-token/deleteMessage", _body) do
+      {:ok, true}
+    end
+
+    def request(:post, "/bottest-token/sendPhoto", _body) do
+      send(Application.fetch_env!(:save_it, :test_pid), {:telegram_send_started, self()})
+
+      receive do
+        :release_telegram_send ->
+          {:ok, %{message_id: 20, photo: [%{file_id: "telegram-photo-file-id"}]}}
+      after
+        2_000 ->
+          {:error, %ExGram.Error{message: "telegram send was not released"}}
+      end
+    end
+
+    def request(:get, "/bottest-token/getUpdates", _body) do
+      {:ok, []}
     end
   end
 

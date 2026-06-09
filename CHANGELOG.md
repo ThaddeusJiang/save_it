@@ -8,8 +8,13 @@ before the CalVer migration retain their original version labels.
 
 ## [Unreleased]
 
+### Added
+
+- Add a Google Drive setup and Telegram usage guide.
+
 ### Fixed
 
+- Run Telegram and Google Drive delivery in parallel while updating the progress message with channel-specific failure reasons instead of sending extra error messages.
 - Prevent oversized files from being uploaded to Telegram Bot API.
 
 ## [2026.6.9] - 2026-06-09

@@ -15,6 +15,7 @@ defmodule SaveIt.Application do
 
     children = [
       ExGram,
+      SaveIt.Delivery,
       {SaveIt.Bot, [method: :polling, token: token]}
     ]
 

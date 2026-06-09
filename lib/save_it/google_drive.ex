@@ -41,21 +41,45 @@ defmodule SaveIt.GoogleDrive do
   end
 
   def upload_file_content(chat_id, file_content, file_name) do
-    # oauth = FileHelper.get_google_oauth(chat_id)
-    access_token = FileHelper.get_google_access_token(chat_id)
-    folder_id = FileHelper.get_google_drive_folder_id(chat_id)
+    with {:ok, access_token, folder_id} <- get_upload_settings(chat_id) do
+      upload_file(file_name, file_content, folder_id, access_token)
+    end
+  end
 
-    upload_file(file_name, file_content, folder_id, access_token)
+  def logged_in?(chat_id) do
+    not is_nil(FileHelper.get_google_access_token(chat_id))
   end
 
   def upload_files(chat_id, files) do
+    with {:ok, access_token, folder_id} <- get_upload_settings(chat_id) do
+      results =
+        Enum.map(files, fn
+          %DownloadedFile{file_name: file_name, file_content: file_content} ->
+            upload_file(file_name, file_content, folder_id, access_token)
+        end)
+
+      if Enum.all?(results, &match?({:ok, _}, &1)) do
+        {:ok, results}
+      else
+        {:error, results}
+      end
+    end
+  end
+
+  defp get_upload_settings(chat_id) do
     access_token = FileHelper.get_google_access_token(chat_id)
     folder_id = FileHelper.get_google_drive_folder_id(chat_id)
 
-    Enum.map(files, fn
-      %DownloadedFile{file_name: file_name, file_content: file_content} ->
-        upload_file(file_name, file_content, folder_id, access_token)
-    end)
+    cond do
+      is_nil(access_token) ->
+        {:error, :google_drive_not_logged_in}
+
+      is_nil(folder_id) ->
+        {:error, :google_drive_folder_not_configured}
+
+      true ->
+        {:ok, access_token, folder_id}
+    end
   end
 
   defp upload_file(file_name, file_content, folder_id, access_token) do
