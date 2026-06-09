@@ -7,7 +7,6 @@ defmodule SaveIt.Bot do
 
   alias SaveIt.DownloadContext
   alias SaveIt.DownloadedFile
-  alias SaveIt.Delivery
   alias SaveIt.FileHelper
   alias SaveIt.GoogleDrive
   alias SaveIt.GoogleOAuth2DeviceFlow
@@ -511,44 +510,101 @@ defmodule SaveIt.Bot do
     end
   end
 
-  defp finalize_single_download(%DownloadContext{} = context, %DownloadedFile{} = file) do
-    delete_message(context.chat_id, context.progress_message_id)
+  defp cache_single_download(%DownloadContext{} = context, %DownloadedFile{} = file) do
     FileHelper.write_file(file.file_name, file.file_content, context.cache_url)
     :ok
   end
 
   defp deliver_downloaded_file(%DownloadContext{} = context, %DownloadedFile{} = file) do
-    Delivery.deliver(
-      fn ->
-        bot_send_downloaded_file(context.chat_id, file,
-          source_url: context.original_url,
-          report_too_large: false
-        )
-      end,
-      fn -> upload_file_to_google_drive(context.chat_id, file) end,
-      fn -> finalize_single_download(context, file) end
-    )
-    |> delivery_result(context)
+    telegram_task =
+      Task.async(fn ->
+        send_downloaded_file_to_telegram(context, file)
+      end)
+
+    google_drive_task =
+      Task.async(fn ->
+        send_downloaded_file_to_google_drive(context, file)
+      end)
+
+    telegram_result = Task.await(telegram_task, :infinity)
+
+    if telegram_result == :ok do
+      cache_single_download(context, file)
+    end
+
+    google_drive_result = Task.await(google_drive_task, :infinity)
+
+    handle_delivery_results(context, telegram_result, google_drive_result)
   end
 
   defp deliver_downloaded_files(%DownloadContext{} = context, files) do
-    Delivery.deliver(
-      fn ->
-        bot_send_files(context.chat_id, files,
-          source_url: context.original_url,
-          report_too_large: false
-        )
-      end,
-      fn -> upload_files_to_google_drive(context.chat_id, files) end,
-      fn ->
+    telegram_task =
+      Task.async(fn ->
+        send_downloaded_files_to_telegram(context, files)
+      end)
+
+    google_drive_task =
+      Task.async(fn ->
+        send_downloaded_files_to_google_drive(context, files)
+      end)
+
+    telegram_result = Task.await(telegram_task, :infinity)
+
+    if telegram_result == :ok do
+      safe_delivery_result(fn ->
         FileHelper.write_folder(context.purge_url, files)
         :ok
-      end
-    )
-    |> delivery_result(context)
+      end)
+    end
+
+    google_drive_result = Task.await(google_drive_task, :infinity)
+
+    handle_delivery_results(context, telegram_result, google_drive_result)
   end
 
-  defp delivery_result({telegram_result, google_drive_result}, %DownloadContext{} = context) do
+  defp send_downloaded_file_to_telegram(%DownloadContext{} = context, %DownloadedFile{} = file) do
+    safe_delivery_result(fn ->
+      bot_send_downloaded_file(context.chat_id, file,
+        source_url: context.original_url,
+        report_too_large: false
+      )
+    end)
+  end
+
+  defp send_downloaded_files_to_telegram(%DownloadContext{} = context, files) do
+    safe_delivery_result(fn ->
+      bot_send_files(context.chat_id, files,
+        source_url: context.original_url,
+        report_too_large: false
+      )
+    end)
+  end
+
+  defp send_downloaded_file_to_google_drive(
+         %DownloadContext{} = context,
+         %DownloadedFile{} = file
+       ) do
+    safe_delivery_result(fn ->
+      upload_file_to_google_drive(context.chat_id, file)
+    end)
+  end
+
+  defp send_downloaded_files_to_google_drive(%DownloadContext{} = context, files) do
+    safe_delivery_result(fn ->
+      upload_files_to_google_drive(context.chat_id, files)
+    end)
+  end
+
+  defp safe_delivery_result(delivery_fun) do
+    delivery_fun.()
+  rescue
+    error -> {:error, error}
+  catch
+    :exit, reason -> {:error, {:exit, reason}}
+    kind, reason -> {:error, {kind, reason}}
+  end
+
+  defp handle_delivery_results(%DownloadContext{} = context, telegram_result, google_drive_result) do
     error_messages =
       [telegram_result, google_drive_result]
       |> Enum.map(&delivery_error_message/1)

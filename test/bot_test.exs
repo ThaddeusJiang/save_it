@@ -14,10 +14,6 @@ defmodule SaveIt.BotTest do
     previous_small_sdk_telegram = Application.get_env(:tesla, SmallSdk.Telegram)
     previous_google_drive = Application.get_env(:tesla, SaveIt.GoogleDrive)
 
-    unless Process.whereis(SaveIt.Delivery) do
-      start_supervised!(SaveIt.Delivery)
-    end
-
     Application.put_env(:ex_gram, :adapter, ExGram.Adapter.Test)
     Application.put_env(:ex_gram, :token, "test-token")
     Application.put_env(:save_it, :cobalt_api_url, base_url)
