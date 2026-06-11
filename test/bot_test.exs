@@ -1,6 +1,8 @@
 defmodule SaveIt.BotTest do
   use ExUnit.Case, async: false
 
+  import ExUnit.CaptureLog
+
   alias ExGram.Adapter.Test, as: ExGramTestAdapter
   alias SaveIt.Bot
   alias SaveIt.FileHelper
@@ -222,6 +224,247 @@ defmodule SaveIt.BotTest do
            end)
   end
 
+  test "silently skips similar photos that Telegram cannot send after media group failure",
+       _context do
+    Application.put_env(:ex_gram, :adapter, __MODULE__.SimilarMediaFailureAdapter)
+    Application.put_env(:tesla, SmallSdk.Telegram, adapter: __MODULE__.TelegramDownloadAdapter)
+
+    message = %{
+      chat: %{id: 12_351},
+      caption: "/similar",
+      photo: [%{file_id: "uploaded-photo-file-id"}]
+    }
+
+    assert :ok = Bot.handle({:message, message}, nil)
+
+    assert_receive {:exgram_request, :post, "/bottest-token/sendMessage",
+                    %{chat_id: 12_351, text: "Similar photos found."}}
+
+    assert_receive {:exgram_request, :post, "/bottest-token/sendMediaGroup", %{chat_id: 12_351}}
+
+    assert_receive {:exgram_request, :post, "/bottest-token/sendPhoto",
+                    %{chat_id: 12_351, photo: "broken-similar-file"}}
+
+    assert_receive {:exgram_request, :post, "/bottest-token/sendPhoto",
+                    %{chat_id: 12_351, photo: "sendable-similar-file"}}
+
+    refute_receive {:exgram_request, :post, "/bottest-token/sendMessage",
+                    %{chat_id: 12_351, text: "Failed to send photos."}}
+  end
+
+  test "silently skips a single similar photo that Telegram cannot send", _context do
+    Application.put_env(:ex_gram, :adapter, __MODULE__.SimilarMediaFailureAdapter)
+    Application.put_env(:tesla, SmallSdk.Telegram, adapter: __MODULE__.TelegramDownloadAdapter)
+
+    message = %{
+      chat: %{id: 12_352},
+      caption: "/similar",
+      photo: [%{file_id: "uploaded-photo-file-id"}]
+    }
+
+    assert :ok = Bot.handle({:message, message}, nil)
+
+    assert_receive {:exgram_request, :post, "/bottest-token/sendMessage",
+                    %{chat_id: 12_352, text: "Similar photos found."}}
+
+    assert_receive {:exgram_request, :post, "/bottest-token/sendPhoto",
+                    %{chat_id: 12_352, photo: "broken-single-similar-file"}}
+
+    refute_receive {:exgram_request, :post, "/bottest-token/sendMessage",
+                    %{chat_id: 12_352, text: "Failed to send photos."}}
+  end
+
+  test "stores a directly uploaded photo in Typesense and Google Drive", _context do
+    chat_id = 12_348
+    stored_file_path = Path.join(["./data/storage/files", "direct-photo.jpg"])
+
+    File.rm(stored_file_path)
+    configure_google_drive(chat_id)
+    Application.put_env(:tesla, SmallSdk.Telegram, adapter: __MODULE__.TelegramDirectMediaAdapter)
+    Application.put_env(:tesla, SaveIt.GoogleDrive, adapter: __MODULE__.GoogleDriveAdapter)
+
+    on_exit(fn ->
+      File.rm(stored_file_path)
+    end)
+
+    ExGramTestAdapter.backdoor_request("/getFile", %{
+      file_id: "uploaded-photo-file-id",
+      file_path: "photos/direct-photo.jpg"
+    })
+
+    message = %{
+      chat: %{id: chat_id},
+      caption: "direct image",
+      photo: [%{file_id: "uploaded-photo-file-id"}]
+    }
+
+    Bot.handle({:message, message}, nil)
+
+    assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
+
+    document = Jason.decode!(typesense_body)
+
+    assert document["caption"] == "direct image"
+    assert document["file_id"] == "uploaded-photo-file-id"
+    assert document["belongs_to_id"] == Integer.to_string(chat_id)
+    assert document["media_type"] == "photo"
+    assert document["image"] == Base.encode64(test_jpeg())
+    refute Map.has_key?(document, "url")
+    refute Map.has_key?(document, "download_url")
+
+    assert_receive {:google_drive_upload_request, drive_env}
+    assert drive_env.url == "https://www.googleapis.com/upload/drive/v3/files"
+    assert {"Authorization", "Bearer test-drive-token"} in drive_env.headers
+    assert binary_contains?(drive_env.body, ~s("name":"direct-photo.jpg"))
+    assert binary_contains?(drive_env.body, "test-drive-folder")
+    assert File.read(stored_file_path) == {:ok, test_jpeg()}
+  end
+
+  test "stores a directly uploaded video using its thumbnail for Typesense and uploads the video to Google Drive",
+       _context do
+    chat_id = 12_347
+    stored_file_path = Path.join(["./data/storage/files", "direct-video.mp4"])
+
+    File.rm(stored_file_path)
+    configure_google_drive(chat_id)
+    Application.put_env(:ex_gram, :adapter, __MODULE__.BodyAwareExGramAdapter)
+    Application.put_env(:tesla, SmallSdk.Telegram, adapter: __MODULE__.TelegramDirectMediaAdapter)
+    Application.put_env(:tesla, SaveIt.GoogleDrive, adapter: __MODULE__.GoogleDriveAdapter)
+
+    on_exit(fn ->
+      File.rm(stored_file_path)
+    end)
+
+    message = %{
+      chat: %{id: chat_id},
+      caption: "/similar",
+      video: %{
+        file_id: "uploaded-video-file-id",
+        file_name: "direct-video.mp4",
+        thumbnail: %{file_id: "uploaded-video-thumbnail-id"}
+      }
+    }
+
+    Bot.handle({:message, message}, nil)
+
+    assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
+
+    document = Jason.decode!(typesense_body)
+
+    assert document["caption"] == ""
+    assert document["file_id"] == "uploaded-video-file-id"
+    assert document["belongs_to_id"] == Integer.to_string(chat_id)
+    assert document["media_type"] == "video"
+    assert document["image"] == Base.encode64(test_jpeg())
+
+    assert_receive {:google_drive_upload_request, drive_env}
+    assert {"Authorization", "Bearer test-drive-token"} in drive_env.headers
+    assert binary_contains?(drive_env.body, ~s("name":"direct-video.mp4"))
+    assert binary_contains?(drive_env.body, "test-drive-folder")
+    assert binary_contains?(drive_env.body, test_mp4())
+    assert File.read(stored_file_path) == {:ok, test_mp4()}
+
+    assert_receive {:exgram_request, :post, "/bottest-token/sendMessage",
+                    %{chat_id: ^chat_id, text: "Similar photos found."}}
+
+    assert_receive {:exgram_request, :post, "/bottest-token/sendVideo",
+                    %{
+                      chat_id: ^chat_id,
+                      video: "similar-video-file",
+                      caption: "similar video",
+                      supports_streaming: true
+                    }}
+  end
+
+  test "indexes a directly uploaded video thumbnail when Telegram refuses to download the large original video",
+       _context do
+    chat_id = 12_349
+
+    configure_google_drive(chat_id)
+    Application.put_env(:ex_gram, :adapter, __MODULE__.BodyAwareExGramAdapter)
+    Application.put_env(:tesla, SmallSdk.Telegram, adapter: __MODULE__.TelegramDirectMediaAdapter)
+    Application.put_env(:tesla, SaveIt.GoogleDrive, adapter: __MODULE__.GoogleDriveAdapter)
+
+    message = %{
+      chat: %{id: chat_id},
+      caption: "1-6",
+      video: %{
+        file_id: "oversized-video-file-id",
+        file_name: "AI-voice-001.mp4",
+        file_size: 33_527_186,
+        thumbnail: %{file_id: "uploaded-video-thumbnail-id"}
+      }
+    }
+
+    log =
+      capture_log(fn ->
+        Bot.handle({:message, message}, nil)
+      end)
+
+    assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
+
+    document = Jason.decode!(typesense_body)
+
+    assert document["caption"] == "1-6"
+    assert document["file_id"] == "oversized-video-file-id"
+    assert document["belongs_to_id"] == Integer.to_string(chat_id)
+    assert document["media_type"] == "video"
+    assert document["image"] == Base.encode64(test_jpeg())
+
+    assert log =~ "Skipping local backup for Telegram video"
+    assert log =~ "file is too big"
+    refute_receive {:exgram_request, :post, "/bottest-token/sendMessage", %{chat_id: ^chat_id}}
+    refute_receive {:google_drive_upload_request, _drive_env}
+  end
+
+  test "indexes a directly uploaded video thumbnail when original video download times out",
+       _context do
+    chat_id = 12_350
+    stored_file_path = Path.join(["./data/storage/files", "timeout-video.mp4"])
+
+    File.rm(stored_file_path)
+    configure_google_drive(chat_id)
+    Application.put_env(:ex_gram, :adapter, __MODULE__.BodyAwareExGramAdapter)
+    Application.put_env(:tesla, SmallSdk.Telegram, adapter: __MODULE__.TelegramDirectMediaAdapter)
+    Application.put_env(:tesla, SaveIt.GoogleDrive, adapter: __MODULE__.GoogleDriveAdapter)
+
+    on_exit(fn ->
+      File.rm(stored_file_path)
+    end)
+
+    message = %{
+      chat: %{id: chat_id},
+      caption: "timeout video",
+      video: %{
+        file_id: "timeout-video-file-id",
+        file_name: "timeout-video.mp4",
+        file_size: 3_343_466,
+        thumbnail: %{file_id: "uploaded-video-thumbnail-id"}
+      }
+    }
+
+    log =
+      capture_log(fn ->
+        Bot.handle({:message, message}, nil)
+      end)
+
+    assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
+
+    document = Jason.decode!(typesense_body)
+
+    assert document["caption"] == "timeout video"
+    assert document["file_id"] == "timeout-video-file-id"
+    assert document["belongs_to_id"] == Integer.to_string(chat_id)
+    assert document["media_type"] == "video"
+    assert document["image"] == Base.encode64(test_jpeg())
+
+    assert log =~ "Skipping local backup for Telegram video"
+    assert log =~ ":timeout"
+    refute_receive {:exgram_request, :post, "/bottest-token/sendMessage", %{chat_id: ^chat_id}}
+    refute File.exists?(stored_file_path)
+    refute_receive {:google_drive_upload_request, _drive_env}
+  end
+
   test "returns details for a replied photo", _context do
     ExGramTestAdapter.backdoor_request("/sendMessage", %{message_id: 30})
 
@@ -309,6 +552,148 @@ defmodule SaveIt.BotTest do
     ExGram.Adapter.Test
     |> :sys.get_state()
     |> Map.fetch!(:calls)
+  end
+
+  defp configure_google_drive(chat_id) do
+    File.rm_rf("./data/settings/#{chat_id}")
+    FileHelper.set_google_access_token(chat_id, "test-drive-token")
+    FileHelper.set_google_drive_folder_id(chat_id, "test-drive-folder")
+
+    on_exit(fn ->
+      File.rm_rf("./data/settings/#{chat_id}")
+    end)
+  end
+
+  def test_jpeg do
+    <<255, 216, 255, 224, 0, 16, 74, 70, 73, 70>>
+  end
+
+  def test_mp4 do
+    <<0, 0, 0, 24, 102, 116, 121, 112, 109, 112, 52, 50>>
+  end
+
+  defp binary_contains?(binary, pattern) do
+    :binary.match(binary, pattern) != :nomatch
+  end
+
+  defmodule BodyAwareExGramAdapter do
+    @behaviour ExGram.Adapter
+
+    @impl ExGram.Adapter
+    def request(verb, path, body) do
+      send(self(), {:exgram_request, verb, path, body})
+
+      case {verb, path, body} do
+        {:get, "/bottest-token/getFile", %{file_id: "oversized-video-file-id"}} ->
+          {:error,
+           %ExGram.Error{
+             code: 400,
+             message:
+               ~s({"ok":false,"description":"Bad Request: file is too big","error_code":400})
+           }}
+
+        {:get, "/bottest-token/getFile", %{file_id: "uploaded-video-file-id"}} ->
+          {:ok, %{file_id: "uploaded-video-file-id", file_path: "videos/direct-video.mp4"}}
+
+        {:get, "/bottest-token/getFile", %{file_id: "timeout-video-file-id"}} ->
+          {:ok, %{file_id: "timeout-video-file-id", file_path: "videos/timeout-video.mp4"}}
+
+        {:get, "/bottest-token/getFile", %{file_id: "uploaded-video-thumbnail-id"}} ->
+          {:ok,
+           %{
+             file_id: "uploaded-video-thumbnail-id",
+             file_path: "video_thumbnails/direct-video.jpg"
+           }}
+
+        {:post, "/bottest-token/sendMessage", %{chat_id: chat_id}} ->
+          {:ok, %{message_id: 50, chat: %{id: chat_id}}}
+
+        {:post, "/bottest-token/sendVideo", %{chat_id: chat_id, video: file_id}} ->
+          {:ok, %{message_id: 51, chat: %{id: chat_id}, video: %{file_id: file_id}}}
+
+        _ ->
+          {:error, %ExGram.Error{code: 404}}
+      end
+    end
+  end
+
+  defmodule TelegramDirectMediaAdapter do
+    @behaviour Tesla.Adapter
+
+    @impl Tesla.Adapter
+    def call(%Tesla.Env{method: :get, url: url} = env, _opts) do
+      send(self(), {:telegram_download_request, env})
+
+      cond do
+        String.contains?(url, "timeout-video.mp4") ->
+          {:error, :timeout}
+
+        String.contains?(url, "direct-video.mp4") ->
+          {:ok, %{env | status: 200, body: SaveIt.BotTest.test_mp4()}}
+
+        true ->
+          {:ok, %{env | status: 200, body: SaveIt.BotTest.test_jpeg()}}
+      end
+    end
+  end
+
+  defmodule SimilarMediaFailureAdapter do
+    @behaviour ExGram.Adapter
+
+    @impl ExGram.Adapter
+    def request(verb, path, body) do
+      send(self(), {:exgram_request, verb, path, body})
+
+      case {verb, path, body} do
+        {:get, "/bottest-token/getFile", %{file_id: "uploaded-photo-file-id"}} ->
+          {:ok, %{file_id: "uploaded-photo-file-id", file_path: "photos/uploaded.jpg"}}
+
+        {:post, "/bottest-token/sendMessage", %{chat_id: chat_id}} ->
+          {:ok, %{message_id: 60, chat: %{id: chat_id}}}
+
+        {:post, "/bottest-token/sendMediaGroup", %{chat_id: _chat_id}} ->
+          {:error,
+           %ExGram.Error{
+             code: 400,
+             message: "Bad Request: failed to get HTTP URL content"
+           }}
+
+        {:post, "/bottest-token/sendPhoto", %{photo: "sendable-similar-file"} = body} ->
+          {:ok,
+           %{
+             message_id: 61,
+             chat: %{id: body.chat_id},
+             photo: [%{file_id: "sendable-similar-file"}]
+           }}
+
+        {:post, "/bottest-token/sendPhoto", %{photo: "broken-similar-file"}} ->
+          {:error,
+           %ExGram.Error{
+             code: 400,
+             message: "Bad Request: wrong file identifier"
+           }}
+
+        {:post, "/bottest-token/sendPhoto", %{photo: "broken-single-similar-file"}} ->
+          {:error,
+           %ExGram.Error{
+             code: 400,
+             message: "Bad Request: wrong file identifier"
+           }}
+
+        _ ->
+          {:error, %ExGram.Error{code: 404}}
+      end
+    end
+  end
+
+  defmodule GoogleDriveAdapter do
+    @behaviour Tesla.Adapter
+
+    @impl Tesla.Adapter
+    def call(%Tesla.Env{} = env, _opts) do
+      send(self(), {:google_drive_upload_request, env})
+      {:ok, %{env | status: 200, body: %{"id" => "drive-file-id"}}}
+    end
   end
 
   defmodule TelegramMediaGroupAdapter do
@@ -499,6 +884,50 @@ defmodule SaveIt.BotTest do
           "document" => %{
             "file_id" => "single-similar-file",
             "caption" => "single similar"
+          }
+        }
+      ]
+    end
+
+    defp similar_hits("belongs_to_id:12347") do
+      [
+        %{
+          "document" => %{
+            "file_id" => "similar-video-file",
+            "caption" => "similar video",
+            "media_type" => "video"
+          }
+        }
+      ]
+    end
+
+    defp similar_hits("belongs_to_id:12348"), do: []
+    defp similar_hits("belongs_to_id:12349"), do: []
+    defp similar_hits("belongs_to_id:12350"), do: []
+
+    defp similar_hits("belongs_to_id:12351") do
+      [
+        %{
+          "document" => %{
+            "file_id" => "broken-similar-file",
+            "caption" => "broken similar"
+          }
+        },
+        %{
+          "document" => %{
+            "file_id" => "sendable-similar-file",
+            "caption" => "sendable similar"
+          }
+        }
+      ]
+    end
+
+    defp similar_hits("belongs_to_id:12352") do
+      [
+        %{
+          "document" => %{
+            "file_id" => "broken-single-similar-file",
+            "caption" => "broken single similar"
           }
         }
       ]

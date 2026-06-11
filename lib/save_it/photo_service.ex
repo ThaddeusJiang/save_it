@@ -14,6 +14,7 @@ defmodule SaveIt.PhotoService do
     photo_create_input =
       photo_params
       |> normalize_photo_urls()
+      |> Map.put_new(:media_type, "photo")
       |> Map.put(:belongs_to_id, Integer.to_string(belongs_to_id))
       |> Map.put(:inserted_at, DateTime.utc_now() |> DateTime.to_unix())
 

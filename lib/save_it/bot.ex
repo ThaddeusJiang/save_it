@@ -187,89 +187,13 @@ defmodule SaveIt.Bot do
   end
 
   # caption: nil -> find same photos
-  def handle({:message, %{chat: chat, caption: nil, photo: photos}}, _ctx) do
-    photo = List.last(photos)
-
-    file = ExGram.get_file!(photo.file_id)
-    photo_file_content = Telegram.download_file_content!(file.file_path)
-
-    chat_id = chat.id
-
-    typesense_photo =
-      safe_typesense_create_photo(%{
-        image: Base.encode64(photo_file_content),
-        caption: "",
-        file_id: file.file_id,
-        belongs_to_id: chat_id
-      })
-
-    case typesense_photo do
-      nil ->
-        :ok
-
-      _ ->
-        photos =
-          safe_typesense_search_similar_photos(
-            typesense_photo["id"],
-            distance_threshold: 0.1,
-            belongs_to_id: chat_id
-          )
-
-        answer_similar_photos_if_any(chat.id, photos)
-    end
+  # caption: contains /similar or /search -> search similar photos; otherwise, find same photos
+  def handle({:message, %{chat: chat, photo: [_ | _] = photos} = message}, _ctx) do
+    handle_uploaded_photo(chat.id, Map.get(message, :caption), photos)
   end
 
-  # caption: contains /similar or /search -> search similar photos; otherwise, find same photos
-  def handle({:message, %{chat: chat, caption: caption, photo: photos}}, _ctx) do
-    photo = List.last(photos)
-
-    file = ExGram.get_file!(photo.file_id)
-    photo_file_content = Telegram.download_file_content!(file.file_path)
-
-    chat_id = chat.id
-
-    caption =
-      if String.contains?(caption, ["/similar", "/search"]) do
-        ""
-      else
-        caption
-      end
-
-    typesense_photo =
-      safe_typesense_create_photo(%{
-        image: Base.encode64(photo_file_content),
-        caption: caption,
-        file_id: file.file_id,
-        belongs_to_id: chat_id
-      })
-
-    case typesense_photo do
-      nil ->
-        :ok
-
-      _ ->
-        case caption do
-          "" ->
-            photos =
-              safe_typesense_search_similar_photos(
-                typesense_photo["id"],
-                distance_threshold: 0.4,
-                belongs_to_id: chat_id
-              )
-
-            answer_similar_photos(chat.id, photos)
-
-          _ ->
-            photos =
-              safe_typesense_search_similar_photos(
-                typesense_photo["id"],
-                distance_threshold: 0.1,
-                belongs_to_id: chat_id
-              )
-
-            answer_similar_photos_if_any(chat.id, photos)
-        end
-    end
+  def handle({:message, %{chat: chat, video: %{file_id: _file_id} = video} = message}, _ctx) do
+    handle_uploaded_video(chat.id, Map.get(message, :caption), video)
   end
 
   def handle({:text, text, %{chat: chat, message_id: message_id}}, _context) do
@@ -317,37 +241,38 @@ defmodule SaveIt.Bot do
   end
 
   defp answer_photos(chat_id, [photo]) do
-    case ExGram.send_photo(chat_id, photo["file_id"],
-           caption: photo["caption"],
-           show_caption_above_media: true
-         ) do
-      {:ok, _response} ->
-        :ok
-
-      {:error, reason} ->
-        Logger.error("Failed to send photo: #{inspect(reason)}")
-        send_message(chat_id, "Failed to send photos.")
-    end
+    send_similar_media(chat_id, photo)
+    :ok
   end
 
   defp answer_photos(chat_id, similar_photos) do
-    media =
-      Enum.map(similar_photos, fn photo ->
-        %ExGram.Model.InputMediaPhoto{
-          type: "photo",
-          media: photo["file_id"],
-          caption: photo["caption"],
-          show_caption_above_media: true
-        }
-      end)
+    media = Enum.map(similar_photos, &saved_media_group_input/1)
 
     case ExGram.send_media_group(chat_id, media) do
       {:ok, _response} ->
         :ok
 
       {:error, reason} ->
-        Logger.error("Failed to send media group: #{inspect(reason)}")
-        send_message(chat_id, "Failed to send photos.")
+        Logger.warning(
+          "Failed to send similar media group, falling back to individual media: #{inspect(reason)}"
+        )
+
+        Enum.each(similar_photos, &send_similar_media(chat_id, &1))
+        :ok
+    end
+  end
+
+  defp send_similar_media(chat_id, media) do
+    case send_saved_media(chat_id, media) do
+      {:ok, _response} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning(
+          "Skipping unavailable similar media file_id=#{inspect(media["file_id"])}: #{inspect(reason)}"
+        )
+
+        :error
     end
   end
 
@@ -364,6 +289,163 @@ defmodule SaveIt.Bot do
 
   defp answer_similar_photos_if_any(chat_id, photos) when is_list(photos),
     do: answer_similar_photos(chat_id, photos)
+
+  defp handle_uploaded_photo(chat_id, caption, photos) do
+    photo = List.last(photos)
+    file = ExGram.get_file!(photo.file_id)
+    file_content = Telegram.download_file_content!(file.file_path)
+    file_name = telegram_file_name(file, photo.file_id, ".jpg")
+
+    FileHelper.write_file(file_name, file_content, telegram_cache_key("photo", file.file_id))
+    GoogleDrive.upload_file_content(chat_id, file_content, file_name)
+
+    %{
+      image: Base.encode64(file_content),
+      caption: searchable_caption(caption),
+      file_id: file.file_id,
+      media_type: "photo",
+      belongs_to_id: chat_id
+    }
+    |> safe_typesense_create_photo()
+    |> answer_similar_for_uploaded_media(chat_id, caption)
+  end
+
+  defp handle_uploaded_video(chat_id, caption, video) do
+    typesense_photo =
+      video
+      |> video_thumbnail()
+      |> create_video_thumbnail_index(chat_id, caption, video.file_id)
+
+    store_uploaded_video_file(chat_id, video)
+    answer_similar_for_uploaded_media(typesense_photo, chat_id, caption)
+  end
+
+  defp create_video_thumbnail_index(nil, _chat_id, _caption, _file_id), do: nil
+
+  defp create_video_thumbnail_index(thumbnail, chat_id, caption, file_id) do
+    thumbnail_file = ExGram.get_file!(thumbnail.file_id)
+    thumbnail_content = Telegram.download_file_content!(thumbnail_file.file_path)
+
+    safe_typesense_create_photo(%{
+      image: Base.encode64(thumbnail_content),
+      caption: searchable_caption(caption),
+      file_id: file_id,
+      media_type: "video",
+      belongs_to_id: chat_id
+    })
+  end
+
+  defp store_uploaded_video_file(chat_id, video) do
+    case ExGram.get_file(video.file_id) do
+      {:ok, file} ->
+        store_uploaded_video_file_content(chat_id, video, file)
+
+      {:error, reason} ->
+        handle_uploaded_video_file_error(reason)
+    end
+  end
+
+  defp store_uploaded_video_file_content(chat_id, video, file) do
+    case Telegram.download_file_content(file.file_path) do
+      {:ok, file_content} ->
+        file_name = Map.get(video, :file_name) || telegram_file_name(file, video.file_id, ".mp4")
+        FileHelper.write_file(file_name, file_content, telegram_cache_key("video", video.file_id))
+        upload_to_google_drive_if_configured(chat_id, file_content, file_name)
+        :ok
+
+      {:error, reason} ->
+        handle_uploaded_video_file_error(reason)
+    end
+  end
+
+  defp handle_uploaded_video_file_error(reason) do
+    Logger.warning("Skipping local backup for Telegram video: #{inspect(reason)}")
+    :error
+  end
+
+  defp upload_to_google_drive_if_configured(chat_id, file_content, file_name) do
+    if GoogleDrive.configured?(chat_id) do
+      GoogleDrive.upload_file_content(chat_id, file_content, file_name)
+    else
+      :ok
+    end
+  end
+
+  defp video_thumbnail(video) do
+    Map.get(video, :thumbnail) || Map.get(video, :thumb)
+  end
+
+  defp telegram_cache_key(media_type, file_id) do
+    "telegram:#{media_type}:#{file_id}"
+  end
+
+  defp answer_similar_for_uploaded_media(nil, _chat_id, _caption), do: :ok
+
+  defp answer_similar_for_uploaded_media(typesense_photo, chat_id, caption) do
+    if search_command_caption?(caption) do
+      typesense_photo["id"]
+      |> safe_typesense_search_similar_photos(distance_threshold: 0.4, belongs_to_id: chat_id)
+      |> then(&answer_similar_photos(chat_id, &1))
+    else
+      typesense_photo["id"]
+      |> safe_typesense_search_similar_photos(distance_threshold: 0.1, belongs_to_id: chat_id)
+      |> then(&answer_similar_photos_if_any(chat_id, &1))
+    end
+  end
+
+  defp searchable_caption(caption) do
+    if search_command_caption?(caption), do: "", else: caption || ""
+  end
+
+  defp search_command_caption?(caption) when is_binary(caption) do
+    String.contains?(caption, ["/similar", "/search"])
+  end
+
+  defp search_command_caption?(_caption), do: false
+
+  defp telegram_file_name(file, file_id, fallback_extension) do
+    case Map.get(file, :file_path) do
+      file_path when is_binary(file_path) and file_path != "" ->
+        Path.basename(file_path)
+
+      _ ->
+        file_id <> fallback_extension
+    end
+  end
+
+  defp send_saved_media(chat_id, %{"media_type" => "video"} = media) do
+    ExGram.send_video(chat_id, media["file_id"],
+      caption: media["caption"],
+      supports_streaming: true,
+      show_caption_above_media: true
+    )
+  end
+
+  defp send_saved_media(chat_id, media) do
+    ExGram.send_photo(chat_id, media["file_id"],
+      caption: media["caption"],
+      show_caption_above_media: true
+    )
+  end
+
+  defp saved_media_group_input(%{"media_type" => "video"} = media) do
+    %ExGram.Model.InputMediaVideo{
+      type: "video",
+      media: media["file_id"],
+      caption: media["caption"],
+      supports_streaming: true,
+      show_caption_above_media: true
+    }
+  end
+
+  defp saved_media_group_input(media) do
+    %ExGram.Model.InputMediaPhoto{
+      type: "photo",
+      media: media["file_id"],
+      caption: media["caption"],
+      show_caption_above_media: true
+    }
+  end
 
   defp extract_urls_from_string(str) do
     regex = ~r/http[s]?:\/\/[^\s]+/
@@ -636,17 +718,15 @@ defmodule SaveIt.Bot do
     source_url = Keyword.get(opts, :source_url)
     download_url = Keyword.get(opts, :download_url)
 
-    cond do
-      telegram_upload_too_large?(content) ->
-        send_message(chat_id, @telegram_file_too_large_message)
-        {:error, :telegram_file_too_large}
-
-      true ->
-        do_bot_send_file(chat_id, file_name, content,
-          caption: caption,
-          source_url: source_url,
-          download_url: download_url
-        )
+    if telegram_upload_too_large?(content) do
+      send_message(chat_id, @telegram_file_too_large_message)
+      {:error, :telegram_file_too_large}
+    else
+      do_bot_send_file(chat_id, file_name, content,
+        caption: caption,
+        source_url: source_url,
+        download_url: download_url
+      )
     end
   end
 
