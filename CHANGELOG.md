@@ -16,6 +16,7 @@ before the CalVer migration retain their original version labels.
 
 - Log original-file backup failures for directly uploaded Telegram videos without sending a user-facing message.
 - Silently skip unavailable similar media results instead of sending user-facing error messages.
+- Use a worktree-local Mix dependencies directory under `mise` to avoid dependency cache conflicts across branches.
 
 ### Fixed
 

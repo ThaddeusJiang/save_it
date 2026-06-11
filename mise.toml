@@ -3,6 +3,7 @@ elixir = "1.19.5"
 
 [env]
 _.file = '.env'
+MIX_DEPS_PATH = "deps"
 
 [tasks.update-zeabur-template]
 description = "Update Zeabur template"
