@@ -66,7 +66,7 @@ defmodule SaveIt.BotTest do
     end)
 
     message = %{
-      chat: %{id: 12_345},
+      chat: %{id: 12_345, username: "save_it_test_chat"},
       message_id: 99
     }
 
@@ -83,6 +83,8 @@ defmodule SaveIt.BotTest do
     assert document["download_url"] == download_url
     assert document["file_id"] == "telegram-photo-file-id"
     assert document["belongs_to_id"] == "12345"
+    assert document["source_message_id"] == 20
+    assert document["source_message_url"] == "https://t.me/save_it_test_chat/20"
   end
 
   test "stores the original user-sent url for every photo in a multi-image download", _context do
@@ -98,7 +100,7 @@ defmodule SaveIt.BotTest do
     Application.put_env(:tesla, SmallSdk.Telegram, adapter: __MODULE__.TelegramMediaGroupAdapter)
 
     message = %{
-      chat: %{id: 12_345},
+      chat: %{id: 12_345, username: "save_it_test_chat"},
       message_id: 100
     }
 
@@ -136,6 +138,15 @@ defmodule SaveIt.BotTest do
              "group-file-2",
              "group-file-3",
              "group-file-4"
+           ]
+
+    assert Enum.map(documents, & &1["source_message_id"]) == [101, 102, 103, 104]
+
+    assert Enum.map(documents, & &1["source_message_url"]) == [
+             "https://t.me/save_it_test_chat/101",
+             "https://t.me/save_it_test_chat/102",
+             "https://t.me/save_it_test_chat/103",
+             "https://t.me/save_it_test_chat/104"
            ]
   end
 
@@ -342,7 +353,8 @@ defmodule SaveIt.BotTest do
     })
 
     message = %{
-      chat: %{id: chat_id},
+      chat: %{id: chat_id, username: "save_it_directs"},
+      message_id: 321,
       caption: "direct image",
       photo: [%{file_id: "uploaded-photo-file-id"}]
     }
@@ -358,6 +370,8 @@ defmodule SaveIt.BotTest do
     assert document["belongs_to_id"] == Integer.to_string(chat_id)
     assert document["media_type"] == "photo"
     assert document["image"] == Base.encode64(test_jpeg())
+    assert document["source_message_id"] == 321
+    assert document["source_message_url"] == "https://t.me/save_it_directs/321"
     refute Map.has_key?(document, "url")
     refute Map.has_key?(document, "download_url")
 
@@ -385,7 +399,8 @@ defmodule SaveIt.BotTest do
     end)
 
     message = %{
-      chat: %{id: chat_id},
+      chat: %{id: chat_id, username: "save_it_directs"},
+      message_id: 322,
       caption: "/similar",
       video: %{
         file_id: "uploaded-video-file-id",
@@ -405,6 +420,8 @@ defmodule SaveIt.BotTest do
     assert document["belongs_to_id"] == Integer.to_string(chat_id)
     assert document["media_type"] == "video"
     assert document["image"] == Base.encode64(test_jpeg())
+    assert document["source_message_id"] == 322
+    assert document["source_message_url"] == "https://t.me/save_it_directs/322"
 
     assert_receive {:google_drive_upload_request, drive_env}
     assert {"Authorization", "Bearer test-drive-token"} in drive_env.headers
@@ -545,7 +562,39 @@ defmodule SaveIt.BotTest do
     assert request_body.text =~ "Sent at: 2024-06-01 00:00:00 UTC"
     assert request_body.text =~ "Original URL: #{original_url}"
     assert request_body.text =~ "Download URL: #{download_url}"
+    assert request_body.text =~ "Message URL: https://t.me/save_it_test_chat/20"
     assert request_body.text =~ "File ID: telegram-photo-file-id"
+  end
+
+  test "omits missing values from photo details", _context do
+    ExGramTestAdapter.backdoor_request("/sendMessage", %{message_id: 30})
+
+    chat_id = 12_345
+
+    message = %{
+      chat: %{id: chat_id},
+      reply_to_message: %{
+        photo: [
+          %{file_id: "small-photo-file-id"},
+          %{file_id: "old-photo-file-id"}
+        ]
+      }
+    }
+
+    assert {:ok, %{message_id: 30}} = Bot.handle({:command, :detail, message}, nil)
+
+    assert_receive {:test_http_request, :get, search_path, ""}
+    assert search_path =~ "file_id%3A%3Dold-photo-file-id"
+
+    request_body = sent_message_body()
+
+    assert request_body.chat_id == chat_id
+    assert request_body.text == "File ID: old-photo-file-id\nTypesense ID: old-typesense-photo-id"
+    refute request_body.text =~ "N/A"
+    refute request_body.text =~ "Sent at:"
+    refute request_body.text =~ "Original URL:"
+    refute request_body.text =~ "Download URL:"
+    refute request_body.text =~ "Message URL:"
   end
 
   defp cleanup_cached_file(download_url, cached_file_name) do
@@ -759,10 +808,10 @@ defmodule SaveIt.BotTest do
            body: %{
              "ok" => true,
              "result" => [
-               %{"photo" => [%{"file_id" => "group-file-1"}]},
-               %{"photo" => [%{"file_id" => "group-file-2"}]},
-               %{"photo" => [%{"file_id" => "group-file-3"}]},
-               %{"photo" => [%{"file_id" => "group-file-4"}]}
+               %{"message_id" => 101, "photo" => [%{"file_id" => "group-file-1"}]},
+               %{"message_id" => 102, "photo" => [%{"file_id" => "group-file-2"}]},
+               %{"message_id" => 103, "photo" => [%{"file_id" => "group-file-3"}]},
+               %{"message_id" => 104, "photo" => [%{"file_id" => "group-file-4"}]}
              ]
            }
        }}
@@ -871,19 +920,33 @@ defmodule SaveIt.BotTest do
       end
     end
 
-    defp response_for("/collections/photos/documents/search?" <> _query, port, _body) do
+    defp response_for("/collections/photos/documents/search?" <> query, port, _body) do
+      document =
+        if query =~ "file_id%3A%3Dold-photo-file-id" do
+          %{
+            "id" => "old-typesense-photo-id",
+            "caption" => "",
+            "file_id" => "old-photo-file-id",
+            "belongs_to_id" => "12345",
+            "inserted_at" => 1_717_200_000
+          }
+        else
+          %{
+            "id" => "typesense-photo-id",
+            "caption" => "",
+            "file_id" => "telegram-photo-file-id",
+            "url" => "https://x.com/example/status/1?utm_source=telegram",
+            "download_url" => "http://127.0.0.1:#{port}/downloaded/photo.jpg",
+            "source_message_url" => "https://t.me/save_it_test_chat/20",
+            "belongs_to_id" => "12345",
+            "inserted_at" => 1_717_200_000
+          }
+        end
+
       json_response(%{
         "hits" => [
           %{
-            "document" => %{
-              "id" => "typesense-photo-id",
-              "caption" => "",
-              "file_id" => "telegram-photo-file-id",
-              "url" => "https://x.com/example/status/1?utm_source=telegram",
-              "download_url" => "http://127.0.0.1:#{port}/downloaded/photo.jpg",
-              "belongs_to_id" => "12345",
-              "inserted_at" => 1_717_200_000
-            }
+            "document" => document
           }
         ]
       })
