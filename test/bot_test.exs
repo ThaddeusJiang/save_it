@@ -224,6 +224,55 @@ defmodule SaveIt.BotTest do
            end)
   end
 
+  test "does not return the just uploaded photo as a similar result", _context do
+    Application.put_env(:tesla, SmallSdk.Telegram, adapter: __MODULE__.TelegramDownloadAdapter)
+
+    ExGramTestAdapter.backdoor_request("/getFile", %{
+      file_id: "uploaded-photo-file-id",
+      file_path: "photos/uploaded.jpg"
+    })
+
+    ExGramTestAdapter.backdoor_request("/sendMessage", %{message_id: 42})
+
+    ExGramTestAdapter.backdoor_request("/sendPhoto", %{
+      message_id: 43,
+      photo: [%{file_id: "other-similar-file"}]
+    })
+
+    ExGramTestAdapter.backdoor_request("/sendMediaGroup", [
+      %{message_id: 44},
+      %{message_id: 45}
+    ])
+
+    message = %{
+      chat: %{id: 12_353},
+      caption: "/similar",
+      photo: [%{file_id: "uploaded-photo-file-id"}]
+    }
+
+    assert :ok = Bot.handle({:message, message}, nil)
+
+    calls = exgram_calls()
+
+    assert {:post, "/bottest-token/sendMessage",
+            %{chat_id: 12_353, text: "Similar photos found."}} in calls
+
+    assert Enum.any?(calls, fn
+             {:post, "/bottest-token/sendPhoto",
+              %{chat_id: 12_353, photo: "other-similar-file", caption: "other similar"}} ->
+               true
+
+             _ ->
+               false
+           end)
+
+    refute Enum.any?(calls, fn
+             {:post, "/bottest-token/sendPhoto", %{photo: "uploaded-photo-file-id"}} -> true
+             {:post, "/bottest-token/sendMediaGroup", _body} -> true
+             _ -> false
+           end)
+  end
+
   test "silently skips similar photos that Telegram cannot send after media group failure",
        _context do
     Application.put_env(:ex_gram, :adapter, __MODULE__.SimilarMediaFailureAdapter)
@@ -928,6 +977,23 @@ defmodule SaveIt.BotTest do
           "document" => %{
             "file_id" => "broken-single-similar-file",
             "caption" => "broken single similar"
+          }
+        }
+      ]
+    end
+
+    defp similar_hits("belongs_to_id:12353") do
+      [
+        %{
+          "document" => %{
+            "file_id" => "uploaded-photo-file-id",
+            "caption" => ""
+          }
+        },
+        %{
+          "document" => %{
+            "file_id" => "other-similar-file",
+            "caption" => "other similar"
           }
         }
       ]

@@ -382,16 +382,40 @@ defmodule SaveIt.Bot do
   defp answer_similar_for_uploaded_media(nil, _chat_id, _caption), do: :ok
 
   defp answer_similar_for_uploaded_media(typesense_photo, chat_id, caption) do
+    similar_photos =
+      typesense_photo["id"]
+      |> safe_typesense_search_similar_photos(
+        distance_threshold: similar_search_distance_threshold(caption),
+        belongs_to_id: chat_id
+      )
+      |> exclude_uploaded_media(typesense_photo)
+
     if search_command_caption?(caption) do
-      typesense_photo["id"]
-      |> safe_typesense_search_similar_photos(distance_threshold: 0.4, belongs_to_id: chat_id)
-      |> then(&answer_similar_photos(chat_id, &1))
+      answer_similar_photos(chat_id, similar_photos)
     else
-      typesense_photo["id"]
-      |> safe_typesense_search_similar_photos(distance_threshold: 0.1, belongs_to_id: chat_id)
-      |> then(&answer_similar_photos_if_any(chat_id, &1))
+      answer_similar_photos_if_any(chat_id, similar_photos)
     end
   end
+
+  defp similar_search_distance_threshold(caption) do
+    if search_command_caption?(caption), do: 0.4, else: 0.1
+  end
+
+  defp exclude_uploaded_media(photos, uploaded_media) when is_list(photos) do
+    uploaded_file_id = Map.get(uploaded_media, "file_id")
+    uploaded_id = Map.get(uploaded_media, "id")
+
+    Enum.reject(photos, fn photo ->
+      same_present_value?(Map.get(photo, "file_id"), uploaded_file_id) or
+        same_present_value?(Map.get(photo, "id"), uploaded_id)
+    end)
+  end
+
+  defp same_present_value?(left, right) when is_binary(left) and is_binary(right) do
+    left != "" and left == right
+  end
+
+  defp same_present_value?(_left, _right), do: false
 
   defp searchable_caption(caption) do
     if search_command_caption?(caption), do: "", else: caption || ""
@@ -834,7 +858,9 @@ defmodule SaveIt.Bot do
   end
 
   defp safe_typesense_create_photo(photo_params) do
-    PhotoService.create_photo!(photo_params)
+    photo_params
+    |> PhotoService.create_photo!()
+    |> include_created_photo_metadata(photo_params)
   rescue
     error ->
       Logger.error("Typesense create_photo failed: #{Exception.message(error)}")
@@ -844,6 +870,17 @@ defmodule SaveIt.Bot do
       Logger.error("Typesense create_photo failed: #{inspect({kind, reason})}")
       nil
   end
+
+  defp include_created_photo_metadata(photo, photo_params) when is_map(photo) do
+    Enum.reduce([:file_id, :media_type], photo, fn key, acc ->
+      case Map.fetch(photo_params, key) do
+        {:ok, value} -> Map.put_new(acc, Atom.to_string(key), value)
+        :error -> acc
+      end
+    end)
+  end
+
+  defp include_created_photo_metadata(photo, _photo_params), do: photo
 
   defp safe_typesense_search_photos(q, opts) do
     PhotoService.search_photos!(q, opts)
