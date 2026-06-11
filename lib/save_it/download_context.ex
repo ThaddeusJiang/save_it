@@ -4,6 +4,7 @@ defmodule SaveIt.DownloadContext do
   @enforce_keys [:chat_id, :progress_message_id, :original_url]
   defstruct [
     :chat_id,
+    :chat,
     :progress_message_id,
     :original_url,
     :download_url,

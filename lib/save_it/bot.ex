@@ -189,11 +189,11 @@ defmodule SaveIt.Bot do
   # caption: nil -> find same photos
   # caption: contains /similar or /search -> search similar photos; otherwise, find same photos
   def handle({:message, %{chat: chat, photo: [_ | _] = photos} = message}, _ctx) do
-    handle_uploaded_photo(chat.id, Map.get(message, :caption), photos)
+    handle_uploaded_photo(message, chat, Map.get(message, :caption), photos)
   end
 
   def handle({:message, %{chat: chat, video: %{file_id: _file_id} = video} = message}, _ctx) do
-    handle_uploaded_video(chat.id, Map.get(message, :caption), video)
+    handle_uploaded_video(message, chat, Map.get(message, :caption), video)
   end
 
   def handle({:text, text, %{chat: chat, message_id: message_id} = message}, _context) do
@@ -206,7 +206,7 @@ defmodule SaveIt.Bot do
       _ ->
         has_success? =
           urls
-          |> Enum.map(&process_url(chat.id, &1, message))
+          |> Enum.map(&process_url(chat, &1, message))
           |> Enum.any?(&(&1 == :ok))
 
         if has_success? do
@@ -290,49 +290,52 @@ defmodule SaveIt.Bot do
   defp answer_similar_photos_if_any(chat_id, photos) when is_list(photos),
     do: answer_similar_photos(chat_id, photos)
 
-  defp handle_uploaded_photo(chat_id, caption, photos) do
+  defp handle_uploaded_photo(message, chat, caption, photos) do
     photo = List.last(photos)
     file = ExGram.get_file!(photo.file_id)
     file_content = Telegram.download_file_content!(file.file_path)
     file_name = telegram_file_name(file, photo.file_id, ".jpg")
 
     FileHelper.write_file(file_name, file_content, telegram_cache_key("photo", file.file_id))
-    GoogleDrive.upload_file_content(chat_id, file_content, file_name)
+    GoogleDrive.upload_file_content(chat.id, file_content, file_name)
 
     %{
       image: Base.encode64(file_content),
       caption: searchable_caption(caption),
       file_id: file.file_id,
       media_type: "photo",
-      belongs_to_id: chat_id
+      belongs_to_id: chat.id
     }
+    |> Map.merge(source_message_fields(chat, message_id(message)))
     |> safe_typesense_create_photo()
-    |> answer_similar_for_uploaded_media(chat_id, caption)
+    |> answer_similar_for_uploaded_media(chat.id, caption)
   end
 
-  defp handle_uploaded_video(chat_id, caption, video) do
+  defp handle_uploaded_video(message, chat, caption, video) do
     typesense_photo =
       video
       |> video_thumbnail()
-      |> create_video_thumbnail_index(chat_id, caption, video.file_id)
+      |> create_video_thumbnail_index(chat, message_id(message), caption, video.file_id)
 
-    store_uploaded_video_file(chat_id, video)
-    answer_similar_for_uploaded_media(typesense_photo, chat_id, caption)
+    store_uploaded_video_file(chat.id, video)
+    answer_similar_for_uploaded_media(typesense_photo, chat.id, caption)
   end
 
-  defp create_video_thumbnail_index(nil, _chat_id, _caption, _file_id), do: nil
+  defp create_video_thumbnail_index(nil, _chat, _message_id, _caption, _file_id), do: nil
 
-  defp create_video_thumbnail_index(thumbnail, chat_id, caption, file_id) do
+  defp create_video_thumbnail_index(thumbnail, chat, message_id, caption, file_id) do
     thumbnail_file = ExGram.get_file!(thumbnail.file_id)
     thumbnail_content = Telegram.download_file_content!(thumbnail_file.file_path)
 
-    safe_typesense_create_photo(%{
+    %{
       image: Base.encode64(thumbnail_content),
       caption: searchable_caption(caption),
       file_id: file_id,
       media_type: "video",
-      belongs_to_id: chat_id
-    })
+      belongs_to_id: chat.id
+    }
+    |> Map.merge(source_message_fields(chat, message_id))
+    |> safe_typesense_create_photo()
   end
 
   defp store_uploaded_video_file(chat_id, video) do
@@ -468,11 +471,13 @@ defmodule SaveIt.Bot do
     end
   end
 
-  defp process_url(chat_id, url, message) do
+  defp process_url(chat, url, message) do
+    chat_id = chat.id
     {:ok, progress_message} = send_message(chat_id, Enum.at(@progress, 0))
 
     context = %DownloadContext{
       chat_id: chat_id,
+      chat: chat,
       progress_message_id: progress_message.message_id,
       original_url: url,
       message: message
@@ -518,7 +523,12 @@ defmodule SaveIt.Bot do
 
       downloaded_files ->
         update_message(context.chat_id, context.progress_message_id, Enum.slice(@progress, 0..2))
-        bot_send_filenames(context.chat_id, downloaded_files, source_url: context.original_url)
+
+        bot_send_filenames(context.chat_id, downloaded_files,
+          source_url: context.original_url,
+          source_chat: context.chat
+        )
+
         delete_message(context.chat_id, context.progress_message_id)
         :ok
     end
@@ -530,7 +540,12 @@ defmodule SaveIt.Bot do
     case WebDownloader.download_files(download_urls) do
       {:ok, files} ->
         update_message(context.chat_id, context.progress_message_id, Enum.slice(@progress, 0..2))
-        bot_send_files(context.chat_id, files, source_url: context.original_url)
+
+        bot_send_files(context.chat_id, files,
+          source_url: context.original_url,
+          source_chat: context.chat
+        )
+
         delete_message(context.chat_id, context.progress_message_id)
         FileHelper.write_folder(context.purge_url, files)
         GoogleDrive.upload_files(context.chat_id, files)
@@ -551,7 +566,8 @@ defmodule SaveIt.Bot do
 
         bot_send_file(context.chat_id, downloaded_file, {:file, downloaded_file},
           source_url: context.original_url,
-          download_url: context.download_url
+          download_url: context.download_url,
+          source_chat: context.chat
         )
 
         delete_message(context.chat_id, context.progress_message_id)
@@ -565,7 +581,12 @@ defmodule SaveIt.Bot do
     case WebDownloader.download_file(context.download_url) do
       {:ok, %DownloadedFile{} = file} ->
         update_message(context.chat_id, context.progress_message_id, Enum.slice(@progress, 0..2))
-        bot_send_downloaded_file(context.chat_id, file, source_url: context.original_url)
+
+        bot_send_downloaded_file(context.chat_id, file,
+          source_url: context.original_url,
+          source_chat: context.chat
+        )
+
         finalize_single_download(context, file)
 
       {:error, reason} ->
@@ -582,7 +603,11 @@ defmodule SaveIt.Bot do
 
         update_message(context.chat_id, context.progress_message_id, Enum.slice(@progress, 0..2))
 
-        bot_send_downloaded_file(context.chat_id, file, source_url: context.original_url)
+        bot_send_downloaded_file(context.chat_id, file,
+          source_url: context.original_url,
+          source_chat: context.chat
+        )
+
         finalize_thumbnail_download(context, file)
 
       {:error, fallback_reason} ->
@@ -684,6 +709,7 @@ defmodule SaveIt.Bot do
 
   defp bot_send_files(chat_id, files, opts) do
     source_url = Keyword.get(opts, :source_url)
+    source_chat = Keyword.get(opts, :source_chat)
 
     if all_images?(files) and length(files) > 1 do
       bot_send_media_group(
@@ -691,11 +717,12 @@ defmodule SaveIt.Bot do
         Enum.map(files, fn %DownloadedFile{} = file ->
           {file.file_name, {:file_content, file.file_content, file.file_name}, source_url,
            file.download_url}
-        end)
+        end),
+        source_chat: source_chat
       )
     else
       Enum.each(files, fn %DownloadedFile{} = file ->
-        bot_send_downloaded_file(chat_id, file, source_url: source_url)
+        bot_send_downloaded_file(chat_id, file, source_url: source_url, source_chat: source_chat)
       end)
     end
   end
@@ -711,20 +738,27 @@ defmodule SaveIt.Bot do
 
   defp bot_send_filenames(chat_id, filenames, opts) do
     source_url = Keyword.get(opts, :source_url)
+    source_chat = Keyword.get(opts, :source_chat)
 
     if all_images?(filenames) and length(filenames) > 1 do
       bot_send_media_group(
         chat_id,
-        Enum.map(filenames, fn filename -> {filename, {:file, filename}, source_url} end)
+        Enum.map(filenames, fn filename -> {filename, {:file, filename}, source_url} end),
+        source_chat: source_chat
       )
     else
       Enum.each(filenames, fn filename ->
-        bot_send_file(chat_id, filename, {:file, filename}, source_url: source_url)
+        bot_send_file(chat_id, filename, {:file, filename},
+          source_url: source_url,
+          source_chat: source_chat
+        )
       end)
     end
   end
 
-  defp bot_send_media_group(chat_id, files) do
+  defp bot_send_media_group(chat_id, files, opts) do
+    source_chat = Keyword.get(opts, :source_chat) || %{id: chat_id}
+
     case Telegram.send_media_group(chat_id, files) do
       {:ok, messages} ->
         Enum.zip(files, messages)
@@ -733,37 +767,43 @@ defmodule SaveIt.Bot do
             file_id = get_file_id(msg)
             image_base64 = encode_file_content(content)
 
-            PhotoService.create_photo!(%{
+            %{
               image: image_base64,
               caption: "",
               file_id: file_id,
               url: source_url,
               download_url: download_url,
               belongs_to_id: chat_id
-            })
+            }
+            |> Map.merge(source_message_fields(source_chat, message_id(msg)))
+            |> PhotoService.create_photo!()
 
           {{_file_name, content, source_url}, msg} ->
             file_id = get_file_id(msg)
             image_base64 = encode_file_content(content)
 
-            PhotoService.create_photo!(%{
+            %{
               image: image_base64,
               caption: "",
               file_id: file_id,
               url: source_url,
               belongs_to_id: chat_id
-            })
+            }
+            |> Map.merge(source_message_fields(source_chat, message_id(msg)))
+            |> PhotoService.create_photo!()
 
           {{_file_name, content}, msg} ->
             file_id = get_file_id(msg)
             image_base64 = encode_file_content(content)
 
-            PhotoService.create_photo!(%{
+            %{
               image: image_base64,
               caption: "",
               file_id: file_id,
               belongs_to_id: chat_id
-            })
+            }
+            |> Map.merge(source_message_fields(source_chat, message_id(msg)))
+            |> PhotoService.create_photo!()
         end)
 
       {:error, reason} ->
@@ -773,19 +813,23 @@ defmodule SaveIt.Bot do
           {file_name, content, source_url, download_url} ->
             bot_send_file(chat_id, file_name, content,
               source_url: source_url,
-              download_url: download_url
+              download_url: download_url,
+              source_chat: source_chat
             )
 
           {file_name, content, source_url} ->
-            bot_send_file(chat_id, file_name, content, source_url: source_url)
+            bot_send_file(chat_id, file_name, content,
+              source_url: source_url,
+              source_chat: source_chat
+            )
 
           {file_name, content} ->
-            bot_send_file(chat_id, file_name, content)
+            bot_send_file(chat_id, file_name, content, source_chat: source_chat)
         end)
     end
   end
 
-  defp bot_send_file(chat_id, file_name, file_content, opts \\ []) do
+  defp bot_send_file(chat_id, file_name, file_content, opts) do
     content =
       case file_content do
         {:file, file} -> {:file, file}
@@ -795,6 +839,7 @@ defmodule SaveIt.Bot do
     caption = Keyword.get(opts, :caption, "")
     source_url = Keyword.get(opts, :source_url)
     download_url = Keyword.get(opts, :download_url)
+    source_chat = Keyword.get(opts, :source_chat) || %{id: chat_id}
 
     if telegram_upload_too_large?(content) do
       send_message(chat_id, @telegram_file_too_large_message)
@@ -803,7 +848,8 @@ defmodule SaveIt.Bot do
       do_bot_send_file(chat_id, file_name, content,
         caption: caption,
         source_url: source_url,
-        download_url: download_url
+        download_url: download_url,
+        source_chat: source_chat
       )
     end
   end
@@ -812,6 +858,7 @@ defmodule SaveIt.Bot do
     caption = Keyword.fetch!(opts, :caption)
     source_url = Keyword.get(opts, :source_url)
     download_url = Keyword.get(opts, :download_url)
+    source_chat = Keyword.fetch!(opts, :source_chat)
 
     case file_extension(file_name) do
       ext when ext in [".png", ".jpg", ".jpeg"] ->
@@ -822,14 +869,16 @@ defmodule SaveIt.Bot do
         image_base64 =
           encode_file_content(content)
 
-        safe_index_photo(%{
+        %{
           image: image_base64,
           caption: caption,
           file_id: file_id,
           url: source_url,
           download_url: download_url,
           belongs_to_id: chat_id
-        })
+        }
+        |> Map.merge(source_message_fields(source_chat, message_id(msg)))
+        |> safe_index_photo()
 
       ".mp4" ->
         ExGram.send_video(chat_id, content, supports_streaming: true, caption: caption)
@@ -903,6 +952,51 @@ defmodule SaveIt.Bot do
         nil
     end
   end
+
+  defp message_id(message) when is_map(message) do
+    Map.get(message, :message_id) || Map.get(message, "message_id")
+  end
+
+  defp message_id(_message), do: nil
+
+  defp source_message_fields(chat, message_id) when is_integer(message_id) do
+    %{}
+    |> Map.put(:source_message_id, message_id)
+    |> put_optional(:source_message_url, telegram_message_url(chat, message_id))
+  end
+
+  defp source_message_fields(_chat, _message_id), do: %{}
+
+  defp telegram_message_url(chat, message_id) do
+    username = map_value(chat, :username)
+    chat_id = map_value(chat, :id)
+    private_channel_id = telegram_private_channel_id(chat_id)
+
+    cond do
+      is_binary(username) and username != "" ->
+        "https://t.me/#{username}/#{message_id}"
+
+      private_channel_id ->
+        "https://t.me/c/#{private_channel_id}/#{message_id}"
+
+      true ->
+        nil
+    end
+  end
+
+  defp telegram_private_channel_id(chat_id) do
+    chat_id = to_string(chat_id)
+
+    if String.starts_with?(chat_id, "-100") do
+      String.replace_prefix(chat_id, "-100", "")
+    end
+  end
+
+  defp map_value(map, key) when is_map(map), do: Map.get(map, key) || Map.get(map, to_string(key))
+  defp map_value(_map, _key), do: nil
+
+  defp put_optional(map, _key, nil), do: map
+  defp put_optional(map, key, value), do: Map.put(map, key, value)
 
   defp safe_index_photo(photo_params) do
     case safe_typesense_create_photo(photo_params) do
@@ -999,21 +1093,20 @@ defmodule SaveIt.Bot do
 
   defp detail_message(reply_to_message, photo, file_id) do
     [
-      "Sent at: #{format_unix_time(Map.get(reply_to_message, :date))}",
-      "Original URL: #{detail_value(photo, "url")}",
-      "Download URL: #{detail_value(photo, "download_url")}",
-      "File ID: #{file_id}",
-      "Typesense ID: #{detail_value(photo, "id")}"
+      detail_line("Sent at", format_unix_time(Map.get(reply_to_message, :date))),
+      detail_line("Original URL", Map.get(photo, "url")),
+      detail_line("Download URL", Map.get(photo, "download_url")),
+      detail_line("Message URL", Map.get(photo, "source_message_url")),
+      detail_line("File ID", file_id),
+      detail_line("Typesense ID", Map.get(photo, "id"))
     ]
+    |> Enum.reject(&is_nil/1)
     |> Enum.join("\n")
   end
 
-  defp detail_value(photo, key) do
-    case Map.get(photo, key) do
-      value when is_binary(value) and value != "" -> value
-      _ -> "N/A"
-    end
-  end
+  defp detail_line(_label, nil), do: nil
+  defp detail_line(_label, ""), do: nil
+  defp detail_line(label, value), do: "#{label}: #{value}"
 
   defp format_unix_time(timestamp) when is_integer(timestamp) do
     timestamp
@@ -1021,7 +1114,7 @@ defmodule SaveIt.Bot do
     |> Calendar.strftime("%Y-%m-%d %H:%M:%S UTC")
   end
 
-  defp format_unix_time(_timestamp), do: "N/A"
+  defp format_unix_time(_timestamp), do: nil
 
   defp safe_typesense_get_photo(file_id, belongs_to_id) do
     PhotoService.get_photo(file_id, belongs_to_id)
