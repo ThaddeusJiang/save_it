@@ -10,10 +10,12 @@ before the CalVer migration retain their original version labels.
 
 ### Added
 
+- Store Telegram source message links for indexed media and show them in photo details when a jump URL can be built.
 - Save directly uploaded Telegram photos and videos to Typesense, and upload them to Google Drive when Drive is configured.
 
 ### Changed
 
+- Show only available fields in photo details instead of rendering empty `N/A` rows.
 - Log original-file backup failures for directly uploaded Telegram videos without sending a user-facing message.
 - Silently skip unavailable similar media results instead of sending user-facing error messages.
 
