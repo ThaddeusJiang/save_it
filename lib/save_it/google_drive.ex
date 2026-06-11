@@ -3,7 +3,6 @@ defmodule SaveIt.GoogleDrive do
   Google Drive integration used by the bot for optional uploads.
 
   Future improvements:
-  - Skip uploads early when Drive is not configured.
   - Move the raw API client into `SmallSdk`.
   - Support browsing and selecting folders.
   """
@@ -21,6 +20,10 @@ defmodule SaveIt.GoogleDrive do
   plug(Tesla.Middleware.JSON)
 
   @upload_type "multipart"
+
+  def configured?(chat_id) do
+    match?({:ok, _folder_id, _access_token}, upload_config(chat_id))
+  end
 
   # Google Drive folder listing is limited and may not match the public guide exactly.
   def list_files(chat_id) do
@@ -41,21 +44,26 @@ defmodule SaveIt.GoogleDrive do
   end
 
   def upload_file_content(chat_id, file_content, file_name) do
-    # oauth = FileHelper.get_google_oauth(chat_id)
-    access_token = FileHelper.get_google_access_token(chat_id)
-    folder_id = FileHelper.get_google_drive_folder_id(chat_id)
+    case upload_config(chat_id) do
+      {:ok, folder_id, access_token} ->
+        upload_file(file_name, file_content, folder_id, access_token)
 
-    upload_file(file_name, file_content, folder_id, access_token)
+      :not_configured ->
+        {:ok, :skipped}
+    end
   end
 
   def upload_files(chat_id, files) do
-    access_token = FileHelper.get_google_access_token(chat_id)
-    folder_id = FileHelper.get_google_drive_folder_id(chat_id)
+    case upload_config(chat_id) do
+      {:ok, folder_id, access_token} ->
+        Enum.map(files, fn
+          %DownloadedFile{file_name: file_name, file_content: file_content} ->
+            upload_file(file_name, file_content, folder_id, access_token)
+        end)
 
-    Enum.map(files, fn
-      %DownloadedFile{file_name: file_name, file_content: file_content} ->
-        upload_file(file_name, file_content, folder_id, access_token)
-    end)
+      :not_configured ->
+        {:ok, :skipped}
+    end
   end
 
   defp upload_file(file_name, file_content, folder_id, access_token) do
@@ -82,9 +90,16 @@ defmodule SaveIt.GoogleDrive do
   def upload_file(chat_id, file_path) do
     # settings = SettingsStore.get(chat_id)
     # oauth = FileHelper.get_google_oauth(chat_id)
-    access_token = FileHelper.get_google_access_token(chat_id)
-    folder_id = FileHelper.get_google_drive_folder_id(chat_id)
+    case upload_config(chat_id) do
+      {:ok, folder_id, access_token} ->
+        upload_file_path(file_path, folder_id, access_token)
 
+      :not_configured ->
+        {:ok, :skipped}
+    end
+  end
+
+  defp upload_file_path(file_path, folder_id, access_token) do
     metadata = %{
       name: Path.basename(file_path),
       parents: [folder_id]
@@ -107,6 +122,20 @@ defmodule SaveIt.GoogleDrive do
     )
     |> handle_response()
   end
+
+  defp upload_config(chat_id) do
+    access_token = FileHelper.get_google_access_token(chat_id)
+    folder_id = FileHelper.get_google_drive_folder_id(chat_id)
+
+    if configured_value?(access_token) and configured_value?(folder_id) do
+      {:ok, folder_id, access_token}
+    else
+      :not_configured
+    end
+  end
+
+  defp configured_value?(value) when is_binary(value), do: String.trim(value) != ""
+  defp configured_value?(_value), do: false
 
   defp build_multipart_body(metadata, file_content, boundary) do
     """

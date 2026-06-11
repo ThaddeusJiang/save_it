@@ -8,8 +8,19 @@ before the CalVer migration retain their original version labels.
 
 ## [Unreleased]
 
+### Added
+
+- Save directly uploaded Telegram photos and videos to Typesense, and upload them to Google Drive when Drive is configured.
+
+### Changed
+
+- Log original-file backup failures for directly uploaded Telegram videos without sending a user-facing message.
+- Silently skip unavailable similar media results instead of sending user-facing error messages.
+
 ### Fixed
 
+- Save directly uploaded Telegram photos and downloadable videos to local storage backups.
+- Prevent directly uploaded Telegram videos from crashing when Telegram refuses, fails, or times out while downloading the original file.
 - Prevent oversized files from being uploaded to Telegram Bot API.
 
 ## [2026.6.9] - 2026-06-09
