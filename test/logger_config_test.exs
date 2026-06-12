@@ -35,6 +35,8 @@ defmodule SaveIt.LoggerConfigTest do
   end
 
   test "runtime logger uses distinct severity colors" do
+    assert Application.fetch_env!(:logger, :level) == :info
+
     logger_config = Application.fetch_env!(:logger, :default_formatter)
 
     assert logger_config[:colors][:info] == :green

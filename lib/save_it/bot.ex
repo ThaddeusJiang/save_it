@@ -611,7 +611,7 @@ defmodule SaveIt.Bot do
       {:error, fallback_reason} ->
         Logger.warning(
           "No Telegram thumbnail fallback available after link download failed: " <>
-            inspect(%{failure_reason: failure_reason, fallback_reason: fallback_reason})
+            "failure_reason=#{inspect(failure_reason)} fallback_reason=#{inspect(fallback_reason)}"
         )
 
         update_message(context.chat_id, context.progress_message_id, failure_message)
