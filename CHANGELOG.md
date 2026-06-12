@@ -11,6 +11,8 @@ before the CalVer migration retain their original version labels.
 ### Changed
 
 - Simplify photo details to show only the source message URL, original URL, and saved timestamp.
+- Keep HTTP logs at request-summary level instead of dumping full request and response bodies at debug level.
+- Require `TELEGRAM_BOT_TOKEN` at runtime outside the test environment.
 
 ## [2026.6.12-rc.1] - 2026-06-12
 
