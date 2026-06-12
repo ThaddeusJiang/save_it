@@ -56,4 +56,4 @@ When solving a non-trivial bug or issue, create `others/postmortem/YYYY-MM-DD-ti
 - **Always** use fixed versions for dependencies.
 - Maintain a repository `CHANGELOG.md` using [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/) structure.
 - Use CalVer release headings in `CHANGELOG.md`, for example `## [2026.6.9] - 2026-06-09`.
-- At the end of repository work, check `CHANGELOG.md` and update `## [Unreleased]` for notable user-facing, operational, documentation, workflow, or agent-process changes.
+- At the end of repository work, check `CHANGELOG.md` and update `## [Unreleased]` only for product-focused user-facing features, behavior changes, fixes, removals, security changes, or breaking changes. Do not record docs-only, tests-only, chore-only, formatting-only, CI-only, internal refactor-only, release-process-only, or agent-workflow-only changes.

@@ -1,6 +1,6 @@
 ---
 name: save-it-changelog
-description: Maintain the save_it repository CHANGELOG.md using Keep a Changelog 1.1.0 with CalVer version headings. Use at the end of repository work, before final response or commit/PR handoff, whenever files changed or a notable project decision, user-facing behavior, operational workflow, documentation, release process, or agent workflow changed.
+description: Maintain the save_it repository CHANGELOG.md using Keep a Changelog 1.1.0 with CalVer version headings. Use at the end of repository work, before final response or commit/PR handoff, when user-facing product behavior, features, fixes, removals, security changes, or breaking changes changed.
 ---
 
 # Save It Changelog
@@ -12,10 +12,10 @@ Keep `CHANGELOG.md` as the in-repository, human-written summary of notable chang
 ## Workflow
 
 1. Open `CHANGELOG.md`. If it is missing, create it from the template below.
-2. Review the actual repository diff and summarize only notable changes. Do not dump commit logs.
+2. Review the actual repository diff and summarize only notable user-facing product changes. Do not dump commit logs.
 3. Add entries under `## [Unreleased]`, grouped by standard change types.
 4. Keep entries concise, user-facing, and understandable without reading the diff.
-5. If no notable changelog entry is warranted, leave the file unchanged and mention that in the final response.
+5. If the diff is only docs, tests, chores, internal refactors, formatting, CI, release plumbing, agent skills, or other maintainer-only workflow changes, leave the file unchanged and mention that no product changelog entry is warranted.
 
 ## Format Rules
 
@@ -31,13 +31,14 @@ Keep `CHANGELOG.md` as the in-repository, human-written summary of notable chang
 
 ## Entry Guidance
 
-- Add `Added` for new features, docs, skills, automation, or capabilities.
-- Add `Changed` for changed behavior, workflow, defaults, dependencies, or documented project policy.
+- Add `Added` for new user-facing features or product capabilities.
+- Add `Changed` for user-visible behavior, defaults, or compatibility changes.
 - Add `Fixed` for bug fixes.
-- Add `Removed` for removed behavior, files, or workflows.
+- Add `Removed` for removed user-facing behavior or product capabilities.
 - Add `Security` for vulnerability-related changes.
 - Prefer one clear bullet per meaningful change.
-- Mention implementation details only when they matter to users, operators, or future maintainers.
+- Do not record docs-only, tests-only, chore-only, formatting-only, CI-only, internal refactor-only, release-process-only, or agent-workflow-only changes.
+- Mention implementation details only when they explain a user-visible outcome or required operator action.
 
 ## Initial Template
 
