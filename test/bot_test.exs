@@ -13,12 +13,17 @@ defmodule SaveIt.BotTest do
 
     previous_ex_gram = Application.get_all_env(:ex_gram)
     previous_save_it = Application.get_all_env(:save_it)
-    previous_small_sdk_telegram = Application.get_env(:tesla, SmallSdk.Telegram)
 
     Application.put_env(:ex_gram, :adapter, ExGram.Adapter.Test)
     Application.put_env(:ex_gram, :token, "test-token")
     Application.put_env(:save_it, :cobalt_api_url, base_url)
+    Application.put_env(:save_it, :google_api_url, "https://www.googleapis.com")
     Application.put_env(:save_it, :telegram_bot_token, "test-token")
+
+    Application.put_env(:save_it, :telegram_req_options,
+      adapter: &__MODULE__.TelegramDownloadAdapter.request/1
+    )
+
     Application.put_env(:save_it, :typesense_url, base_url)
     Application.put_env(:save_it, :typesense_api_key, "test-typesense-key")
     Application.put_env(:save_it, :timezone, System.get_env("TZ") || "Asia/Tokyo")
@@ -32,11 +37,11 @@ defmodule SaveIt.BotTest do
       })
     end
 
-    ExGramTestAdapter.backdoor_request("/sendMessage", %{message_id: 10})
-    ExGramTestAdapter.backdoor_request("/editMessageText", %{message_id: 10})
-    ExGramTestAdapter.backdoor_request("/deleteMessage", true)
+    ExGramTestAdapter.backdoor_request(:send_message, %{message_id: 10})
+    ExGramTestAdapter.backdoor_request(:edit_message_text, %{message_id: 10})
+    ExGramTestAdapter.backdoor_request(:delete_message, true)
 
-    ExGramTestAdapter.backdoor_request("/sendPhoto", %{
+    ExGramTestAdapter.backdoor_request(:send_photo, %{
       message_id: 20,
       photo: [%{file_id: "telegram-photo-file-id"}]
     })
@@ -46,7 +51,6 @@ defmodule SaveIt.BotTest do
         ExGramTestAdapter.clean()
       end
 
-      restore_env(:tesla, SmallSdk.Telegram, previous_small_sdk_telegram)
       restore_env(:ex_gram, previous_ex_gram)
       restore_env(:save_it, previous_save_it)
     end)
@@ -93,7 +97,7 @@ defmodule SaveIt.BotTest do
     assert document["source_message_url"] == "https://t.me/save_it_test_chat/20"
 
     assert Enum.any?(exgram_calls(), fn
-             {:post, "/bottest-token/sendPhoto", {:multipart, parts}} ->
+             {:post, :send_photo, {:multipart, parts}} ->
                {"caption", "created at 2024-06-01"} in parts and
                  not Enum.any?(parts, &match?({"show_caption_above_media", _}, &1))
 
@@ -167,9 +171,11 @@ defmodule SaveIt.BotTest do
   test "stores the Telegram thumbnail when a user-sent url cannot be resolved", _context do
     original_url = "https://example.com/unavailable"
 
-    Application.put_env(:tesla, SmallSdk.Telegram, adapter: __MODULE__.TelegramDownloadAdapter)
+    Application.put_env(:save_it, :telegram_req_options,
+      adapter: &__MODULE__.TelegramDownloadAdapter.request/1
+    )
 
-    ExGramTestAdapter.backdoor_request("/getFile", %{
+    ExGramTestAdapter.backdoor_request(:get_file, %{
       file_id: "link-thumbnail-file-id",
       file_path: "photos/link-thumbnail.jpg"
     })
@@ -194,7 +200,10 @@ defmodule SaveIt.BotTest do
     assert Jason.decode!(cobalt_body) == %{"url" => original_url}
 
     assert_receive {:telegram_download_request, telegram_env}
-    assert String.ends_with?(telegram_env.url, "/file/bottest-token/photos/link-thumbnail.jpg")
+
+    assert telegram_env.url
+           |> URI.to_string()
+           |> String.ends_with?("/file/bottest-token/photos/link-thumbnail.jpg")
 
     assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
 
@@ -226,7 +235,9 @@ defmodule SaveIt.BotTest do
       cleanup_cached_folder(purge_url)
     end)
 
-    Application.put_env(:tesla, SmallSdk.Telegram, adapter: __MODULE__.TelegramMediaGroupAdapter)
+    Application.put_env(:save_it, :telegram_req_options,
+      adapter: &__MODULE__.TelegramMediaGroupAdapter.request/1
+    )
 
     message = %{
       chat: %{id: 12_345, username: "save_it_test_chat"},
@@ -282,16 +293,18 @@ defmodule SaveIt.BotTest do
   end
 
   test "announces similar photos and sends multiple results as one media group", _context do
-    Application.put_env(:tesla, SmallSdk.Telegram, adapter: __MODULE__.TelegramDownloadAdapter)
+    Application.put_env(:save_it, :telegram_req_options,
+      adapter: &__MODULE__.TelegramDownloadAdapter.request/1
+    )
 
-    ExGramTestAdapter.backdoor_request("/getFile", %{
+    ExGramTestAdapter.backdoor_request(:get_file, %{
       file_id: "uploaded-photo-file-id",
       file_path: "photos/uploaded.jpg"
     })
 
-    ExGramTestAdapter.backdoor_request("/sendMessage", %{message_id: 30})
+    ExGramTestAdapter.backdoor_request(:send_message, %{message_id: 30})
 
-    ExGramTestAdapter.backdoor_request("/sendMediaGroup", [
+    ExGramTestAdapter.backdoor_request(:send_media_group, [
       %{message_id: 31},
       %{message_id: 32}
     ])
@@ -306,17 +319,16 @@ defmodule SaveIt.BotTest do
 
     calls = exgram_calls()
 
-    assert {:post, "/bottest-token/sendMessage",
-            %{chat_id: 12_345, text: "Similar photos found."}} in calls
+    assert {:post, :send_message, %{chat_id: 12_345, text: "Similar photos found."}} in calls
 
     media_group_calls =
       Enum.filter(calls, fn
-        {:post, "/bottest-token/sendMediaGroup", _body} -> true
+        {:post, :send_media_group, _body} -> true
         _ -> false
       end)
 
     assert [
-             {:post, "/bottest-token/sendMediaGroup", %{chat_id: 12_345, media: media}}
+             {:post, :send_media_group, %{chat_id: 12_345, media: media}}
            ] = media_group_calls
 
     assert Enum.map(media, & &1.media) == ["similar-file-1", "similar-file-2"]
@@ -325,16 +337,18 @@ defmodule SaveIt.BotTest do
   end
 
   test "announces similar photos and sends one result as one photo", _context do
-    Application.put_env(:tesla, SmallSdk.Telegram, adapter: __MODULE__.TelegramDownloadAdapter)
+    Application.put_env(:save_it, :telegram_req_options,
+      adapter: &__MODULE__.TelegramDownloadAdapter.request/1
+    )
 
-    ExGramTestAdapter.backdoor_request("/getFile", %{
+    ExGramTestAdapter.backdoor_request(:get_file, %{
       file_id: "uploaded-photo-file-id",
       file_path: "photos/uploaded.jpg"
     })
 
-    ExGramTestAdapter.backdoor_request("/sendMessage", %{message_id: 40})
+    ExGramTestAdapter.backdoor_request(:send_message, %{message_id: 40})
 
-    ExGramTestAdapter.backdoor_request("/sendPhoto", %{
+    ExGramTestAdapter.backdoor_request(:send_photo, %{
       message_id: 41,
       photo: [%{file_id: "single-similar-file"}]
     })
@@ -349,11 +363,10 @@ defmodule SaveIt.BotTest do
 
     calls = exgram_calls()
 
-    assert {:post, "/bottest-token/sendMessage",
-            %{chat_id: 12_346, text: "Similar photos found."}} in calls
+    assert {:post, :send_message, %{chat_id: 12_346, text: "Similar photos found."}} in calls
 
     assert Enum.any?(calls, fn
-             {:post, "/bottest-token/sendPhoto",
+             {:post, :send_photo,
               %{
                 chat_id: 12_346,
                 photo: "single-similar-file",
@@ -366,7 +379,7 @@ defmodule SaveIt.BotTest do
            end)
 
     refute Enum.any?(calls, fn
-             {:post, "/bottest-token/sendMediaGroup", _body} -> true
+             {:post, :send_media_group, _body} -> true
              _ -> false
            end)
   end
@@ -374,7 +387,10 @@ defmodule SaveIt.BotTest do
   test "silently skips similar photos that Telegram cannot send after media group failure",
        _context do
     Application.put_env(:ex_gram, :adapter, __MODULE__.SimilarMediaFailureAdapter)
-    Application.put_env(:tesla, SmallSdk.Telegram, adapter: __MODULE__.TelegramDownloadAdapter)
+
+    Application.put_env(:save_it, :telegram_req_options,
+      adapter: &__MODULE__.TelegramDownloadAdapter.request/1
+    )
 
     message = %{
       chat: %{id: 12_351},
@@ -401,7 +417,10 @@ defmodule SaveIt.BotTest do
 
   test "silently skips a single similar photo that Telegram cannot send", _context do
     Application.put_env(:ex_gram, :adapter, __MODULE__.SimilarMediaFailureAdapter)
-    Application.put_env(:tesla, SmallSdk.Telegram, adapter: __MODULE__.TelegramDownloadAdapter)
+
+    Application.put_env(:save_it, :telegram_req_options,
+      adapter: &__MODULE__.TelegramDownloadAdapter.request/1
+    )
 
     message = %{
       chat: %{id: 12_352},
@@ -427,14 +446,20 @@ defmodule SaveIt.BotTest do
 
     File.rm(stored_file_path)
     configure_google_drive(chat_id)
-    Application.put_env(:tesla, SmallSdk.Telegram, adapter: __MODULE__.TelegramDirectMediaAdapter)
-    Application.put_env(:tesla, SaveIt.GoogleDrive, adapter: __MODULE__.GoogleDriveAdapter)
+
+    Application.put_env(:save_it, :telegram_req_options,
+      adapter: &__MODULE__.TelegramDirectMediaAdapter.request/1
+    )
+
+    Application.put_env(:save_it, :google_drive_req_options,
+      adapter: &__MODULE__.GoogleDriveAdapter.request/1
+    )
 
     on_exit(fn ->
       File.rm(stored_file_path)
     end)
 
-    ExGramTestAdapter.backdoor_request("/getFile", %{
+    ExGramTestAdapter.backdoor_request(:get_file, %{
       file_id: "uploaded-photo-file-id",
       file_path: "photos/direct-photo.jpg"
     })
@@ -463,10 +488,14 @@ defmodule SaveIt.BotTest do
     refute Map.has_key?(document, "download_url")
 
     assert_receive {:google_drive_upload_request, drive_env}
-    assert drive_env.url == "https://www.googleapis.com/upload/drive/v3/files"
-    assert {"Authorization", "Bearer test-drive-token"} in drive_env.headers
-    assert binary_contains?(drive_env.body, ~s("name":"direct-photo.jpg"))
-    assert binary_contains?(drive_env.body, "test-drive-folder")
+
+    assert URI.to_string(drive_env.url) ==
+             "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart"
+
+    assert drive_env.headers["authorization"] == ["Bearer test-drive-token"]
+    drive_body = IO.iodata_to_binary(drive_env.body)
+    assert binary_contains?(drive_body, ~s("name":"direct-photo.jpg"))
+    assert binary_contains?(drive_body, "test-drive-folder")
     assert File.read(stored_file_path) == {:ok, test_jpeg()}
   end
 
@@ -478,8 +507,14 @@ defmodule SaveIt.BotTest do
     File.rm(stored_file_path)
     configure_google_drive(chat_id)
     Application.put_env(:ex_gram, :adapter, __MODULE__.BodyAwareExGramAdapter)
-    Application.put_env(:tesla, SmallSdk.Telegram, adapter: __MODULE__.TelegramDirectMediaAdapter)
-    Application.put_env(:tesla, SaveIt.GoogleDrive, adapter: __MODULE__.GoogleDriveAdapter)
+
+    Application.put_env(:save_it, :telegram_req_options,
+      adapter: &__MODULE__.TelegramDirectMediaAdapter.request/1
+    )
+
+    Application.put_env(:save_it, :google_drive_req_options,
+      adapter: &__MODULE__.GoogleDriveAdapter.request/1
+    )
 
     on_exit(fn ->
       File.rm(stored_file_path)
@@ -511,10 +546,11 @@ defmodule SaveIt.BotTest do
     assert document["source_message_url"] == "https://t.me/save_it_directs/322"
 
     assert_receive {:google_drive_upload_request, drive_env}
-    assert {"Authorization", "Bearer test-drive-token"} in drive_env.headers
-    assert binary_contains?(drive_env.body, ~s("name":"direct-video.mp4"))
-    assert binary_contains?(drive_env.body, "test-drive-folder")
-    assert binary_contains?(drive_env.body, test_mp4())
+    assert drive_env.headers["authorization"] == ["Bearer test-drive-token"]
+    drive_body = IO.iodata_to_binary(drive_env.body)
+    assert binary_contains?(drive_body, ~s("name":"direct-video.mp4"))
+    assert binary_contains?(drive_body, "test-drive-folder")
+    assert binary_contains?(drive_body, test_mp4())
     assert File.read(stored_file_path) == {:ok, test_mp4()}
 
     assert_receive {:exgram_request, :post, "/bottest-token/sendMessage",
@@ -535,8 +571,14 @@ defmodule SaveIt.BotTest do
 
     configure_google_drive(chat_id)
     Application.put_env(:ex_gram, :adapter, __MODULE__.BodyAwareExGramAdapter)
-    Application.put_env(:tesla, SmallSdk.Telegram, adapter: __MODULE__.TelegramDirectMediaAdapter)
-    Application.put_env(:tesla, SaveIt.GoogleDrive, adapter: __MODULE__.GoogleDriveAdapter)
+
+    Application.put_env(:save_it, :telegram_req_options,
+      adapter: &__MODULE__.TelegramDirectMediaAdapter.request/1
+    )
+
+    Application.put_env(:save_it, :google_drive_req_options,
+      adapter: &__MODULE__.GoogleDriveAdapter.request/1
+    )
 
     message = %{
       chat: %{id: chat_id},
@@ -578,8 +620,14 @@ defmodule SaveIt.BotTest do
     File.rm(stored_file_path)
     configure_google_drive(chat_id)
     Application.put_env(:ex_gram, :adapter, __MODULE__.BodyAwareExGramAdapter)
-    Application.put_env(:tesla, SmallSdk.Telegram, adapter: __MODULE__.TelegramDirectMediaAdapter)
-    Application.put_env(:tesla, SaveIt.GoogleDrive, adapter: __MODULE__.GoogleDriveAdapter)
+
+    Application.put_env(:save_it, :telegram_req_options,
+      adapter: &__MODULE__.TelegramDirectMediaAdapter.request/1
+    )
+
+    Application.put_env(:save_it, :google_drive_req_options,
+      adapter: &__MODULE__.GoogleDriveAdapter.request/1
+    )
 
     on_exit(fn ->
       File.rm(stored_file_path)
@@ -619,7 +667,7 @@ defmodule SaveIt.BotTest do
   end
 
   test "returns details for a replied photo", _context do
-    ExGramTestAdapter.backdoor_request("/sendMessage", %{message_id: 30})
+    ExGramTestAdapter.backdoor_request(:send_message, %{message_id: 30})
 
     chat_id = 12_345
     original_url = "https://x.com/example/status/1?utm_source=telegram"
@@ -658,7 +706,7 @@ defmodule SaveIt.BotTest do
   end
 
   test "omits missing values from photo details", _context do
-    ExGramTestAdapter.backdoor_request("/sendMessage", %{message_id: 30})
+    ExGramTestAdapter.backdoor_request(:send_message, %{message_id: 30})
 
     chat_id = 12_345
 
@@ -700,13 +748,11 @@ defmodule SaveIt.BotTest do
   end
 
   defp sent_message_body do
-    %{calls: calls} = :sys.get_state(ExGram.Adapter.Test)
-
-    calls
+    ExGramTestAdapter.get_calls()
     |> Enum.reverse()
     |> Enum.find_value(fn
-      {:post, path, body} ->
-        if String.ends_with?(path, "/sendMessage"), do: body
+      {:post, :send_message, body} ->
+        body
 
       _ ->
         nil
@@ -732,13 +778,8 @@ defmodule SaveIt.BotTest do
     end)
   end
 
-  defp restore_env(app, key, nil), do: Application.delete_env(app, key)
-  defp restore_env(app, key, value), do: Application.put_env(app, key, value)
-
   defp exgram_calls do
-    ExGram.Adapter.Test
-    |> :sys.get_state()
-    |> Map.fetch!(:calls)
+    ExGramTestAdapter.get_calls()
   end
 
   defp configure_google_drive(chat_id) do
@@ -782,16 +823,23 @@ defmodule SaveIt.BotTest do
   end
 
   defp multipart_field(multipart, name) do
-    multipart.parts
-    |> Enum.find(fn part -> part.dispositions[:name] == name end)
-    |> Map.fetch!(:body)
+    multipart
+    |> IO.iodata_to_binary()
+    |> multipart_field_from_binary(name)
+  end
+
+  defp multipart_field_from_binary(multipart, name) do
+    [_before_part, part] = :binary.split(multipart, ~s(name="#{name}"))
+    [_headers, body] = :binary.split(part, "\r\n\r\n")
+    [value, _rest] = :binary.split(body, "\r\n--")
+    value
   end
 
   defmodule BodyAwareExGramAdapter do
     @behaviour ExGram.Adapter
 
     @impl ExGram.Adapter
-    def request(verb, path, body) do
+    def request(verb, path, body, _opts) do
       send(self(), {:exgram_request, verb, path, body})
 
       case {verb, path, body} do
@@ -829,21 +877,19 @@ defmodule SaveIt.BotTest do
   end
 
   defmodule TelegramDirectMediaAdapter do
-    @behaviour Tesla.Adapter
-
-    @impl Tesla.Adapter
-    def call(%Tesla.Env{method: :get, url: url} = env, _opts) do
-      send(self(), {:telegram_download_request, env})
+    def request(%Req.Request{method: :get, url: url} = request) do
+      url = URI.to_string(url)
+      send(self(), {:telegram_download_request, request})
 
       cond do
         String.contains?(url, "timeout-video.mp4") ->
-          {:error, :timeout}
+          {request, Req.TransportError.exception(reason: :timeout)}
 
         String.contains?(url, "direct-video.mp4") ->
-          {:ok, %{env | status: 200, body: SaveIt.BotTest.test_mp4()}}
+          {request, %Req.Response{status: 200, body: SaveIt.BotTest.test_mp4()}}
 
         true ->
-          {:ok, %{env | status: 200, body: SaveIt.BotTest.test_jpeg()}}
+          {request, %Req.Response{status: 200, body: SaveIt.BotTest.test_jpeg()}}
       end
     end
   end
@@ -852,7 +898,7 @@ defmodule SaveIt.BotTest do
     @behaviour ExGram.Adapter
 
     @impl ExGram.Adapter
-    def request(verb, path, body) do
+    def request(verb, path, body, _opts) do
       send(self(), {:exgram_request, verb, path, body})
 
       case {verb, path, body} do
@@ -898,51 +944,41 @@ defmodule SaveIt.BotTest do
   end
 
   defmodule GoogleDriveAdapter do
-    @behaviour Tesla.Adapter
+    def request(%Req.Request{} = request) do
+      send(self(), {:google_drive_upload_request, request})
 
-    @impl Tesla.Adapter
-    def call(%Tesla.Env{} = env, _opts) do
-      send(self(), {:google_drive_upload_request, env})
-      {:ok, %{env | status: 200, body: %{"id" => "drive-file-id"}}}
+      {request, %Req.Response{status: 200, body: %{"id" => "drive-file-id"}}}
     end
   end
 
   defmodule TelegramMediaGroupAdapter do
-    @behaviour Tesla.Adapter
+    def request(%Req.Request{} = request) do
+      send(self(), {:telegram_media_group_request, request})
 
-    @impl Tesla.Adapter
-    def call(%Tesla.Env{} = env, _opts) do
-      send(self(), {:telegram_media_group_request, env})
-
-      {:ok,
-       %Tesla.Env{
-         env
-         | status: 200,
-           body: %{
-             "ok" => true,
-             "result" => [
-               %{"message_id" => 101, "photo" => [%{"file_id" => "group-file-1"}]},
-               %{"message_id" => 102, "photo" => [%{"file_id" => "group-file-2"}]},
-               %{"message_id" => 103, "photo" => [%{"file_id" => "group-file-3"}]},
-               %{"message_id" => 104, "photo" => [%{"file_id" => "group-file-4"}]}
-             ]
-           }
+      {request,
+       %Req.Response{
+         status: 200,
+         body: %{
+           "ok" => true,
+           "result" => [
+             %{"message_id" => 101, "photo" => [%{"file_id" => "group-file-1"}]},
+             %{"message_id" => 102, "photo" => [%{"file_id" => "group-file-2"}]},
+             %{"message_id" => 103, "photo" => [%{"file_id" => "group-file-3"}]},
+             %{"message_id" => 104, "photo" => [%{"file_id" => "group-file-4"}]}
+           ]
+         }
        }}
     end
   end
 
   defmodule TelegramDownloadAdapter do
-    @behaviour Tesla.Adapter
+    def request(%Req.Request{method: :get} = request) do
+      send(self(), {:telegram_download_request, request})
 
-    @impl Tesla.Adapter
-    def call(%Tesla.Env{method: :get} = env, _opts) do
-      send(self(), {:telegram_download_request, env})
-
-      {:ok,
-       %Tesla.Env{
-         env
-         | status: 200,
-           body: <<255, 216, 255, 224, 0, 16, 74, 70, 73, 70>>
+      {request,
+       %Req.Response{
+         status: 200,
+         body: <<255, 216, 255, 224, 0, 16, 74, 70, 73, 70>>
        }}
     end
   end

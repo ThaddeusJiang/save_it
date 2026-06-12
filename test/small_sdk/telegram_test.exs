@@ -3,29 +3,19 @@ defmodule SmallSdk.TelegramTest do
 
   alias SmallSdk.Telegram
 
-  defmodule TestAdapter do
-    @behaviour Tesla.Adapter
-
-    @impl Tesla.Adapter
-    def call(%Tesla.Env{} = env, _opts) do
-      send(Application.fetch_env!(:save_it, :test_pid), {:telegram_request, env})
-      {:ok, %Tesla.Env{env | status: 200, body: %{"ok" => true, "result" => []}}}
-    end
-  end
-
   setup do
     previous_token = Application.get_env(:save_it, :telegram_bot_token)
     previous_test_pid = Application.get_env(:save_it, :test_pid)
-    previous_adapter = Application.get_env(:tesla, SmallSdk.Telegram)
+    previous_req_options = Application.get_env(:save_it, :telegram_req_options)
 
     Application.put_env(:save_it, :telegram_bot_token, "test-token")
     Application.put_env(:save_it, :test_pid, self())
-    Application.put_env(:tesla, SmallSdk.Telegram, adapter: TestAdapter)
+    Application.put_env(:save_it, :telegram_req_options, adapter: &__MODULE__.request_adapter/1)
 
     on_exit(fn ->
       restore_env(:save_it, :telegram_bot_token, previous_token)
       restore_env(:save_it, :test_pid, previous_test_pid)
-      restore_env(:tesla, SmallSdk.Telegram, previous_adapter)
+      restore_env(:save_it, :telegram_req_options, previous_req_options)
     end)
 
     :ok
@@ -42,42 +32,29 @@ defmodule SmallSdk.TelegramTest do
              )
 
     assert_receive {:telegram_request, env}
-    assert env.url == "https://api.telegram.org/bottest-token/sendMediaGroup"
+    assert URI.to_string(env.url) == "https://api.telegram.org/bottest-token/sendMediaGroup"
 
-    multipart = env.body
-    assert %Tesla.Multipart{} = multipart
+    multipart = IO.iodata_to_binary(env.body)
 
-    assert multipart_field(multipart, "chat_id") == "123"
+    assert multipart =~ ~s(name="chat_id")
+    assert multipart =~ "123"
 
-    assert multipart_file_part(multipart, "media0").body == <<1, 2, 3>>
-    assert multipart_file_part(multipart, "media0").dispositions[:filename] == "photo.jpg"
-
-    media =
-      multipart
-      |> multipart_field("media")
-      |> Jason.decode!()
-
-    assert media == [
-             %{
-               "type" => "photo",
-               "media" => "attach://media0",
-               "caption" => "created at 2024-06-01"
-             }
-           ]
+    assert multipart =~ ~s(name="media0"; filename="photo.jpg")
+    assert multipart =~ <<1, 2, 3>>
+    assert multipart =~ ~s(name="media")
+    assert multipart =~ ~s("type":"photo")
+    assert multipart =~ ~s("media":"attach://media0")
+    assert multipart =~ ~s("caption":"created at 2024-06-01")
   end
 
-  defp multipart_field(multipart, name) do
-    multipart
-    |> multipart_part(name)
-    |> Map.fetch!(:body)
-  end
+  def request_adapter(request) do
+    send(Application.fetch_env!(:save_it, :test_pid), {:telegram_request, request})
 
-  defp multipart_file_part(multipart, name) do
-    multipart_part(multipart, name)
-  end
-
-  defp multipart_part(multipart, name) do
-    Enum.find(multipart.parts, fn part -> part.dispositions[:name] == name end)
+    {request,
+     %Req.Response{
+       status: 200,
+       body: %{"ok" => true, "result" => []}
+     }}
   end
 
   defp restore_env(app, key, nil), do: Application.delete_env(app, key)

@@ -2,14 +2,7 @@ defmodule SaveIt.GoogleOAuth2DeviceFlow do
   @moduledoc false
 
   require Logger
-  use Tesla
-
-  plug(Tesla.Middleware.BaseUrl, "https://oauth2.googleapis.com")
-  plug(Tesla.Middleware.JSON)
-
-  plug(Tesla.Middleware.Headers, [
-    {"Content-Type", "application/x-www-form-urlencoded"}
-  ])
+  @google_oauth_api_url "https://oauth2.googleapis.com"
 
   def get_device_code do
     {client_id, _} = get_env()
@@ -19,15 +12,17 @@ defmodule SaveIt.GoogleOAuth2DeviceFlow do
       scope: "https://www.googleapis.com/auth/drive.file"
     }
 
-    post("/device/code", body)
+    "/device/code"
+    |> build_request()
+    |> Req.post(form: body)
     |> handle_response()
   end
 
-  defp handle_response({:ok, %Tesla.Env{status: 200, body: body}}) do
+  defp handle_response({:ok, %{status: 200, body: body}}) do
     {:ok, body}
   end
 
-  defp handle_response({:ok, %Tesla.Env{status: status, body: body}}) do
+  defp handle_response({:ok, %{status: status, body: body}}) do
     Logger.warning("handle_response, status: #{status}, body: #{inspect(body)}")
     {:error, %{status: status, body: body}}
   end
@@ -47,7 +42,9 @@ defmodule SaveIt.GoogleOAuth2DeviceFlow do
       grant_type: "urn:ietf:params:oauth:grant-type:device_code"
     }
 
-    post("/token", body)
+    "/token"
+    |> build_request()
+    |> Req.post(form: body)
     |> handle_response()
   end
 
@@ -56,5 +53,19 @@ defmodule SaveIt.GoogleOAuth2DeviceFlow do
     client_secret = Application.fetch_env!(:save_it, :google_oauth_client_secret)
 
     {client_id, client_secret}
+  end
+
+  defp build_request(path) do
+    req_options =
+      :save_it
+      |> Application.get_env(:google_oauth_req_options, [])
+      |> Keyword.put_new(
+        :base_url,
+        Application.get_env(:save_it, :google_oauth_api_url, @google_oauth_api_url)
+      )
+      |> Keyword.put_new(:retry, false)
+      |> Keyword.put(:url, path)
+
+    Req.new(req_options)
   end
 end

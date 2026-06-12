@@ -11,6 +11,7 @@ before the CalVer migration retain their original version labels.
 ### Changed
 
 - Simplify photo details to show only the source message URL, original URL, and saved timestamp.
+- Upgrade Telegram and HTTP dependencies, and run Telegram, Google Drive, and Google OAuth requests through Req instead of Tesla.
 
 ## [2026.6.12-rc.1] - 2026-06-12
 
