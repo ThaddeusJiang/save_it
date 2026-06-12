@@ -562,7 +562,6 @@ defmodule SaveIt.Bot do
 
         bot_send_file(context.chat_id, downloaded_file, {:file, downloaded_file},
           source_url: context.original_url,
-          download_url: context.download_url,
           source_chat: context.chat,
           caption: download_caption(context)
         )
@@ -744,8 +743,7 @@ defmodule SaveIt.Bot do
       bot_send_media_group(
         chat_id,
         Enum.map(files, fn %DownloadedFile{} = file ->
-          {file.file_name, {:file_content, file.file_content, file.file_name}, source_url,
-           file.download_url}
+          {file.file_name, {:file_content, file.file_content, file.file_name}, source_url}
         end),
         source_chat: source_chat,
         caption: caption
@@ -766,7 +764,7 @@ defmodule SaveIt.Bot do
       chat_id,
       file.file_name,
       {:file_content, file.file_content, file.file_name},
-      Keyword.put_new(opts, :download_url, file.download_url)
+      opts
     )
   end
 
@@ -801,7 +799,7 @@ defmodule SaveIt.Bot do
       {:ok, messages} ->
         Enum.zip(files, messages)
         |> Enum.each(fn
-          {{_file_name, content, source_url, download_url}, msg} ->
+          {{_file_name, content, source_url, _download_url}, msg} ->
             file_id = get_file_id(msg)
             image_base64 = encode_file_content(content)
 
@@ -810,7 +808,6 @@ defmodule SaveIt.Bot do
               caption: caption,
               file_id: file_id,
               url: source_url,
-              download_url: download_url,
               belongs_to_id: chat_id
             }
             |> Map.merge(source_message_fields(source_chat, message_id(msg)))
@@ -848,10 +845,9 @@ defmodule SaveIt.Bot do
         Logger.error("Failed to send media group: #{inspect(reason)}")
 
         Enum.each(files, fn
-          {file_name, content, source_url, download_url} ->
+          {file_name, content, source_url, _download_url} ->
             bot_send_file(chat_id, file_name, content,
               source_url: source_url,
-              download_url: download_url,
               source_chat: source_chat,
               caption: caption
             )
@@ -878,7 +874,6 @@ defmodule SaveIt.Bot do
 
     caption = Keyword.get(opts, :caption, "")
     source_url = Keyword.get(opts, :source_url)
-    download_url = Keyword.get(opts, :download_url)
     source_chat = Keyword.get(opts, :source_chat) || %{id: chat_id}
 
     if telegram_upload_too_large?(content) do
@@ -888,7 +883,6 @@ defmodule SaveIt.Bot do
       do_bot_send_file(chat_id, file_name, content,
         caption: caption,
         source_url: source_url,
-        download_url: download_url,
         source_chat: source_chat
       )
     end
@@ -897,7 +891,6 @@ defmodule SaveIt.Bot do
   defp do_bot_send_file(chat_id, file_name, content, opts) do
     caption = Keyword.fetch!(opts, :caption)
     source_url = Keyword.get(opts, :source_url)
-    download_url = Keyword.get(opts, :download_url)
     source_chat = Keyword.fetch!(opts, :source_chat)
 
     case file_extension(file_name) do
@@ -914,7 +907,6 @@ defmodule SaveIt.Bot do
           caption: caption,
           file_id: file_id,
           url: source_url,
-          download_url: download_url,
           belongs_to_id: chat_id
         }
         |> Map.merge(source_message_fields(source_chat, message_id(msg)))
@@ -1130,18 +1122,15 @@ defmodule SaveIt.Bot do
         send_message(chat_id, "Photo details not found.")
 
       photo ->
-        send_message(chat_id, detail_message(reply_to_message, photo, file_id))
+        send_message(chat_id, detail_message(reply_to_message, photo))
     end
   end
 
-  defp detail_message(reply_to_message, photo, file_id) do
+  defp detail_message(reply_to_message, photo) do
     [
-      detail_line("Sent at", format_unix_time(Map.get(reply_to_message, :date))),
-      detail_line("Original URL", Map.get(photo, "url")),
-      detail_line("Download URL", Map.get(photo, "download_url")),
       detail_line("Message URL", Map.get(photo, "source_message_url")),
-      detail_line("File ID", file_id),
-      detail_line("Typesense ID", Map.get(photo, "id"))
+      detail_line("Original URL", Map.get(photo, "url")),
+      detail_line("Saved at", saved_at(photo, reply_to_message))
     ]
     |> Enum.reject(&is_nil/1)
     |> Enum.join("\n")
@@ -1150,6 +1139,10 @@ defmodule SaveIt.Bot do
   defp detail_line(_label, nil), do: nil
   defp detail_line(_label, ""), do: nil
   defp detail_line(label, value), do: "#{label}: #{value}"
+
+  defp saved_at(photo, reply_to_message) do
+    format_unix_time(Map.get(photo, "inserted_at") || Map.get(reply_to_message, :date))
+  end
 
   defp format_unix_time(timestamp) when is_integer(timestamp) do
     timestamp

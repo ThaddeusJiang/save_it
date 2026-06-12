@@ -85,7 +85,7 @@ defmodule SaveIt.BotTest do
     document = Jason.decode!(typesense_body)
 
     assert document["url"] == original_url
-    assert document["download_url"] == download_url
+    refute Map.has_key?(document, "download_url")
     assert document["caption"] == "created at 2024-06-01"
     assert document["file_id"] == "telegram-photo-file-id"
     assert document["belongs_to_id"] == "12345"
@@ -262,15 +262,7 @@ defmodule SaveIt.BotTest do
 
     assert Enum.map(documents, & &1["url"]) == List.duplicate(original_url, 4)
     assert Enum.map(documents, & &1["caption"]) == List.duplicate("created at 2024-06-01", 4)
-
-    assert Enum.map(documents, & &1["download_url"]) |> Enum.sort() ==
-             [
-               "#{base_test_server_url()}/downloaded/photo-1.jpg",
-               "#{base_test_server_url()}/downloaded/photo-2.jpg",
-               "#{base_test_server_url()}/downloaded/photo-3.jpg",
-               "#{base_test_server_url()}/downloaded/photo-4.jpg"
-             ]
-             |> Enum.sort()
+    refute Enum.any?(documents, &Map.has_key?(&1, "download_url"))
 
     assert Enum.map(documents, & &1["file_id"]) == [
              "group-file-1",
@@ -631,7 +623,6 @@ defmodule SaveIt.BotTest do
 
     chat_id = 12_345
     original_url = "https://x.com/example/status/1?utm_source=telegram"
-    download_url = "#{base_test_server_url()}/downloaded/photo.jpg"
 
     message = %{
       chat: %{id: chat_id},
@@ -654,11 +645,16 @@ defmodule SaveIt.BotTest do
     request_body = sent_message_body()
 
     assert request_body.chat_id == chat_id
-    assert request_body.text =~ "Sent at: 2024-06-01 00:00:00 UTC"
-    assert request_body.text =~ "Original URL: #{original_url}"
-    assert request_body.text =~ "Download URL: #{download_url}"
-    assert request_body.text =~ "Message URL: https://t.me/save_it_test_chat/20"
-    assert request_body.text =~ "File ID: telegram-photo-file-id"
+
+    assert request_body.text ==
+             Enum.join(
+               [
+                 "Message URL: https://t.me/save_it_test_chat/20",
+                 "Original URL: #{original_url}",
+                 "Saved at: 2024-06-01 00:00:00 UTC"
+               ],
+               "\n"
+             )
   end
 
   test "omits missing values from photo details", _context do
@@ -684,9 +680,11 @@ defmodule SaveIt.BotTest do
     request_body = sent_message_body()
 
     assert request_body.chat_id == chat_id
-    assert request_body.text == "File ID: old-photo-file-id\nTypesense ID: old-typesense-photo-id"
+    assert request_body.text == "Saved at: 2024-06-01 00:00:00 UTC"
     refute request_body.text =~ "N/A"
     refute request_body.text =~ "Sent at:"
+    refute request_body.text =~ "File ID:"
+    refute request_body.text =~ "Typesense ID:"
     refute request_body.text =~ "Original URL:"
     refute request_body.text =~ "Download URL:"
     refute request_body.text =~ "Message URL:"
@@ -699,10 +697,6 @@ defmodule SaveIt.BotTest do
 
     File.rm(url_cache_path)
     File.rm(file_path)
-  end
-
-  defp base_test_server_url do
-    Application.fetch_env!(:save_it, :typesense_url)
   end
 
   defp sent_message_body do
