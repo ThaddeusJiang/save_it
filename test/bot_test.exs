@@ -21,6 +21,7 @@ defmodule SaveIt.BotTest do
     Application.put_env(:save_it, :telegram_bot_token, "test-token")
     Application.put_env(:save_it, :typesense_url, base_url)
     Application.put_env(:save_it, :typesense_api_key, "test-typesense-key")
+    Application.put_env(:save_it, :timezone, System.get_env("TZ") || "Asia/Tokyo")
 
     if Process.whereis(ExGram.Adapter.Test) do
       ExGramTestAdapter.clean()
@@ -54,6 +55,9 @@ defmodule SaveIt.BotTest do
   end
 
   test "stores the original user-sent url when indexing a downloaded photo", %{base_url: base_url} do
+    with_env("TZ", nil)
+    Application.put_env(:save_it, :timezone, "Asia/Tokyo")
+
     original_url = "https://x.com/example/status/1?utm_source=telegram"
     download_url = base_url <> "/downloaded/photo.jpg"
     cached_file_name = "bot-original-url-test.jpg"
@@ -67,6 +71,7 @@ defmodule SaveIt.BotTest do
 
     message = %{
       chat: %{id: 12_345, username: "save_it_test_chat"},
+      date: 1_717_170_000,
       message_id: 99
     }
 
@@ -81,10 +86,82 @@ defmodule SaveIt.BotTest do
 
     assert document["url"] == original_url
     assert document["download_url"] == download_url
+    assert document["caption"] == "created at 2024-06-01"
     assert document["file_id"] == "telegram-photo-file-id"
     assert document["belongs_to_id"] == "12345"
     assert document["source_message_id"] == 20
     assert document["source_message_url"] == "https://t.me/save_it_test_chat/20"
+
+    assert Enum.any?(exgram_calls(), fn
+             {:post, "/bottest-token/sendPhoto", {:multipart, parts}} ->
+               {"caption", "created at 2024-06-01"} in parts and
+                 not Enum.any?(parts, &match?({"show_caption_above_media", _}, &1))
+
+             _ ->
+               false
+           end)
+  end
+
+  test "uses TZ when captioning a downloaded photo", %{base_url: base_url} do
+    with_env("TZ", "UTC")
+    Application.put_env(:save_it, :timezone, System.get_env("TZ") || "Asia/Tokyo")
+
+    original_url = "https://x.com/example/status/1?utm_source=telegram"
+    download_url = base_url <> "/downloaded/photo.jpg"
+    cached_file_name = "bot-time-zone-test.jpg"
+    cached_file_content = <<255, 216, 255, 224, 0, 16, 74, 70, 73, 70>>
+
+    FileHelper.write_file(cached_file_name, cached_file_content, download_url)
+
+    on_exit(fn ->
+      cleanup_cached_file(download_url, cached_file_name)
+    end)
+
+    message = %{
+      chat: %{id: 12_345, username: "save_it_test_chat"},
+      date: 1_717_170_000,
+      message_id: 98
+    }
+
+    assert {:ok, true} = Bot.handle({:text, original_url, message}, nil)
+
+    assert_receive {:test_http_request, :post, "/", _cobalt_body}
+    assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
+
+    document = Jason.decode!(typesense_body)
+
+    assert document["caption"] == "created at 2024-05-31"
+  end
+
+  test "uses configured timezone when TZ is not set", %{base_url: base_url} do
+    with_env("TZ", nil)
+    Application.put_env(:save_it, :timezone, "UTC")
+
+    original_url = "https://x.com/example/status/1?utm_source=telegram"
+    download_url = base_url <> "/downloaded/photo.jpg"
+    cached_file_name = "bot-config-default-time-zone-test.jpg"
+    cached_file_content = <<255, 216, 255, 224, 0, 16, 74, 70, 73, 70>>
+
+    FileHelper.write_file(cached_file_name, cached_file_content, download_url)
+
+    on_exit(fn ->
+      cleanup_cached_file(download_url, cached_file_name)
+    end)
+
+    message = %{
+      chat: %{id: 12_345, username: "save_it_test_chat"},
+      date: 1_717_170_000,
+      message_id: 97
+    }
+
+    assert {:ok, true} = Bot.handle({:text, original_url, message}, nil)
+
+    assert_receive {:test_http_request, :post, "/", _cobalt_body}
+    assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
+
+    document = Jason.decode!(typesense_body)
+
+    assert document["caption"] == "created at 2024-05-31"
   end
 
   test "stores the Telegram thumbnail when a user-sent url cannot be resolved", _context do
@@ -153,6 +230,7 @@ defmodule SaveIt.BotTest do
 
     message = %{
       chat: %{id: 12_345, username: "save_it_test_chat"},
+      date: 1_717_200_000,
       message_id: 100
     }
 
@@ -164,7 +242,15 @@ defmodule SaveIt.BotTest do
              "url" => "https://x.com/JennerItGirls/status/2057529104535023815"
            }
 
-    assert_receive {:telegram_media_group_request, _conn}
+    assert_receive {:telegram_media_group_request, conn}
+
+    media =
+      conn.body
+      |> multipart_field("media")
+      |> Jason.decode!()
+
+    assert Enum.map(media, & &1["caption"]) == List.duplicate("created at 2024-06-01", 4)
+    refute Enum.any?(media, &Map.has_key?(&1, "show_caption_above_media"))
 
     documents =
       Enum.map(1..4, fn _ ->
@@ -175,6 +261,7 @@ defmodule SaveIt.BotTest do
       end)
 
     assert Enum.map(documents, & &1["url"]) == List.duplicate(original_url, 4)
+    assert Enum.map(documents, & &1["caption"]) == List.duplicate("created at 2024-06-01", 4)
 
     assert Enum.map(documents, & &1["download_url"]) |> Enum.sort() ==
              [
@@ -242,6 +329,7 @@ defmodule SaveIt.BotTest do
 
     assert Enum.map(media, & &1.media) == ["similar-file-1", "similar-file-2"]
     assert Enum.map(media, & &1.caption) == ["first similar", "second similar"]
+    refute Enum.any?(media, &Map.has_key?(&1, :show_caption_above_media))
   end
 
   test "announces similar photos and sends one result as one photo", _context do
@@ -274,8 +362,12 @@ defmodule SaveIt.BotTest do
 
     assert Enum.any?(calls, fn
              {:post, "/bottest-token/sendPhoto",
-              %{chat_id: 12_346, photo: "single-similar-file", caption: "single similar"}} ->
-               true
+              %{
+                chat_id: 12_346,
+                photo: "single-similar-file",
+                caption: "single similar"
+              } = body} ->
+               not Map.has_key?(body, :show_caption_above_media)
 
              _ ->
                false
@@ -675,6 +767,30 @@ defmodule SaveIt.BotTest do
 
   defp binary_contains?(binary, pattern) do
     :binary.match(binary, pattern) != :nomatch
+  end
+
+  defp with_env(key, value) do
+    previous_value = System.get_env(key)
+
+    if is_nil(value) do
+      System.delete_env(key)
+    else
+      System.put_env(key, value)
+    end
+
+    on_exit(fn ->
+      if is_nil(previous_value) do
+        System.delete_env(key)
+      else
+        System.put_env(key, previous_value)
+      end
+    end)
+  end
+
+  defp multipart_field(multipart, name) do
+    multipart.parts
+    |> Enum.find(fn part -> part.dispositions[:name] == name end)
+    |> Map.fetch!(:body)
   end
 
   defmodule BodyAwareExGramAdapter do

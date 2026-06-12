@@ -37,6 +37,7 @@ defmodule SaveIt.MixProject do
       {:hackney, "~> 1.12"},
       {:jason, "~> 1.4.1"},
       {:req, "~> 0.5.0"},
+      {:tzdata, "1.1.3"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false}

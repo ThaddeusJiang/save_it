@@ -31,11 +31,15 @@ defmodule SmallSdk.TelegramTest do
     :ok
   end
 
-  test "send_media_group accepts files with source urls" do
+  test "send_media_group accepts files with source urls and captions every media item" do
     assert {:ok, []} =
-             Telegram.send_media_group(123, [
-               {"photo.jpg", {:file_content, <<1, 2, 3>>, "photo.jpg"}, "https://x.com/example"}
-             ])
+             Telegram.send_media_group(
+               123,
+               [
+                 {"photo.jpg", {:file_content, <<1, 2, 3>>, "photo.jpg"}, "https://x.com/example"}
+               ],
+               caption: "created at 2024-06-01"
+             )
 
     assert_receive {:telegram_request, env}
     assert env.url == "https://api.telegram.org/bottest-token/sendMediaGroup"
@@ -53,7 +57,13 @@ defmodule SmallSdk.TelegramTest do
       |> multipart_field("media")
       |> Jason.decode!()
 
-    assert media == [%{"type" => "photo", "media" => "attach://media0"}]
+    assert media == [
+             %{
+               "type" => "photo",
+               "media" => "attach://media0",
+               "caption" => "created at 2024-06-01"
+             }
+           ]
   end
 
   defp multipart_field(multipart, name) do

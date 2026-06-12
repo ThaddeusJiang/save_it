@@ -7,9 +7,10 @@ defmodule SmallSdk.Telegram do
 
   plug(Tesla.Middleware.BaseUrl, "https://api.telegram.org")
 
-  def send_media_group(chat_id, files) when is_list(files) do
+  def send_media_group(chat_id, files, opts \\ []) when is_list(files) do
     token = get_env()
     path = "/bot#{token}/sendMediaGroup"
+    caption = Keyword.get(opts, :caption, "")
 
     {media_entries, multipart} =
       files
@@ -18,10 +19,12 @@ defmodule SmallSdk.Telegram do
         {_file_name, content} = media_group_file_parts(file)
         part_name = "media#{index}"
 
-        media = %{
-          type: "photo",
-          media: "attach://#{part_name}"
-        }
+        media =
+          %{
+            type: "photo",
+            media: "attach://#{part_name}"
+          }
+          |> put_caption(caption)
 
         mp =
           case content do
@@ -53,6 +56,10 @@ defmodule SmallSdk.Telegram do
         {:error, error}
     end
   end
+
+  defp put_caption(media, ""), do: media
+  defp put_caption(media, nil), do: media
+  defp put_caption(media, caption), do: Map.put(media, :caption, caption)
 
   defp media_group_file_parts({file_name, content, _source_url, _download_url}),
     do: {file_name, content}

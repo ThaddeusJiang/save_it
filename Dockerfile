@@ -2,6 +2,7 @@ FROM elixir:1.17.2 AS base
 
 ENV MIX_ENV=prod
 ENV LANG=C.UTF-8
+ENV TZ=Asia/Tokyo
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \

@@ -10,11 +10,13 @@ before the CalVer migration retain their original version labels.
 
 ### Added
 
+- Add timezone-aware `created at YYYY-MM-DD` captions to media downloaded from URLs, including every item in Telegram media groups. Caption dates use `tzdata` with the standard `TZ` environment variable, defaulting to Tokyo time.
 - Store Telegram source message links for indexed media and show them in photo details when a jump URL can be built.
 - Save directly uploaded Telegram photos and videos to Typesense, and upload them to Google Drive when Drive is configured.
 
 ### Changed
 
+- Show Telegram media captions below photos and videos instead of above the media.
 - Show only available fields in photo details instead of rendering empty `N/A` rows.
 - Log original-file backup failures for directly uploaded Telegram videos without sending a user-facing message.
 - Silently skip unavailable similar media results instead of sending user-facing error messages.
