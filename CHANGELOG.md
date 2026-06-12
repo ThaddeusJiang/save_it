@@ -8,6 +8,8 @@ before the CalVer migration retain their original version labels.
 
 ## [Unreleased]
 
+## [2026.6.13] - 2026-06-13
+
 ### Changed
 
 - Simplify photo details to show only the source message URL, original URL, and saved timestamp.
