@@ -306,6 +306,9 @@ defmodule SaveIt.BotTest do
     refute_receive {:test_http_request, :get, "/preview.jpg", ""}
 
     assert File.exists?(Path.join(["./data/storage/files", cached_video_name(base_url)]))
+
+    assert File.read(Path.join(["./data/storage/files", cached_video_preview_name(base_url)])) ==
+             {:ok, test_og_jpeg()}
   end
 
   test "indexes a downloaded video using the webpage preview when Telegram has no thumbnail", %{
@@ -347,6 +350,9 @@ defmodule SaveIt.BotTest do
     assert document["image"] == Base.encode64(test_og_jpeg())
     assert document["source_message_id"] == 71
     assert document["source_message_url"] == "https://t.me/save_it_test_chat/71"
+
+    assert File.read(Path.join(["./data/storage/files", cached_video_preview_name(base_url)])) ==
+             {:ok, test_og_jpeg()}
   end
 
   test "stores the original user-sent url for every photo in a multi-image download", _context do
@@ -836,6 +842,12 @@ defmodule SaveIt.BotTest do
     :crypto.hash(:sha256, base_url <> "/downloaded/video.mp4")
     |> Base.url_encode64(padding: false)
     |> then(&(&1 <> ".mp4"))
+  end
+
+  defp cached_video_preview_name(base_url) do
+    :crypto.hash(:sha256, base_url <> "/video-preview.jpg")
+    |> Base.url_encode64(padding: false)
+    |> then(&(&1 <> ".jpeg"))
   end
 
   defp sent_message_body do

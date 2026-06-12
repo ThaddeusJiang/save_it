@@ -998,6 +998,8 @@ defmodule SaveIt.Bot do
       }
       |> Map.merge(source_message_fields(source_chat, message_id(msg)))
       |> safe_index_photo()
+
+      store_sent_video_preview(file, source_url)
     else
       nil ->
         Logger.warning("Skipping video preview indexing: missing sent video file_id")
@@ -1013,6 +1015,14 @@ defmodule SaveIt.Bot do
     case LinkPreview.download_image(source_url) do
       {:ok, %DownloadedFile{} = file} -> {:ok, file}
       {:error, _reason} -> download_message_thumbnail(msg)
+    end
+  end
+
+  defp store_sent_video_preview(%DownloadedFile{} = file, source_url) do
+    cache_url = file.download_url || source_url
+
+    if is_binary(cache_url) do
+      FileHelper.write_file(file.file_name, file.file_content, cache_url)
     end
   end
 

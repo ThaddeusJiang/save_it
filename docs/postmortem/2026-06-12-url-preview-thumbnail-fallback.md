@@ -12,7 +12,7 @@ The existing thumbnail fallback only handled media that Telegram includes in Bot
 
 The link failure path still prefers Telegram-provided thumbnails when a `file_id` exists. If Telegram does not include thumbnail media, the bot now fetches the preview page, extracts `og:image`, `twitter:image`, or `video poster`, downloads that image, sends it back as the saved media, indexes it in Typesense with the original URL, writes it to local storage, and uploads it through the existing save path.
 
-For successful URL video downloads, the bot now indexes the original URL preview image as the preferred Typesense video record image. If the webpage preview image is not available, it falls back to the Telegram `sendVideo` thumbnail. Directly uploaded Telegram videos continue to use the Telegram video thumbnail because they do not have a source webpage preview.
+For successful URL video downloads, the bot now indexes the original URL preview image as the preferred Typesense video record image and writes that preview image into local storage alongside the downloaded video. If the webpage preview image is not available, it falls back to the Telegram `sendVideo` thumbnail. Directly uploaded Telegram videos continue to use the Telegram video thumbnail because they do not have a source webpage preview.
 
 ## What we learned
 
