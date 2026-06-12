@@ -262,8 +262,9 @@ defmodule SaveIt.BotTest do
            end)
   end
 
-  test "indexes a downloaded video using the Telegram video thumbnail", %{base_url: base_url} do
-    original_url = "https://example.com/video-with-thumbnail"
+  test "indexes a downloaded URL video using the webpage preview before the Telegram video thumbnail",
+       %{base_url: base_url} do
+    original_url = base_url <> "/video-page-with-telegram-thumbnail"
 
     Application.put_env(:ex_gram, :adapter, __MODULE__.UrlVideoThumbnailAdapter)
     Application.put_env(:tesla, SmallSdk.Telegram, adapter: __MODULE__.TelegramDownloadAdapter)
@@ -271,7 +272,8 @@ defmodule SaveIt.BotTest do
     message = %{
       chat: %{id: 12_345, username: "save_it_test_chat"},
       date: 1_717_170_000,
-      message_id: 103
+      message_id: 103,
+      link_preview_options: %{url: original_url}
     }
 
     assert {:ok, true} = Bot.handle({:text, original_url, message}, nil)
@@ -286,9 +288,8 @@ defmodule SaveIt.BotTest do
     assert multipart_part(parts, "caption") == "created at 2024-06-01"
     assert multipart_part(parts, "supports_streaming") == "true"
 
-    assert_receive {:telegram_download_request, telegram_env}
-    assert String.ends_with?(telegram_env.url, "/file/bottest-token/video_thumbnails/sent.jpg")
-
+    assert_receive {:test_http_request, :get, "/video-page-with-telegram-thumbnail", ""}
+    assert_receive {:test_http_request, :get, "/video-preview.jpg", ""}
     assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
 
     document = Jason.decode!(typesense_body)
@@ -297,11 +298,11 @@ defmodule SaveIt.BotTest do
     assert document["caption"] == "created at 2024-06-01"
     assert document["file_id"] == "sent-video-file-id"
     assert document["media_type"] == "video"
-    assert document["image"] == Base.encode64(test_jpeg())
+    assert document["image"] == Base.encode64(test_og_jpeg())
     assert document["source_message_id"] == 70
     assert document["source_message_url"] == "https://t.me/save_it_test_chat/70"
 
-    refute_receive {:test_http_request, :get, "/video-preview.jpg", ""}
+    refute_receive {:telegram_download_request, _telegram_env}
     refute_receive {:test_http_request, :get, "/preview.jpg", ""}
 
     assert File.exists?(Path.join(["./data/storage/files", cached_video_name(base_url)]))
@@ -343,7 +344,7 @@ defmodule SaveIt.BotTest do
     assert document["caption"] == "created at 2024-06-01"
     assert document["file_id"] == "sent-video-file-id"
     assert document["media_type"] == "video"
-    assert document["image"] == Base.encode64(test_jpeg())
+    assert document["image"] == Base.encode64(test_og_jpeg())
     assert document["source_message_id"] == 71
     assert document["source_message_url"] == "https://t.me/save_it_test_chat/71"
   end
@@ -893,6 +894,10 @@ defmodule SaveIt.BotTest do
     <<255, 216, 255, 224, 0, 16, 74, 70, 73, 70>>
   end
 
+  def test_og_jpeg do
+    <<255, 216, 255, 224, 0, 16, 79, 71, 73, 70>>
+  end
+
   def test_mp4 do
     <<0, 0, 0, 24, 102, 116, 121, 112, 109, 112, 52, 50>>
   end
@@ -1267,11 +1272,8 @@ defmodule SaveIt.BotTest do
         %{"url" => "https://example.com/unavailable"} ->
           error_response(%{"error" => "unsupported url"})
 
-        %{"url" => "https://example.com/video-with-thumbnail"} ->
-          json_response(%{"url" => "http://127.0.0.1:#{port}/downloaded/video.mp4"})
-
         %{"url" => "http://127.0.0.1:" <> _ = url} ->
-          if String.ends_with?(url, "/video-page") do
+          if String.contains?(url, "/video-page") do
             json_response(%{"url" => "http://127.0.0.1:#{port}/downloaded/video.mp4"})
           else
             error_response(%{"error" => "unsupported url"})
@@ -1377,7 +1379,8 @@ defmodule SaveIt.BotTest do
       """
     end
 
-    defp response_for("/video-page", port, _body) do
+    defp response_for(path, port, _body)
+         when path in ["/video-page", "/video-page-with-telegram-thumbnail"] do
       html = """
       <!doctype html>
       <html>
@@ -1399,7 +1402,7 @@ defmodule SaveIt.BotTest do
     end
 
     defp response_for("/video-preview.jpg", _port, _body) do
-      jpeg = <<255, 216, 255, 224, 0, 16, 74, 70, 73, 70>>
+      jpeg = SaveIt.BotTest.test_og_jpeg()
 
       """
       HTTP/1.1 200 OK\r
