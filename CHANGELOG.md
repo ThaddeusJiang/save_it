@@ -23,6 +23,7 @@ before the CalVer migration retain their original version labels.
 
 - Save directly uploaded Telegram photos and downloadable videos to local storage backups.
 - Prevent `/similar` results from echoing the just uploaded Telegram media back into the chat.
+- Save Telegram-provided thumbnails without a user-facing failure message when a user-sent link cannot be downloaded.
 - Prevent directly uploaded Telegram videos from crashing when Telegram refuses, fails, or times out while downloading the original file.
 - Prevent oversized files from being uploaded to Telegram Bot API.
 

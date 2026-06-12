@@ -9,6 +9,7 @@ defmodule SaveIt.DownloadContext do
     :original_url,
     :download_url,
     :purge_url,
-    :cache_url
+    :cache_url,
+    :message
   ]
 end

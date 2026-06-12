@@ -196,7 +196,7 @@ defmodule SaveIt.Bot do
     handle_uploaded_video(message, chat, Map.get(message, :caption), video)
   end
 
-  def handle({:text, text, %{chat: chat, message_id: message_id}}, _context) do
+  def handle({:text, text, %{chat: chat, message_id: message_id} = message}, _context) do
     urls = extract_urls_from_string(text)
 
     case urls do
@@ -206,7 +206,7 @@ defmodule SaveIt.Bot do
       _ ->
         has_success? =
           urls
-          |> Enum.map(&process_url(chat, &1))
+          |> Enum.map(&process_url(chat, &1, message))
           |> Enum.any?(&(&1 == :ok))
 
         if has_success? do
@@ -495,7 +495,7 @@ defmodule SaveIt.Bot do
     end
   end
 
-  defp process_url(chat, url) do
+  defp process_url(chat, url, message) do
     chat_id = chat.id
     {:ok, progress_message} = send_message(chat_id, Enum.at(@progress, 0))
 
@@ -503,7 +503,8 @@ defmodule SaveIt.Bot do
       chat_id: chat_id,
       chat: chat,
       progress_message_id: progress_message.message_id,
-      original_url: url
+      original_url: url,
+      message: message
     }
 
     case get_download_url(url) do
@@ -520,9 +521,8 @@ defmodule SaveIt.Bot do
             cache_url: download_url
         })
 
-      {:error, _} ->
-        update_message(chat_id, context.progress_message_id, "💔 Failed to get download URL.")
-        :error
+      {:error, reason} ->
+        handle_download_failure(context, "💔 Failed to get download URL.", reason)
     end
   end
 
@@ -535,14 +535,8 @@ defmodule SaveIt.Bot do
         bot_send_downloaded_file(context.chat_id, file)
         finalize_single_download(context, file)
 
-      {:error, _reason} ->
-        update_message(
-          context.chat_id,
-          context.progress_message_id,
-          "💔 Failed downloading HLS video."
-        )
-
-        :error
+      {:error, reason} ->
+        handle_download_failure(context, "💔 Failed downloading HLS video.", reason)
     end
   end
 
@@ -581,9 +575,8 @@ defmodule SaveIt.Bot do
         GoogleDrive.upload_files(context.chat_id, files)
         :ok
 
-      _ ->
-        update_message(context.chat_id, context.progress_message_id, "💔 Failed downloading file.")
-        :error
+      {:error, reason} ->
+        handle_download_failure(context, "💔 Failed downloading file.", reason)
     end
   end
 
@@ -620,10 +613,99 @@ defmodule SaveIt.Bot do
 
         finalize_single_download(context, file)
 
-      _ ->
-        update_message(context.chat_id, context.progress_message_id, "💔 Failed downloading file.")
+      {:error, reason} ->
+        handle_download_failure(context, "💔 Failed downloading file.", reason)
+    end
+  end
+
+  defp handle_download_failure(%DownloadContext{} = context, failure_message, failure_reason) do
+    case download_message_thumbnail(context.message) do
+      {:ok, %DownloadedFile{} = file} ->
+        Logger.warning(
+          "Saved Telegram thumbnail fallback after link download failed: #{inspect(failure_reason)}"
+        )
+
+        update_message(context.chat_id, context.progress_message_id, Enum.slice(@progress, 0..2))
+
+        bot_send_downloaded_file(context.chat_id, file,
+          source_url: context.original_url,
+          source_chat: context.chat
+        )
+
+        finalize_thumbnail_download(context, file)
+
+      {:error, fallback_reason} ->
+        Logger.warning(
+          "No Telegram thumbnail fallback available after link download failed: " <>
+            inspect(%{failure_reason: failure_reason, fallback_reason: fallback_reason})
+        )
+
+        update_message(context.chat_id, context.progress_message_id, failure_message)
         :error
     end
+  end
+
+  defp download_message_thumbnail(message) do
+    with thumbnail when not is_nil(thumbnail) <- message_thumbnail(message),
+         file_id when is_binary(file_id) <- map_get(thumbnail, :file_id),
+         {:ok, file} <- ExGram.get_file(file_id),
+         {:ok, file_content} <- Telegram.download_file_content(file.file_path) do
+      {:ok,
+       %DownloadedFile{
+         file_name: telegram_file_name(file, file_id, ".jpg"),
+         file_content: file_content
+       }}
+    else
+      nil -> {:error, :no_thumbnail}
+      {:error, reason} -> {:error, reason}
+      _ -> {:error, :missing_thumbnail_file_id}
+    end
+  end
+
+  defp message_thumbnail(nil), do: nil
+
+  defp message_thumbnail(message) do
+    [
+      largest_photo(map_get(message, :photo)),
+      map_get(message, :thumbnail),
+      map_get(message, :thumb),
+      media_thumbnail(map_get(message, :animation)),
+      media_thumbnail(map_get(message, :audio)),
+      media_thumbnail(map_get(message, :document)),
+      media_thumbnail(map_get(message, :video)),
+      media_thumbnail(map_get(message, :video_note)),
+      media_thumbnail(map_get(message, :sticker)),
+      message_thumbnail(map_get(message, :external_reply))
+    ]
+    |> Enum.find(&thumbnail_file?/1)
+  end
+
+  defp media_thumbnail(nil), do: nil
+
+  defp media_thumbnail(media) do
+    map_get(media, :thumbnail) || map_get(media, :thumb)
+  end
+
+  defp largest_photo([_ | _] = photos), do: List.last(photos)
+  defp largest_photo(_photos), do: nil
+
+  defp thumbnail_file?(thumbnail) do
+    thumbnail
+    |> map_get(:file_id)
+    |> is_binary()
+  end
+
+  defp map_get(nil, _key), do: nil
+
+  defp map_get(map, key) when is_map(map) do
+    Map.get(map, key) || Map.get(map, Atom.to_string(key))
+  end
+
+  defp finalize_thumbnail_download(%DownloadContext{} = context, %DownloadedFile{} = file) do
+    delete_message(context.chat_id, context.progress_message_id)
+    FileHelper.write_file(file.file_name, file.file_content, context.original_url)
+    GoogleDrive.upload_file_content(context.chat_id, file.file_content, file.file_name)
+    :ok
   end
 
   defp finalize_single_download(%DownloadContext{} = context, %DownloadedFile{} = file) do
