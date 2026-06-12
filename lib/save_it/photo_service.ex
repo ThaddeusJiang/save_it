@@ -177,15 +177,12 @@ defmodule SaveIt.PhotoService do
   end
 
   defp format_log_fields(fields) do
-    fields
-    |> Enum.map(fn {key, value} -> "#{key}=#{inspect(value)}" end)
-    |> Enum.join(" ")
+    Enum.map_join(fields, " ", fn {key, value} -> "#{key}=#{inspect(value)}" end)
   end
 
   defp format_log_list(values) do
     values
-    |> Enum.map(&inspect/1)
-    |> Enum.join(", ")
+    |> Enum.map_join(", ", &inspect/1)
     |> then(&"[#{&1}]")
   end
 

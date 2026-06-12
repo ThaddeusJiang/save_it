@@ -1,38 +1,7 @@
 defmodule SaveIt.LoggerConfigTest do
   use ExUnit.Case, async: true
 
-  import ExUnit.CaptureLog
-
-  @tesla_logger_config Application.compile_env(:tesla, Tesla.Middleware.Logger, [])
   @runtime_config Path.expand("../config/runtime.exs", __DIR__)
-
-  defmodule TeslaTestAdapter do
-    @behaviour Tesla.Adapter
-
-    @impl Tesla.Adapter
-    def call(%Tesla.Env{} = env, _opts) do
-      {:ok, %Tesla.Env{env | status: 200, body: %{ok: true, result: %{created: 1}}}}
-    end
-  end
-
-  test "Tesla HTTP logger does not dump full request and response bodies at debug level" do
-    assert @tesla_logger_config[:debug] == false
-  end
-
-  test "Tesla HTTP logger keeps debug output at request summary level" do
-    log =
-      capture_log([level: :debug], fn ->
-        client = Tesla.client([{Tesla.Middleware.Logger, []}], TeslaTestAdapter)
-
-        assert {:ok, %Tesla.Env{status: 200}} =
-                 Tesla.post(client, "https://example.test/save", %{message_id: 3974})
-      end)
-
-    assert log =~ "POST https://example.test/save -> 200"
-    refute log =~ ">>> REQUEST >>>"
-    refute log =~ "%{message_id: 3974}"
-    refute log =~ "%{ok: true"
-  end
 
   test "runtime logger uses distinct severity colors" do
     assert Application.fetch_env!(:logger, :level) == :info
@@ -57,6 +26,7 @@ defmodule SaveIt.LoggerConfigTest do
 
     assert get_in(runtime_config, [:save_it, :telegram_bot_token]) == "required-token"
     assert get_in(runtime_config, [:ex_gram, :token]) == "required-token"
+    assert get_in(runtime_config, [:ex_gram, :adapter]) == ExGram.Adapter.Req
   end
 
   defp restore_system_env(key, nil), do: System.delete_env(key)

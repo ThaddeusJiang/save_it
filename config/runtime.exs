@@ -5,7 +5,7 @@ config :save_it, :timezone, System.get_env("TZ") || "Asia/Tokyo"
 telegram_bot_token = System.get_env("TELEGRAM_BOT_TOKEN")
 
 config :save_it, :telegram_bot_token, telegram_bot_token
-config :ex_gram, token: telegram_bot_token
+config :ex_gram, token: telegram_bot_token, adapter: ExGram.Adapter.Req
 
 config :save_it, :cobalt_api_url, System.get_env("COBALT_API_URL", "http://localhost:9001")
 
@@ -21,4 +21,4 @@ config :sentry,
   environment_name: config_env(),
   enable_source_code_context: true,
   root_source_code_path: File.cwd!(),
-  included_dependencies: [:req, :jason, :hackney]
+  included_dependencies: [:req, :jason]

@@ -3,19 +3,17 @@ defmodule SmallSdk.Telegram do
 
   require Logger
 
-  use Tesla
-
-  plug(Tesla.Middleware.BaseUrl, "https://api.telegram.org")
+  @telegram_api_url "https://api.telegram.org"
 
   def send_media_group(chat_id, files, opts \\ []) when is_list(files) do
     token = get_env()
     path = "/bot#{token}/sendMediaGroup"
     caption = Keyword.get(opts, :caption, "")
 
-    {media_entries, multipart} =
+    {media_entries, multipart_fields} =
       files
       |> Enum.with_index()
-      |> Enum.reduce({[], Tesla.Multipart.new()}, fn {file, index}, {media_acc, mp} ->
+      |> Enum.reduce({[], []}, fn {file, index}, {media_acc, fields_acc} ->
         {_file_name, content} = media_group_file_parts(file)
         part_name = "media#{index}"
 
@@ -26,26 +24,31 @@ defmodule SmallSdk.Telegram do
           }
           |> put_caption(caption)
 
-        mp =
+        field =
           case content do
             {:file, file_path} ->
-              Tesla.Multipart.add_file(mp, file_path, name: part_name)
+              {part_name, File.stream!(file_path, 2048, [])}
 
             {:file_content, file_content, file_name} ->
-              Tesla.Multipart.add_file_content(mp, file_content, file_name, name: part_name)
+              {part_name, {file_content, filename: file_name}}
           end
 
-        {[media | media_acc], mp}
+        {[media | media_acc], [field | fields_acc]}
       end)
 
     media_json = media_entries |> Enum.reverse() |> Jason.encode!()
 
-    multipart =
-      multipart
-      |> Tesla.Multipart.add_field("chat_id", to_string(chat_id))
-      |> Tesla.Multipart.add_field("media", media_json)
+    multipart_fields =
+      [
+        {"chat_id", to_string(chat_id)},
+        {"media", media_json}
+        | Enum.reverse(multipart_fields)
+      ]
 
-    case post(path, multipart, headers: Tesla.Multipart.headers(multipart)) do
+    path
+    |> build_request()
+    |> Req.post(form_multipart: multipart_fields)
+    |> case do
       {:ok, %{status: status, body: body}} when status in 200..299 ->
         decode_send_media_group_body(body)
 
@@ -71,9 +74,15 @@ defmodule SmallSdk.Telegram do
     bot_token = get_env()
     url = "/file/bot#{bot_token}/#{file_path}"
 
-    case get(url) do
-      {:ok, response} ->
-        {:ok, response.body}
+    url
+    |> build_request()
+    |> Req.get()
+    |> case do
+      {:ok, %{status: status, body: body}} when status in 200..299 ->
+        {:ok, body}
+
+      {:ok, %{status: status, body: body}} ->
+        {:error, {:telegram_http_error, status, body}}
 
       {:error, error} ->
         {:error, error}
@@ -107,5 +116,19 @@ defmodule SmallSdk.Telegram do
     bot_token = Application.fetch_env!(:save_it, :telegram_bot_token)
 
     bot_token
+  end
+
+  defp build_request(path) do
+    req_options =
+      :save_it
+      |> Application.get_env(:telegram_req_options, [])
+      |> Keyword.put_new(
+        :base_url,
+        Application.get_env(:save_it, :telegram_api_url, @telegram_api_url)
+      )
+      |> Keyword.put_new(:retry, false)
+      |> Keyword.put(:url, path)
+
+    Req.new(req_options)
   end
 end

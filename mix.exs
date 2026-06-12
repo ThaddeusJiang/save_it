@@ -31,16 +31,14 @@ defmodule SaveIt.MixProject do
 
   defp deps do
     [
-      {:ex_gram, "~> 0.53"},
-      {:tesla, "~> 1.11"},
-      {:sentry, "~> 10.2.0"},
-      {:hackney, "~> 1.12"},
-      {:jason, "~> 1.4.1"},
-      {:req, "~> 0.5.0"},
+      {:ex_gram, "0.67.0"},
+      {:sentry, "13.2.0"},
+      {:jason, "1.4.5"},
+      {:req, "0.5.18"},
       {:tzdata, "1.1.3"},
-      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
-      {:ex_doc, "~> 0.34", only: :dev, runtime: false}
+      {:credo, "1.7.19", only: [:dev, :test], runtime: false},
+      {:dialyxir, "1.4.7", only: [:dev, :test], runtime: false},
+      {:ex_doc, "0.40.3", only: :dev, runtime: false}
     ]
   end
 
