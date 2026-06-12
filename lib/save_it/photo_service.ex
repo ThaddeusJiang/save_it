@@ -169,13 +169,24 @@ defmodule SaveIt.PhotoService do
 
     Logger.info(
       "Typesense #{action} response: " <>
-        inspect(%{
-          metadata: metadata,
-          hits_count: hits_count,
-          top_vector_distances: top_vector_distances,
-          results: results
-        })
+        "metadata=#{format_log_fields(metadata)} " <>
+        "hits_count=#{hits_count} " <>
+        "top_vector_distances=#{format_log_list(top_vector_distances)} " <>
+        "results_count=#{length(results)}"
     )
+  end
+
+  defp format_log_fields(fields) do
+    fields
+    |> Enum.map(fn {key, value} -> "#{key}=#{inspect(value)}" end)
+    |> Enum.join(" ")
+  end
+
+  defp format_log_list(values) do
+    values
+    |> Enum.map(&inspect/1)
+    |> Enum.join(", ")
+    |> then(&"[#{&1}]")
   end
 
   defp normalize_photo_urls(photo_params) do

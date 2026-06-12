@@ -24,14 +24,15 @@ defmodule SmallSdk.CobaltTest do
 
     assert {:error, msg} = Cobalt.handle_response(response)
     assert msg =~ "Request failed with status 500"
+    refute msg =~ "internal"
+    refute msg =~ "%{"
   end
 
   test "handle_response/1 does not raise on transport error" do
     response = {:error, %Req.TransportError{reason: :econnrefused}}
 
     assert {:error, msg} = Cobalt.handle_response(response)
-    assert msg =~ "Request failed"
-    assert msg =~ "econnrefused"
+    assert msg == "Request failed"
   end
 
   test "get_download_url/1 rewrites tunnel urls to the configured cobalt api host" do

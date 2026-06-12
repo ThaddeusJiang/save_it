@@ -88,8 +88,8 @@ defmodule SaveIt.Bot do
         Run `/login` after you have logged in.
         """)
 
-      {:error, error} ->
-        Logger.error("Failed to get device code: #{inspect(error)}")
+      {:error, _error} ->
+        Logger.error("Failed to get device code")
         send_message(chat.id, "Failed to get device code")
     end
   end
@@ -253,9 +253,10 @@ defmodule SaveIt.Bot do
       {:ok, _response} ->
         :ok
 
-      {:error, reason} ->
+      {:error, _reason} ->
         Logger.warning(
-          "Failed to send similar media group, falling back to individual media: #{inspect(reason)}"
+          "Failed to send similar media group, falling back to individual media",
+          kind: :telegram_media_group_failed
         )
 
         Enum.each(similar_photos, &send_similar_media(chat_id, &1))
@@ -268,9 +269,10 @@ defmodule SaveIt.Bot do
       {:ok, _response} ->
         :ok
 
-      {:error, reason} ->
+      {:error, _reason} ->
         Logger.warning(
-          "Skipping unavailable similar media file_id=#{inspect(media["file_id"])}: #{inspect(reason)}"
+          "Skipping unavailable similar media",
+          file_id: media["file_id"]
         )
 
         :error
@@ -362,8 +364,8 @@ defmodule SaveIt.Bot do
     end
   end
 
-  defp handle_uploaded_video_file_error(reason) do
-    Logger.warning("Skipping local backup for Telegram video: #{inspect(reason)}")
+  defp handle_uploaded_video_file_error(_reason) do
+    Logger.warning("Skipping local backup for Telegram video")
     :error
   end
 
@@ -633,17 +635,14 @@ defmodule SaveIt.Bot do
     end
   end
 
-  defp handle_download_failure(%DownloadContext{} = context, failure_message, failure_reason) do
+  defp handle_download_failure(%DownloadContext{} = context, failure_message, _failure_reason) do
     case download_fallback_thumbnail(context) do
       {:ok, %DownloadedFile{} = file, source} ->
-        log_thumbnail_fallback_success(source, failure_reason)
+        log_thumbnail_fallback_success(source)
         save_thumbnail_fallback(context, file)
 
-      {:error, fallback_reasons} ->
-        Logger.warning(
-          "No thumbnail fallback available after link download failed: " <>
-            inspect(%{failure_reason: failure_reason, fallback_reasons: fallback_reasons})
-        )
+      {:error, _fallback_reasons} ->
+        Logger.warning("No thumbnail fallback available after link download failed")
 
         update_message(context.chat_id, context.progress_message_id, failure_message)
         :error
@@ -666,16 +665,12 @@ defmodule SaveIt.Bot do
     end
   end
 
-  defp log_thumbnail_fallback_success(:telegram_thumbnail, failure_reason) do
-    Logger.warning(
-      "Saved Telegram thumbnail fallback after link download failed: #{inspect(failure_reason)}"
-    )
+  defp log_thumbnail_fallback_success(:telegram_thumbnail) do
+    Logger.warning("Saved Telegram thumbnail fallback after link download failed")
   end
 
-  defp log_thumbnail_fallback_success(:webpage_preview, failure_reason) do
-    Logger.warning(
-      "Saved webpage preview fallback after link download failed: #{inspect(failure_reason)}"
-    )
+  defp log_thumbnail_fallback_success(:webpage_preview) do
+    Logger.warning("Saved webpage preview fallback after link download failed")
   end
 
   defp save_thumbnail_fallback(%DownloadContext{} = context, %DownloadedFile{} = file) do
@@ -925,8 +920,8 @@ defmodule SaveIt.Bot do
             |> PhotoService.create_photo!()
         end)
 
-      {:error, reason} ->
-        Logger.error("Failed to send media group: #{inspect(reason)}")
+      {:error, _reason} ->
+        Logger.error("Failed to send media group")
 
         Enum.each(files, fn
           {file_name, content, source_url, _download_url} ->
@@ -1046,8 +1041,8 @@ defmodule SaveIt.Bot do
         Logger.warning("Skipping video preview indexing: missing sent video file_id")
         :error
 
-      {:error, reason} ->
-        Logger.warning("Skipping video preview indexing: #{inspect(reason)}")
+      {:error, _reason} ->
+        Logger.warning("Skipping video preview indexing")
         :error
     end
   end
@@ -1196,8 +1191,8 @@ defmodule SaveIt.Bot do
       Logger.error("Typesense create_photo failed: #{Exception.message(error)}")
       nil
   catch
-    kind, reason ->
-      Logger.error("Typesense create_photo failed: #{inspect({kind, reason})}")
+    kind, _reason ->
+      Logger.error("Typesense create_photo failed", kind: kind)
       nil
   end
 
@@ -1219,8 +1214,8 @@ defmodule SaveIt.Bot do
       Logger.error("Typesense search_photos failed: #{Exception.message(error)}")
       []
   catch
-    kind, reason ->
-      Logger.error("Typesense search_photos failed: #{inspect({kind, reason})}")
+    kind, _reason ->
+      Logger.error("Typesense search_photos failed", kind: kind)
       []
   end
 
@@ -1231,8 +1226,8 @@ defmodule SaveIt.Bot do
       Logger.error("Typesense search_similar_photos failed: #{Exception.message(error)}")
       []
   catch
-    kind, reason ->
-      Logger.error("Typesense search_similar_photos failed: #{inspect({kind, reason})}")
+    kind, _reason ->
+      Logger.error("Typesense search_similar_photos failed", kind: kind)
       []
   end
 
@@ -1244,8 +1239,8 @@ defmodule SaveIt.Bot do
         FileHelper.set_google_access_token(chat.id, body["access_token"])
         send_message(chat.id, "Successfully logged in!")
 
-      {:error, error} ->
-        Logger.error("Failed to log in: #{inspect(error)}")
+      {:error, _error} ->
+        Logger.error("Failed to log in")
 
         send_message(chat.id, """
         Failed to log in.
@@ -1319,8 +1314,8 @@ defmodule SaveIt.Bot do
       Logger.error("Typesense get_photo failed: #{Exception.message(error)}")
       nil
   catch
-    kind, reason ->
-      Logger.error("Typesense get_photo failed: #{inspect({kind, reason})}")
+    kind, _reason ->
+      Logger.error("Typesense get_photo failed", kind: kind)
       nil
   end
 end

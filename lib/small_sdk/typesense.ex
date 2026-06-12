@@ -182,7 +182,7 @@ defmodule SmallSdk.Typesense do
         body
 
       400 ->
-        Logger.warning("Bad Request: #{inspect(body)}")
+        Logger.warning("Bad Typesense request", status: 400)
         raise "Bad Request"
 
       401 ->
@@ -202,13 +202,13 @@ defmodule SmallSdk.Typesense do
         raise "Service Unavailable"
 
       _ ->
-        Logger.error("Unhandled status code #{status}: #{inspect(body)}")
+        Logger.error("Unhandled Typesense response", status: status)
         raise "Unknown error: #{status}"
     end
   end
 
-  def handle_response({:error, reason}) do
-    Logger.error("Request failed: #{inspect(reason)}")
+  def handle_response({:error, _reason}) do
+    Logger.error("Typesense request failed")
     raise "Request failed"
   end
 
@@ -218,7 +218,7 @@ defmodule SmallSdk.Typesense do
         body
 
       status ->
-        Logger.warning("Request failed with status #{status}: #{inspect(body)}")
+        Logger.warning("Typesense request failed", status: status)
         raise "Request failed with status #{status}"
     end
   end

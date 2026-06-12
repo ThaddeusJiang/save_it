@@ -797,7 +797,7 @@ defmodule SaveIt.BotTest do
     assert document["image"] == Base.encode64(test_jpeg())
 
     assert log =~ "Skipping local backup for Telegram video"
-    assert log =~ "file is too big"
+    refute log =~ ~s({"ok":false)
     refute_receive {:exgram_request, :post, "/bottest-token/sendMessage", %{chat_id: ^chat_id}}
     refute_receive {:google_drive_upload_request, _drive_env}
   end
@@ -844,7 +844,7 @@ defmodule SaveIt.BotTest do
     assert document["image"] == Base.encode64(test_jpeg())
 
     assert log =~ "Skipping local backup for Telegram video"
-    assert log =~ ":timeout"
+    refute log =~ ":timeout"
     refute_receive {:exgram_request, :post, "/bottest-token/sendMessage", %{chat_id: ^chat_id}}
     refute File.exists?(stored_file_path)
     refute_receive {:google_drive_upload_request, _drive_env}

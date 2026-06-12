@@ -23,8 +23,8 @@ defmodule SmallSdk.BadNews do
       {:ok, %{status: status}} ->
         {:error, "bad.news returned status #{status}"}
 
-      {:error, reason} ->
-        Logger.error("Failed to fetch bad.news page: #{inspect(reason)}")
+      {:error, _reason} ->
+        Logger.error("Failed to fetch bad.news page")
         {:error, "Failed to fetch bad.news page"}
     end
   end
