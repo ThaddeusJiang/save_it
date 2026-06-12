@@ -15,6 +15,9 @@ defmodule SaveIt.BotTest do
     previous_save_it = Application.get_all_env(:save_it)
     previous_small_sdk_telegram = Application.get_env(:tesla, SmallSdk.Telegram)
 
+    storage_dir =
+      Path.join(System.tmp_dir!(), "save-it-bot-test-#{System.unique_integer([:positive])}")
+
     Application.put_env(:ex_gram, :adapter, ExGram.Adapter.Test)
     Application.put_env(:ex_gram, :token, "test-token")
     Application.put_env(:save_it, :cobalt_api_url, base_url)
@@ -22,6 +25,8 @@ defmodule SaveIt.BotTest do
     Application.put_env(:save_it, :typesense_url, base_url)
     Application.put_env(:save_it, :typesense_api_key, "test-typesense-key")
     Application.put_env(:save_it, :timezone, System.get_env("TZ") || "Asia/Tokyo")
+    Application.put_env(:save_it, :storage_files_dir, Path.join(storage_dir, "files"))
+    Application.put_env(:save_it, :storage_urls_dir, Path.join(storage_dir, "urls"))
 
     if Process.whereis(ExGram.Adapter.Test) do
       ExGramTestAdapter.clean()
@@ -49,6 +54,7 @@ defmodule SaveIt.BotTest do
       restore_env(:tesla, SmallSdk.Telegram, previous_small_sdk_telegram)
       restore_env(:ex_gram, previous_ex_gram)
       restore_env(:save_it, previous_save_it)
+      File.rm_rf(storage_dir)
     end)
 
     %{base_url: base_url}
@@ -214,6 +220,183 @@ defmodule SaveIt.BotTest do
              _ ->
                false
            end)
+  end
+
+  test "stores the webpage preview image when Telegram does not include thumbnail media", %{
+    base_url: base_url
+  } do
+    original_url = base_url <> "/preview-page"
+
+    message = %{
+      chat: %{id: 12_345, username: "save_it_test_chat"},
+      date: 1_717_170_000,
+      message_id: 102,
+      text: original_url,
+      entities: [%{offset: 0, type: "url", length: String.length(original_url)}],
+      link_preview_options: %{url: original_url}
+    }
+
+    log =
+      capture_log(fn ->
+        assert {:ok, true} = Bot.handle({:text, original_url, message}, nil)
+      end)
+
+    assert log =~ "Saved webpage preview fallback after link download failed"
+
+    assert_receive {:test_http_request, :post, "/", cobalt_body}
+    assert Jason.decode!(cobalt_body) == %{"url" => original_url}
+
+    assert_receive {:test_http_request, :get, "/preview-page", ""}
+    assert_receive {:test_http_request, :get, "/preview.jpg", ""}
+    assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
+
+    document = Jason.decode!(typesense_body)
+
+    assert document["url"] == original_url
+    refute Map.has_key?(document, "download_url")
+    assert document["caption"] == "created at 2024-06-01"
+    assert document["file_id"] == "telegram-photo-file-id"
+    assert document["source_message_id"] == 20
+    assert document["source_message_url"] == "https://t.me/save_it_test_chat/20"
+
+    refute Enum.any?(exgram_calls(), fn
+             {:post, _path, %{text: text}} when is_binary(text) ->
+               String.contains?(text, "Failed")
+
+             _ ->
+               false
+           end)
+  end
+
+  test "indexes a downloaded URL video using the Telegram video thumbnail before the webpage preview",
+       %{base_url: base_url} do
+    original_url = base_url <> "/video-page-with-telegram-thumbnail"
+
+    Application.put_env(:ex_gram, :adapter, __MODULE__.UrlVideoThumbnailAdapter)
+    Application.put_env(:tesla, SmallSdk.Telegram, adapter: __MODULE__.TelegramDownloadAdapter)
+
+    message = %{
+      chat: %{id: 12_345, username: "save_it_test_chat"},
+      date: 1_717_170_000,
+      message_id: 103,
+      link_preview_options: %{url: original_url}
+    }
+
+    assert {:ok, true} = Bot.handle({:text, original_url, message}, nil)
+
+    assert_receive {:test_http_request, :post, "/", cobalt_body}
+    assert Jason.decode!(cobalt_body) == %{"url" => original_url}
+
+    assert_receive {:test_http_request, :get, "/downloaded/video.mp4", ""}
+
+    assert_receive {:exgram_request, :post, "/bottest-token/sendVideo", {:multipart, parts}}
+    assert multipart_part(parts, "chat_id") == "12345"
+    assert multipart_part(parts, "caption") == "created at 2024-06-01"
+    assert multipart_part(parts, "supports_streaming") == "true"
+
+    assert_receive {:telegram_download_request, telegram_env}
+    assert String.ends_with?(telegram_env.url, "/file/bottest-token/video_thumbnails/sent.jpg")
+
+    assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
+
+    document = Jason.decode!(typesense_body)
+
+    assert document["url"] == original_url
+    assert document["caption"] == "created at 2024-06-01"
+    assert document["file_id"] == "sent-video-file-id"
+    assert document["media_type"] == "video"
+    assert document["image"] == Base.encode64(test_jpeg())
+    assert document["source_message_id"] == 70
+    assert document["source_message_url"] == "https://t.me/save_it_test_chat/70"
+
+    refute_receive {:test_http_request, :get, "/video-page-with-telegram-thumbnail", ""}
+    refute_receive {:test_http_request, :get, "/video-preview.jpg", ""}
+    refute_receive {:test_http_request, :get, "/preview.jpg", ""}
+
+    assert File.exists?(storage_file_path(cached_video_name(base_url)))
+
+    assert File.read(storage_file_path("sent.jpg")) == {:ok, test_jpeg()}
+  end
+
+  test "indexes a downloaded video using the webpage preview when Telegram has no thumbnail", %{
+    base_url: base_url
+  } do
+    original_url = base_url <> "/video-page"
+
+    Application.put_env(:ex_gram, :adapter, __MODULE__.UrlVideoWithoutThumbnailAdapter)
+
+    message = %{
+      chat: %{id: 12_345, username: "save_it_test_chat"},
+      date: 1_717_170_000,
+      message_id: 104,
+      link_preview_options: %{url: original_url}
+    }
+
+    assert {:ok, true} = Bot.handle({:text, original_url, message}, nil)
+
+    assert_receive {:test_http_request, :post, "/", cobalt_body}
+    assert Jason.decode!(cobalt_body) == %{"url" => original_url}
+
+    assert_receive {:test_http_request, :get, "/downloaded/video.mp4", ""}
+
+    assert_receive {:exgram_request, :post, "/bottest-token/sendVideo", {:multipart, parts}}
+    assert multipart_part(parts, "chat_id") == "12345"
+    assert multipart_part(parts, "caption") == "created at 2024-06-01"
+    assert multipart_part(parts, "supports_streaming") == "true"
+
+    assert_receive {:test_http_request, :get, "/video-page", ""}
+    assert_receive {:test_http_request, :get, "/video-preview.jpg", ""}
+    assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
+
+    document = Jason.decode!(typesense_body)
+
+    assert document["url"] == original_url
+    assert document["caption"] == "created at 2024-06-01"
+    assert document["file_id"] == "sent-video-file-id"
+    assert document["media_type"] == "video"
+    assert document["image"] == Base.encode64(test_og_jpeg())
+    assert document["source_message_id"] == 71
+    assert document["source_message_url"] == "https://t.me/save_it_test_chat/71"
+
+    assert File.read(storage_file_path(cached_video_preview_name(base_url))) ==
+             {:ok, test_og_jpeg()}
+  end
+
+  test "stores the webpage preview for a downloaded HLS URL video", %{base_url: base_url} do
+    original_url = base_url <> "/hls-video-page"
+
+    Application.put_env(:save_it, :download_url_resolver, __MODULE__.HlsDownloadUrlResolver)
+    Application.put_env(:save_it, :hls_downloader, __MODULE__.HlsDownloaderAdapter)
+    Application.put_env(:ex_gram, :adapter, __MODULE__.UrlVideoWithoutThumbnailAdapter)
+
+    message = %{
+      chat: %{id: 12_345, username: "save_it_test_chat"},
+      date: 1_717_170_000,
+      message_id: 105,
+      link_preview_options: %{url: original_url}
+    }
+
+    assert {:ok, true} = Bot.handle({:text, original_url, message}, nil)
+
+    assert_receive {:exgram_request, :post, "/bottest-token/sendVideo", {:multipart, parts}}
+    assert multipart_part(parts, "chat_id") == "12345"
+    assert multipart_part(parts, "caption") == "created at 2024-06-01"
+    assert multipart_part(parts, "supports_streaming") == "true"
+
+    assert_receive {:test_http_request, :get, "/hls-video-page", ""}
+    assert_receive {:test_http_request, :get, "/video-preview.jpg", ""}
+    assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
+
+    document = Jason.decode!(typesense_body)
+
+    assert document["url"] == original_url
+    assert document["caption"] == "created at 2024-06-01"
+    assert document["file_id"] == "sent-video-file-id"
+    assert document["media_type"] == "video"
+    assert document["image"] == Base.encode64(test_og_jpeg())
+
+    assert File.read(storage_file_path(cached_video_preview_name(base_url))) ==
+             {:ok, test_og_jpeg()}
   end
 
   test "stores the original user-sent url for every photo in a multi-image download", _context do
@@ -423,7 +606,7 @@ defmodule SaveIt.BotTest do
 
   test "stores a directly uploaded photo in Typesense and Google Drive", _context do
     chat_id = 12_348
-    stored_file_path = Path.join(["./data/storage/files", "direct-photo.jpg"])
+    stored_file_path = storage_file_path("direct-photo.jpg")
 
     File.rm(stored_file_path)
     configure_google_drive(chat_id)
@@ -473,7 +656,7 @@ defmodule SaveIt.BotTest do
   test "stores a directly uploaded video using its thumbnail for Typesense and uploads the video to Google Drive",
        _context do
     chat_id = 12_347
-    stored_file_path = Path.join(["./data/storage/files", "direct-video.mp4"])
+    stored_file_path = storage_file_path("direct-video.mp4")
 
     File.rm(stored_file_path)
     configure_google_drive(chat_id)
@@ -573,7 +756,7 @@ defmodule SaveIt.BotTest do
   test "indexes a directly uploaded video thumbnail when original video download times out",
        _context do
     chat_id = 12_350
-    stored_file_path = Path.join(["./data/storage/files", "timeout-video.mp4"])
+    stored_file_path = storage_file_path("timeout-video.mp4")
 
     File.rm(stored_file_path)
     configure_google_drive(chat_id)
@@ -692,12 +875,27 @@ defmodule SaveIt.BotTest do
 
   defp cleanup_cached_file(download_url, cached_file_name) do
     hashed_url = :crypto.hash(:sha256, download_url) |> Base.url_encode64(padding: false)
-    url_cache_path = Path.join(["./data/storage/urls", hashed_url])
-    file_path = Path.join(["./data/storage/files", cached_file_name])
+    url_cache_path = storage_url_path(hashed_url)
+    file_path = storage_file_path(cached_file_name)
 
     File.rm(url_cache_path)
     File.rm(file_path)
   end
+
+  defp cached_video_name(base_url) do
+    :crypto.hash(:sha256, base_url <> "/downloaded/video.mp4")
+    |> Base.url_encode64(padding: false)
+    |> then(&(&1 <> ".mp4"))
+  end
+
+  defp cached_video_preview_name(base_url) do
+    :crypto.hash(:sha256, base_url <> "/video-preview.jpg")
+    |> Base.url_encode64(padding: false)
+    |> then(&(&1 <> ".jpeg"))
+  end
+
+  defp storage_file_path(file_name), do: Path.join(FileHelper.files_dir(), file_name)
+  defp storage_url_path(file_name), do: Path.join(FileHelper.urls_dir(), file_name)
 
   defp sent_message_body do
     %{calls: calls} = :sys.get_state(ExGram.Adapter.Test)
@@ -715,8 +913,8 @@ defmodule SaveIt.BotTest do
 
   defp cleanup_cached_folder(cache_key_url) do
     hashed_url = :crypto.hash(:sha256, cache_key_url) |> Base.url_encode64(padding: false)
-    url_cache_path = Path.join(["./data/storage/urls", hashed_url])
-    files_dir_path = Path.join(["./data/storage/files", hashed_url])
+    url_cache_path = storage_url_path(hashed_url)
+    files_dir_path = storage_file_path(hashed_url)
 
     File.rm(url_cache_path)
     File.rm_rf(files_dir_path)
@@ -755,6 +953,10 @@ defmodule SaveIt.BotTest do
     <<255, 216, 255, 224, 0, 16, 74, 70, 73, 70>>
   end
 
+  def test_og_jpeg do
+    <<255, 216, 255, 224, 0, 16, 79, 71, 73, 70>>
+  end
+
   def test_mp4 do
     <<0, 0, 0, 24, 102, 116, 121, 112, 109, 112, 52, 50>>
   end
@@ -785,6 +987,14 @@ defmodule SaveIt.BotTest do
     multipart.parts
     |> Enum.find(fn part -> part.dispositions[:name] == name end)
     |> Map.fetch!(:body)
+  end
+
+  defp multipart_part(parts, name) when is_list(parts) do
+    Enum.find_value(parts, fn
+      {^name, value} -> value
+      {_file_content, ^name, _content, _file_name} -> :file_content
+      _part -> nil
+    end)
   end
 
   defmodule BodyAwareExGramAdapter do
@@ -825,6 +1035,110 @@ defmodule SaveIt.BotTest do
         _ ->
           {:error, %ExGram.Error{code: 404}}
       end
+    end
+  end
+
+  defmodule UrlVideoThumbnailAdapter do
+    @behaviour ExGram.Adapter
+
+    @impl ExGram.Adapter
+    def request(verb, path, body) do
+      send(self(), {:exgram_request, verb, path, body})
+
+      case {verb, path, body} do
+        {:post, "/bottest-token/sendMessage", %{chat_id: chat_id}} ->
+          {:ok, %{message_id: 69, chat: %{id: chat_id}}}
+
+        {:post, "/bottest-token/editMessageText", _body} ->
+          {:ok, %{message_id: 69}}
+
+        {:post, "/bottest-token/deleteMessage", _body} ->
+          {:ok, true}
+
+        {:post, "/bottest-token/sendVideo", {:multipart, parts}} ->
+          chat_id = multipart_value(parts, "chat_id") |> String.to_integer()
+
+          {:ok,
+           %{
+             message_id: 70,
+             chat: %{id: chat_id},
+             video: %{
+               file_id: "sent-video-file-id",
+               thumbnail: %{file_id: "sent-video-thumbnail-id"}
+             }
+           }}
+
+        {:get, "/bottest-token/getFile", %{file_id: "sent-video-thumbnail-id"}} ->
+          {:ok,
+           %{
+             file_id: "sent-video-thumbnail-id",
+             file_path: "video_thumbnails/sent.jpg"
+           }}
+
+        _ ->
+          {:error, %ExGram.Error{code: 404}}
+      end
+    end
+
+    defp multipart_value(parts, name) do
+      Enum.find_value(parts, fn
+        {^name, value} -> value
+        _part -> nil
+      end)
+    end
+  end
+
+  defmodule UrlVideoWithoutThumbnailAdapter do
+    @behaviour ExGram.Adapter
+
+    @impl ExGram.Adapter
+    def request(verb, path, body) do
+      send(self(), {:exgram_request, verb, path, body})
+
+      case {verb, path, body} do
+        {:post, "/bottest-token/sendMessage", %{chat_id: chat_id}} ->
+          {:ok, %{message_id: 68, chat: %{id: chat_id}}}
+
+        {:post, "/bottest-token/editMessageText", _body} ->
+          {:ok, %{message_id: 68}}
+
+        {:post, "/bottest-token/deleteMessage", _body} ->
+          {:ok, true}
+
+        {:post, "/bottest-token/sendVideo", {:multipart, parts}} ->
+          chat_id = multipart_value(parts, "chat_id") |> String.to_integer()
+
+          {:ok,
+           %{
+             message_id: 71,
+             chat: %{id: chat_id},
+             video: %{file_id: "sent-video-file-id"}
+           }}
+
+        _ ->
+          {:error, %ExGram.Error{code: 404}}
+      end
+    end
+
+    defp multipart_value(parts, name) do
+      Enum.find_value(parts, fn
+        {^name, value} -> value
+        _part -> nil
+      end)
+    end
+  end
+
+  defmodule HlsDownloadUrlResolver do
+    def get_download_url(_url), do: {:ok, "https://stream.example/master.m3u8", :hls}
+  end
+
+  defmodule HlsDownloaderAdapter do
+    def download(_m3u8_url) do
+      {:ok,
+       %SaveIt.DownloadedFile{
+         file_name: "hls-video.mp4",
+         file_content: SaveIt.BotTest.test_mp4()
+       }}
     end
   end
 
@@ -1031,6 +1345,13 @@ defmodule SaveIt.BotTest do
         %{"url" => "https://example.com/unavailable"} ->
           error_response(%{"error" => "unsupported url"})
 
+        %{"url" => "http://127.0.0.1:" <> _ = url} ->
+          if String.contains?(url, "/video-page") do
+            json_response(%{"url" => "http://127.0.0.1:#{port}/downloaded/video.mp4"})
+          else
+            error_response(%{"error" => "unsupported url"})
+          end
+
         unexpected ->
           raise "Unexpected cobalt request body: #{inspect(unexpected)}"
       end
@@ -1084,7 +1405,89 @@ defmodule SaveIt.BotTest do
       })
     end
 
+    defp response_for("/downloaded/video.mp4", _port, _body) do
+      mp4 = SaveIt.BotTest.test_mp4()
+
+      """
+      HTTP/1.1 200 OK\r
+      content-type: video/mp4\r
+      content-length: #{byte_size(mp4)}\r
+      connection: close\r
+      \r
+      #{mp4}
+      """
+    end
+
     defp response_for("/downloaded/" <> _file_name, _port, _body) do
+      jpeg = <<255, 216, 255, 224, 0, 16, 74, 70, 73, 70>>
+
+      """
+      HTTP/1.1 200 OK\r
+      content-type: image/jpeg\r
+      content-length: #{byte_size(jpeg)}\r
+      connection: close\r
+      \r
+      #{jpeg}
+      """
+    end
+
+    defp response_for("/preview-page", port, _body) do
+      html = """
+      <!doctype html>
+      <html>
+        <head>
+          <meta property="og:image" content="http://127.0.0.1:#{port}/preview.jpg">
+        </head>
+        <body>preview</body>
+      </html>
+      """
+
+      """
+      HTTP/1.1 200 OK\r
+      content-type: text/html\r
+      content-length: #{byte_size(html)}\r
+      connection: close\r
+      \r
+      #{html}
+      """
+    end
+
+    defp response_for(path, port, _body)
+         when path in ["/video-page", "/video-page-with-telegram-thumbnail", "/hls-video-page"] do
+      html = """
+      <!doctype html>
+      <html>
+        <head>
+          <meta property="og:image" content="http://127.0.0.1:#{port}/video-preview.jpg">
+        </head>
+        <body>video preview</body>
+      </html>
+      """
+
+      """
+      HTTP/1.1 200 OK\r
+      content-type: text/html\r
+      content-length: #{byte_size(html)}\r
+      connection: close\r
+      \r
+      #{html}
+      """
+    end
+
+    defp response_for("/video-preview.jpg", _port, _body) do
+      jpeg = SaveIt.BotTest.test_og_jpeg()
+
+      """
+      HTTP/1.1 200 OK\r
+      content-type: image/jpeg\r
+      content-length: #{byte_size(jpeg)}\r
+      connection: close\r
+      \r
+      #{jpeg}
+      """
+    end
+
+    defp response_for("/preview.jpg", _port, _body) do
       jpeg = <<255, 216, 255, 224, 0, 16, 74, 70, 73, 70>>
 
       """
