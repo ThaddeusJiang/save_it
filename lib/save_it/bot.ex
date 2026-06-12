@@ -956,10 +956,22 @@ defmodule SaveIt.Bot do
         |> safe_index_photo()
 
       ".mp4" ->
-        ExGram.send_video(chat_id, content,
-          supports_streaming: true,
-          caption: caption
-        )
+        case ExGram.send_video(chat_id, content,
+               supports_streaming: true,
+               caption: caption
+             ) do
+          {:ok, msg} = response ->
+            index_sent_video_preview(chat_id, msg,
+              caption: caption,
+              source_url: source_url,
+              source_chat: source_chat
+            )
+
+            response
+
+          {:error, _reason} = error ->
+            error
+        end
 
       ".gif" ->
         ExGram.send_animation(chat_id, content, caption: caption)
@@ -967,6 +979,47 @@ defmodule SaveIt.Bot do
       _ ->
         ExGram.send_document(chat_id, content, caption: caption)
     end
+  end
+
+  defp index_sent_video_preview(chat_id, msg, opts) do
+    caption = Keyword.fetch!(opts, :caption)
+    source_url = Keyword.get(opts, :source_url)
+    source_chat = Keyword.fetch!(opts, :source_chat)
+
+    with file_id when is_binary(file_id) <- sent_video_file_id(msg),
+         {:ok, %DownloadedFile{} = file} <- download_sent_video_preview(msg, source_url) do
+      %{
+        image: Base.encode64(file.file_content),
+        caption: caption,
+        file_id: file_id,
+        media_type: "video",
+        url: source_url,
+        belongs_to_id: chat_id
+      }
+      |> Map.merge(source_message_fields(source_chat, message_id(msg)))
+      |> safe_index_photo()
+    else
+      nil ->
+        Logger.warning("Skipping video preview indexing: missing sent video file_id")
+        :error
+
+      {:error, reason} ->
+        Logger.warning("Skipping video preview indexing: #{inspect(reason)}")
+        :error
+    end
+  end
+
+  defp download_sent_video_preview(msg, source_url) do
+    case download_message_thumbnail(msg) do
+      {:ok, %DownloadedFile{} = file} -> {:ok, file}
+      {:error, _reason} -> LinkPreview.download_image(source_url)
+    end
+  end
+
+  defp sent_video_file_id(msg) do
+    msg
+    |> map_get(:video)
+    |> map_get(:file_id)
   end
 
   defp telegram_upload_too_large?({:file_content, file_content, _file_name}) do

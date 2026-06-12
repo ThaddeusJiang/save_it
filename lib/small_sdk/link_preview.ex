@@ -4,10 +4,10 @@ defmodule SmallSdk.LinkPreview do
   alias SmallSdk.WebDownloader
 
   @preview_patterns [
-    ~r/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
-    ~r/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i,
-    ~r/<meta[^>]+name=["']twitter:image(?::src)?["'][^>]+content=["']([^"']+)["']/i,
-    ~r/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image(?::src)?["']/i,
+    ~r/<meta[^>]+property=["']og:image["'][^>]+(?:content|value)=["']([^"']+)["']/i,
+    ~r/<meta[^>]+(?:content|value)=["']([^"']+)["'][^>]+property=["']og:image["']/i,
+    ~r/<meta[^>]+name=["']twitter:image(?::src)?["'][^>]+(?:content|value)=["']([^"']+)["']/i,
+    ~r/<meta[^>]+(?:content|value)=["']([^"']+)["'][^>]+name=["']twitter:image(?::src)?["']/i,
     ~r/<video[^>]+poster=["']([^"']+)["']/i
   ]
 
@@ -23,9 +23,7 @@ defmodule SmallSdk.LinkPreview do
   def get_image_url(page_url) when is_binary(page_url) do
     case Req.get(page_url, headers: [{"User-Agent", "Mozilla/5.0"}]) do
       {:ok, %{status: status, body: body}} when status in 200..209 and is_binary(body) ->
-        body
-        |> extract_image_url()
-        |> resolve_image_url(page_url)
+        get_image_url_from_html(page_url, body)
 
       {:ok, %{status: status}} ->
         {:error, {:preview_page_status, status}}
@@ -36,6 +34,12 @@ defmodule SmallSdk.LinkPreview do
   end
 
   def get_image_url(_page_url), do: {:error, :missing_preview_url}
+
+  def get_image_url_from_html(page_url, html) when is_binary(page_url) and is_binary(html) do
+    html
+    |> extract_image_url()
+    |> resolve_image_url(page_url)
+  end
 
   defp extract_image_url(html) do
     Enum.find_value(@preview_patterns, fn pattern ->
