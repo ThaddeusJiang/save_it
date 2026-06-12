@@ -8,6 +8,8 @@ before the CalVer migration retain their original version labels.
 
 ## [Unreleased]
 
+## [2026.6.12-rc.1] - 2026-06-12
+
 ### Added
 
 - Add timezone-aware `created at YYYY-MM-DD` captions to media downloaded from URLs, including every item in Telegram media groups. Caption dates use `tzdata` with the standard `TZ` environment variable, defaulting to Tokyo time.
