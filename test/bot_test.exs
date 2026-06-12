@@ -355,6 +355,43 @@ defmodule SaveIt.BotTest do
              {:ok, test_og_jpeg()}
   end
 
+  test "stores the webpage preview for a downloaded HLS URL video", %{base_url: base_url} do
+    original_url = base_url <> "/hls-video-page"
+
+    Application.put_env(:save_it, :download_url_resolver, __MODULE__.HlsDownloadUrlResolver)
+    Application.put_env(:save_it, :hls_downloader, __MODULE__.HlsDownloaderAdapter)
+    Application.put_env(:ex_gram, :adapter, __MODULE__.UrlVideoWithoutThumbnailAdapter)
+
+    message = %{
+      chat: %{id: 12_345, username: "save_it_test_chat"},
+      date: 1_717_170_000,
+      message_id: 105,
+      link_preview_options: %{url: original_url}
+    }
+
+    assert {:ok, true} = Bot.handle({:text, original_url, message}, nil)
+
+    assert_receive {:exgram_request, :post, "/bottest-token/sendVideo", {:multipart, parts}}
+    assert multipart_part(parts, "chat_id") == "12345"
+    assert multipart_part(parts, "caption") == "created at 2024-06-01"
+    assert multipart_part(parts, "supports_streaming") == "true"
+
+    assert_receive {:test_http_request, :get, "/hls-video-page", ""}
+    assert_receive {:test_http_request, :get, "/video-preview.jpg", ""}
+    assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
+
+    document = Jason.decode!(typesense_body)
+
+    assert document["url"] == original_url
+    assert document["caption"] == "created at 2024-06-01"
+    assert document["file_id"] == "sent-video-file-id"
+    assert document["media_type"] == "video"
+    assert document["image"] == Base.encode64(test_og_jpeg())
+
+    assert File.read(Path.join(["./data/storage/files", cached_video_preview_name(base_url)])) ==
+             {:ok, test_og_jpeg()}
+  end
+
   test "stores the original user-sent url for every photo in a multi-image download", _context do
     original_url = "https://x.com/JennerItGirls/status/2057529104535023815?s=20"
     purge_url = "https://x.com/JennerItGirls/status/2057529104535023815"
@@ -1081,6 +1118,20 @@ defmodule SaveIt.BotTest do
     end
   end
 
+  defmodule HlsDownloadUrlResolver do
+    def get_download_url(_url), do: {:ok, "https://stream.example/master.m3u8", :hls}
+  end
+
+  defmodule HlsDownloaderAdapter do
+    def download(_m3u8_url) do
+      {:ok,
+       %SaveIt.DownloadedFile{
+         file_name: "hls-video.mp4",
+         file_content: SaveIt.BotTest.test_mp4()
+       }}
+    end
+  end
+
   defmodule TelegramDirectMediaAdapter do
     @behaviour Tesla.Adapter
 
@@ -1392,7 +1443,7 @@ defmodule SaveIt.BotTest do
     end
 
     defp response_for(path, port, _body)
-         when path in ["/video-page", "/video-page-with-telegram-thumbnail"] do
+         when path in ["/video-page", "/video-page-with-telegram-thumbnail", "/hls-video-page"] do
       html = """
       <!doctype html>
       <html>

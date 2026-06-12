@@ -478,7 +478,7 @@ defmodule SaveIt.Bot do
       message: message
     }
 
-    case get_download_url(url) do
+    case resolve_download_url(url) do
       {:ok, m3u8_url, :hls} ->
         handle_hls_download(%{context | cache_url: url}, m3u8_url)
 
@@ -497,18 +497,35 @@ defmodule SaveIt.Bot do
     end
   end
 
+  defp resolve_download_url(url) do
+    case Application.get_env(:save_it, :download_url_resolver) do
+      nil -> get_download_url(url)
+      resolver -> resolver.get_download_url(url)
+    end
+  end
+
   defp handle_hls_download(%DownloadContext{} = context, m3u8_url) do
     update_message(context.chat_id, context.progress_message_id, Enum.slice(@progress, 0..1))
 
-    case HlsDownloader.download(m3u8_url) do
+    case hls_downloader().download(m3u8_url) do
       {:ok, %DownloadedFile{} = file} ->
         update_message(context.chat_id, context.progress_message_id, Enum.slice(@progress, 0..2))
-        bot_send_downloaded_file(context.chat_id, file, caption: download_caption(context))
+
+        bot_send_downloaded_file(context.chat_id, file,
+          source_url: context.original_url,
+          source_chat: context.chat,
+          caption: download_caption(context)
+        )
+
         finalize_single_download(context, file)
 
       {:error, reason} ->
         handle_download_failure(context, "💔 Failed downloading HLS video.", reason)
     end
+  end
+
+  defp hls_downloader do
+    Application.get_env(:save_it, :hls_downloader, HlsDownloader)
   end
 
   defp handle_multi_file_download(%DownloadContext{} = context, download_urls) do
