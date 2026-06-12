@@ -42,7 +42,7 @@ defmodule SaveIt.LoggerConfigTest do
     assert logger_config[:colors][:error] == :red
   end
 
-  test "runtime config requires the Telegram bot token and shares it with ExGram" do
+  test "runtime config shares the Telegram bot token with ExGram" do
     previous_system_token = System.get_env("TELEGRAM_BOT_TOKEN")
 
     on_exit(fn ->
@@ -54,17 +54,6 @@ defmodule SaveIt.LoggerConfigTest do
 
     assert get_in(runtime_config, [:save_it, :telegram_bot_token]) == "required-token"
     assert get_in(runtime_config, [:ex_gram, :token]) == "required-token"
-
-    System.delete_env("TELEGRAM_BOT_TOKEN")
-
-    test_runtime_config = Config.Reader.read!(@runtime_config, env: :test)
-
-    assert get_in(test_runtime_config, [:save_it, :telegram_bot_token]) == "test-token"
-    assert get_in(test_runtime_config, [:ex_gram, :token]) == "test-token"
-
-    assert_raise System.EnvError, fn ->
-      Config.Reader.read!(@runtime_config, env: :dev)
-    end
   end
 
   defp restore_system_env(key, nil), do: System.delete_env(key)

@@ -2,12 +2,7 @@ import Config
 
 config :save_it, :timezone, System.get_env("TZ") || "Asia/Tokyo"
 
-telegram_bot_token =
-  if config_env() == :test do
-    System.get_env("TELEGRAM_BOT_TOKEN", "test-token")
-  else
-    System.fetch_env!("TELEGRAM_BOT_TOKEN")
-  end
+telegram_bot_token = System.get_env("TELEGRAM_BOT_TOKEN")
 
 config :save_it, :telegram_bot_token, telegram_bot_token
 config :ex_gram, token: telegram_bot_token
