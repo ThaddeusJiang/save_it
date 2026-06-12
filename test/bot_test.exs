@@ -216,6 +216,52 @@ defmodule SaveIt.BotTest do
            end)
   end
 
+  test "stores the webpage preview image when Telegram does not include thumbnail media", %{
+    base_url: base_url
+  } do
+    original_url = base_url <> "/preview-page"
+
+    message = %{
+      chat: %{id: 12_345, username: "save_it_test_chat"},
+      date: 1_717_170_000,
+      message_id: 102,
+      text: original_url,
+      entities: [%{offset: 0, type: "url", length: String.length(original_url)}],
+      link_preview_options: %{url: original_url}
+    }
+
+    log =
+      capture_log(fn ->
+        assert {:ok, true} = Bot.handle({:text, original_url, message}, nil)
+      end)
+
+    assert log =~ "Saved webpage preview fallback after link download failed"
+
+    assert_receive {:test_http_request, :post, "/", cobalt_body}
+    assert Jason.decode!(cobalt_body) == %{"url" => original_url}
+
+    assert_receive {:test_http_request, :get, "/preview-page", ""}
+    assert_receive {:test_http_request, :get, "/preview.jpg", ""}
+    assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
+
+    document = Jason.decode!(typesense_body)
+
+    assert document["url"] == original_url
+    refute Map.has_key?(document, "download_url")
+    assert document["caption"] == "created at 2024-06-01"
+    assert document["file_id"] == "telegram-photo-file-id"
+    assert document["source_message_id"] == 20
+    assert document["source_message_url"] == "https://t.me/save_it_test_chat/20"
+
+    refute Enum.any?(exgram_calls(), fn
+             {:post, _path, %{text: text}} when is_binary(text) ->
+               String.contains?(text, "Failed")
+
+             _ ->
+               false
+           end)
+  end
+
   test "stores the original user-sent url for every photo in a multi-image download", _context do
     original_url = "https://x.com/JennerItGirls/status/2057529104535023815?s=20"
     purge_url = "https://x.com/JennerItGirls/status/2057529104535023815"
@@ -1031,6 +1077,9 @@ defmodule SaveIt.BotTest do
         %{"url" => "https://example.com/unavailable"} ->
           error_response(%{"error" => "unsupported url"})
 
+        %{"url" => "http://127.0.0.1:" <> _rest} ->
+          error_response(%{"error" => "unsupported url"})
+
         unexpected ->
           raise "Unexpected cobalt request body: #{inspect(unexpected)}"
       end
@@ -1085,6 +1134,40 @@ defmodule SaveIt.BotTest do
     end
 
     defp response_for("/downloaded/" <> _file_name, _port, _body) do
+      jpeg = <<255, 216, 255, 224, 0, 16, 74, 70, 73, 70>>
+
+      """
+      HTTP/1.1 200 OK\r
+      content-type: image/jpeg\r
+      content-length: #{byte_size(jpeg)}\r
+      connection: close\r
+      \r
+      #{jpeg}
+      """
+    end
+
+    defp response_for("/preview-page", port, _body) do
+      html = """
+      <!doctype html>
+      <html>
+        <head>
+          <meta property="og:image" content="http://127.0.0.1:#{port}/preview.jpg">
+        </head>
+        <body>preview</body>
+      </html>
+      """
+
+      """
+      HTTP/1.1 200 OK\r
+      content-type: text/html\r
+      content-length: #{byte_size(html)}\r
+      connection: close\r
+      \r
+      #{html}
+      """
+    end
+
+    defp response_for("/preview.jpg", _port, _body) do
       jpeg = <<255, 216, 255, 224, 0, 16, 74, 70, 73, 70>>
 
       """

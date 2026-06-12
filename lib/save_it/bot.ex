@@ -16,6 +16,7 @@ defmodule SaveIt.Bot do
   alias SmallSdk.BadNews
   alias SmallSdk.Cobalt
   alias SmallSdk.HlsDownloader
+  alias SmallSdk.LinkPreview
   alias SmallSdk.Telegram
   alias SmallSdk.WebDownloader
 
@@ -592,31 +593,60 @@ defmodule SaveIt.Bot do
   end
 
   defp handle_download_failure(%DownloadContext{} = context, failure_message, failure_reason) do
-    case download_message_thumbnail(context.message) do
-      {:ok, %DownloadedFile{} = file} ->
+    case download_fallback_thumbnail(context) do
+      {:ok, %DownloadedFile{} = file, source} ->
+        log_thumbnail_fallback_success(source, failure_reason)
+        save_thumbnail_fallback(context, file)
+
+      {:error, fallback_reasons} ->
         Logger.warning(
-          "Saved Telegram thumbnail fallback after link download failed: #{inspect(failure_reason)}"
-        )
-
-        update_message(context.chat_id, context.progress_message_id, Enum.slice(@progress, 0..2))
-
-        bot_send_downloaded_file(context.chat_id, file,
-          source_url: context.original_url,
-          source_chat: context.chat,
-          caption: download_caption(context)
-        )
-
-        finalize_thumbnail_download(context, file)
-
-      {:error, fallback_reason} ->
-        Logger.warning(
-          "No Telegram thumbnail fallback available after link download failed: " <>
-            inspect(%{failure_reason: failure_reason, fallback_reason: fallback_reason})
+          "No thumbnail fallback available after link download failed: " <>
+            inspect(%{failure_reason: failure_reason, fallback_reasons: fallback_reasons})
         )
 
         update_message(context.chat_id, context.progress_message_id, failure_message)
         :error
     end
+  end
+
+  defp download_fallback_thumbnail(%DownloadContext{} = context) do
+    case download_message_thumbnail(context.message) do
+      {:ok, %DownloadedFile{} = file} ->
+        {:ok, file, :telegram_thumbnail}
+
+      {:error, telegram_reason} ->
+        case download_webpage_preview(context) do
+          {:ok, %DownloadedFile{} = file} ->
+            {:ok, file, :webpage_preview}
+
+          {:error, preview_reason} ->
+            {:error, %{telegram_thumbnail: telegram_reason, webpage_preview: preview_reason}}
+        end
+    end
+  end
+
+  defp log_thumbnail_fallback_success(:telegram_thumbnail, failure_reason) do
+    Logger.warning(
+      "Saved Telegram thumbnail fallback after link download failed: #{inspect(failure_reason)}"
+    )
+  end
+
+  defp log_thumbnail_fallback_success(:webpage_preview, failure_reason) do
+    Logger.warning(
+      "Saved webpage preview fallback after link download failed: #{inspect(failure_reason)}"
+    )
+  end
+
+  defp save_thumbnail_fallback(%DownloadContext{} = context, %DownloadedFile{} = file) do
+    update_message(context.chat_id, context.progress_message_id, Enum.slice(@progress, 0..2))
+
+    bot_send_downloaded_file(context.chat_id, file,
+      source_url: context.original_url,
+      source_chat: context.chat,
+      caption: download_caption(context)
+    )
+
+    finalize_thumbnail_download(context, file)
   end
 
   defp download_message_thumbnail(message) do
@@ -634,6 +664,19 @@ defmodule SaveIt.Bot do
       {:error, reason} -> {:error, reason}
       _ -> {:error, :missing_thumbnail_file_id}
     end
+  end
+
+  defp download_webpage_preview(%DownloadContext{} = context) do
+    context.message
+    |> link_preview_url()
+    |> Kernel.||(context.original_url)
+    |> LinkPreview.download_image()
+  end
+
+  defp link_preview_url(message) do
+    message
+    |> map_get(:link_preview_options)
+    |> map_get(:url)
   end
 
   defp message_thumbnail(nil), do: nil
