@@ -14,7 +14,7 @@ before the CalVer migration retain their original version labels.
 
 ### Fixed
 
-- Save webpage preview images as searchable Typesense evidence and local storage files for URL video downloads, while keeping Telegram thumbnails for directly uploaded videos.
+- Save Telegram video thumbnails as the preferred searchable cover for URL video downloads, falling back to webpage preview images only when Telegram does not provide a thumbnail.
 
 ## [2026.6.12-rc.1] - 2026-06-12
 

@@ -1029,9 +1029,9 @@ defmodule SaveIt.Bot do
   end
 
   defp download_sent_video_preview(msg, source_url) do
-    case LinkPreview.download_image(source_url) do
+    case download_message_thumbnail(msg) do
       {:ok, %DownloadedFile{} = file} -> {:ok, file}
-      {:error, _reason} -> download_message_thumbnail(msg)
+      {:error, _reason} -> LinkPreview.download_image(source_url)
     end
   end
 

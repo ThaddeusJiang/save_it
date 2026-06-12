@@ -268,7 +268,7 @@ defmodule SaveIt.BotTest do
            end)
   end
 
-  test "indexes a downloaded URL video using the webpage preview before the Telegram video thumbnail",
+  test "indexes a downloaded URL video using the Telegram video thumbnail before the webpage preview",
        %{base_url: base_url} do
     original_url = base_url <> "/video-page-with-telegram-thumbnail"
 
@@ -294,8 +294,9 @@ defmodule SaveIt.BotTest do
     assert multipart_part(parts, "caption") == "created at 2024-06-01"
     assert multipart_part(parts, "supports_streaming") == "true"
 
-    assert_receive {:test_http_request, :get, "/video-page-with-telegram-thumbnail", ""}
-    assert_receive {:test_http_request, :get, "/video-preview.jpg", ""}
+    assert_receive {:telegram_download_request, telegram_env}
+    assert String.ends_with?(telegram_env.url, "/file/bottest-token/video_thumbnails/sent.jpg")
+
     assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
 
     document = Jason.decode!(typesense_body)
@@ -304,17 +305,17 @@ defmodule SaveIt.BotTest do
     assert document["caption"] == "created at 2024-06-01"
     assert document["file_id"] == "sent-video-file-id"
     assert document["media_type"] == "video"
-    assert document["image"] == Base.encode64(test_og_jpeg())
+    assert document["image"] == Base.encode64(test_jpeg())
     assert document["source_message_id"] == 70
     assert document["source_message_url"] == "https://t.me/save_it_test_chat/70"
 
-    refute_receive {:telegram_download_request, _telegram_env}
+    refute_receive {:test_http_request, :get, "/video-page-with-telegram-thumbnail", ""}
+    refute_receive {:test_http_request, :get, "/video-preview.jpg", ""}
     refute_receive {:test_http_request, :get, "/preview.jpg", ""}
 
     assert File.exists?(storage_file_path(cached_video_name(base_url)))
 
-    assert File.read(storage_file_path(cached_video_preview_name(base_url))) ==
-             {:ok, test_og_jpeg()}
+    assert File.read(storage_file_path("sent.jpg")) == {:ok, test_jpeg()}
   end
 
   test "indexes a downloaded video using the webpage preview when Telegram has no thumbnail", %{
