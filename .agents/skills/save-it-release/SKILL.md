@@ -18,7 +18,7 @@ This repository uses:
 
 ## Release Rules
 
-- The bump version commit message must be exactly `version`.
+- The bump version commit message must be exactly the target release tag, for example `YYYY.M.D` or `YYYY.M.D-rc.N`.
 - The release tag must be created on the bump version commit.
 - Maintain `CHANGELOG.md` only for product-focused user-facing features, behavior changes, fixes, removals, security changes, or breaking changes.
 - Before publishing a release or prerelease, roll current `Unreleased` entries into the target version heading and leave a fresh `## [Unreleased]` section above it.
@@ -77,11 +77,11 @@ When the user asks to publish a stable release:
 
 1. Confirm the released version exists in `mix.exs`.
 2. Confirm `CHANGELOG.md` has a heading for the released version and a fresh `## [Unreleased]` heading above it.
-3. Commit release metadata changes using the repository convention:
+3. Commit release metadata changes using the target release tag as the commit message:
 
 ```bash
 git add mix.exs CHANGELOG.md
-git commit -m "version"
+git commit -m "YYYY.M.D"
 ```
 
 4. Create and push the stable tag:

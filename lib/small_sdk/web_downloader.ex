@@ -42,12 +42,12 @@ defmodule SmallSdk.WebDownloader do
            download_url: url
          }}
 
-      {:ok, %{status: status, body: body}} ->
-        Logger.error("download_file failed, status: #{status}, body: #{inspect(body)}")
+      {:ok, %{status: status, body: _body}} ->
+        Logger.error("download_file failed", status: status)
         {:error, "💔 Failed to download file"}
 
-      {:error, reason} ->
-        Logger.error("download_file failed, reason: #{inspect(reason)}")
+      {:error, _reason} ->
+        Logger.error("download_file failed")
         {:error, "💔 Failed to download file"}
     end
   end

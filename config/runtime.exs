@@ -2,24 +2,15 @@ import Config
 
 config :save_it, :timezone, System.get_env("TZ") || "Asia/Tokyo"
 
-config :save_it, :telegram_bot_token, System.get_env("TELEGRAM_BOT_TOKEN")
-config :ex_gram, token: System.get_env("TELEGRAM_BOT_TOKEN"), adapter: ExGram.Adapter.Req
+telegram_bot_token = System.get_env("TELEGRAM_BOT_TOKEN")
+
+config :save_it, :telegram_bot_token, telegram_bot_token
+config :ex_gram, token: telegram_bot_token, adapter: ExGram.Adapter.Req
 
 config :save_it, :cobalt_api_url, System.get_env("COBALT_API_URL", "http://localhost:9001")
 
 config :save_it, :typesense_url, System.get_env("TYPESENSE_URL", "http://localhost:8108")
 config :save_it, :typesense_api_key, System.get_env("TYPESENSE_API_KEY", "xyz")
-
-config :logger, :default_formatter,
-  format: "$time $metadata[$level] $message\n",
-  metadata: [],
-  colors: [
-    enabled: true,
-    debug: :cyan,
-    info: :green,
-    warning: :yellow,
-    error: :red
-  ]
 
 # optional
 config :save_it, :google_oauth_client_id, System.get_env("GOOGLE_OAUTH_CLIENT_ID")

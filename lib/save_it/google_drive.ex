@@ -175,12 +175,12 @@ defmodule SaveIt.GoogleDrive do
   end
 
   defp handle_response({:ok, %{status: status, body: body}}) do
-    Logger.warning("Failed at Google Drive, status: #{status}, body: #{inspect(body)}")
+    Logger.warning("Failed at Google Drive", status: status)
     {:error, %{status: status, body: body}}
   end
 
   defp handle_response({:error, reason}) do
-    Logger.error("Failed at Google Drive, reason: #{inspect(reason)}")
+    Logger.error("Failed at Google Drive")
     {:error, reason}
   end
 end

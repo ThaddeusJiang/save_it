@@ -23,12 +23,12 @@ defmodule SaveIt.GoogleOAuth2DeviceFlow do
   end
 
   defp handle_response({:ok, %{status: status, body: body}}) do
-    Logger.warning("handle_response, status: #{status}, body: #{inspect(body)}")
+    Logger.warning("Google OAuth request failed", status: status)
     {:error, %{status: status, body: body}}
   end
 
   defp handle_response({:error, reason}) do
-    Logger.error("handle_response, reason: #{inspect(reason)}")
+    Logger.error("Google OAuth request failed")
     {:error, reason}
   end
 
