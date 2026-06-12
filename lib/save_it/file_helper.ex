@@ -5,8 +5,16 @@ defmodule SaveIt.FileHelper do
 
   alias SaveIt.DownloadedFile
 
-  @files_dir "./data/storage/files"
-  @urls_dir "./data/storage/urls"
+  @default_files_dir "./data/storage/files"
+  @default_urls_dir "./data/storage/urls"
+
+  def files_dir do
+    Application.get_env(:save_it, :storage_files_dir, @default_files_dir)
+  end
+
+  def urls_dir do
+    Application.get_env(:save_it, :storage_urls_dir, @default_urls_dir)
+  end
 
   def set_google_drive_folder_id(chat_id, folder_id) do
     write_file_to_disk("./data/settings/#{chat_id}", "folder_id.txt", folder_id)
@@ -53,10 +61,10 @@ defmodule SaveIt.FileHelper do
   end
 
   def write_file(file_name, file_content, download_url) do
-    write_file_to_disk(@files_dir, file_name, file_content)
+    write_file_to_disk(files_dir(), file_name, file_content)
 
     hashed_url = :crypto.hash(:sha256, download_url) |> Base.url_encode64(padding: false)
-    write_file_to_disk(@urls_dir, hashed_url, file_name)
+    write_file_to_disk(urls_dir(), hashed_url, file_name)
   end
 
   def write_folder(original_url, files) do
@@ -64,17 +72,17 @@ defmodule SaveIt.FileHelper do
 
     Enum.each(files, fn
       %DownloadedFile{file_name: file_name, file_content: file_content} ->
-        write_file_to_disk(Path.join(@files_dir, hashed_url), file_name, file_content)
+        write_file_to_disk(Path.join(files_dir(), hashed_url), file_name, file_content)
 
       {file_name, file_content} ->
-        write_file_to_disk(Path.join(@files_dir, hashed_url), file_name, file_content)
+        write_file_to_disk(Path.join(files_dir(), hashed_url), file_name, file_content)
 
       {file_name, file_content, _source_url} ->
-        write_file_to_disk(Path.join(@files_dir, hashed_url), file_name, file_content)
+        write_file_to_disk(Path.join(files_dir(), hashed_url), file_name, file_content)
     end)
 
     write_file_to_disk(
-      @urls_dir,
+      urls_dir(),
       hashed_url,
       Enum.map_join(files, "\n", fn
         %DownloadedFile{file_name: file_name} -> file_name
@@ -103,8 +111,8 @@ defmodule SaveIt.FileHelper do
   def get_downloaded_file(download_url) do
     hashed_url = :crypto.hash(:sha256, download_url) |> Base.url_encode64(padding: false)
 
-    case File.read(Path.join([@urls_dir, hashed_url])) do
-      {:ok, file} -> Path.join([@files_dir, file |> String.trim()])
+    case File.read(Path.join([urls_dir(), hashed_url])) do
+      {:ok, file} -> Path.join([files_dir(), file |> String.trim()])
       {:error, _} -> nil
     end
   end
@@ -112,12 +120,12 @@ defmodule SaveIt.FileHelper do
   def get_downloaded_files(download_url) do
     hashed_url = :crypto.hash(:sha256, download_url) |> Base.url_encode64(padding: false)
 
-    case File.read(Path.join([@urls_dir, hashed_url])) do
+    case File.read(Path.join([urls_dir(), hashed_url])) do
       {:ok, file} ->
         file
         |> String.trim()
         |> String.split("\n")
-        |> Enum.map(&Path.join([@files_dir, hashed_url, &1]))
+        |> Enum.map(&Path.join([files_dir(), hashed_url, &1]))
 
       {:error, _} ->
         nil

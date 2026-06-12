@@ -15,6 +15,9 @@ defmodule SaveIt.BotTest do
     previous_save_it = Application.get_all_env(:save_it)
     previous_small_sdk_telegram = Application.get_env(:tesla, SmallSdk.Telegram)
 
+    storage_dir =
+      Path.join(System.tmp_dir!(), "save-it-bot-test-#{System.unique_integer([:positive])}")
+
     Application.put_env(:ex_gram, :adapter, ExGram.Adapter.Test)
     Application.put_env(:ex_gram, :token, "test-token")
     Application.put_env(:save_it, :cobalt_api_url, base_url)
@@ -22,6 +25,8 @@ defmodule SaveIt.BotTest do
     Application.put_env(:save_it, :typesense_url, base_url)
     Application.put_env(:save_it, :typesense_api_key, "test-typesense-key")
     Application.put_env(:save_it, :timezone, System.get_env("TZ") || "Asia/Tokyo")
+    Application.put_env(:save_it, :storage_files_dir, Path.join(storage_dir, "files"))
+    Application.put_env(:save_it, :storage_urls_dir, Path.join(storage_dir, "urls"))
 
     if Process.whereis(ExGram.Adapter.Test) do
       ExGramTestAdapter.clean()
@@ -49,6 +54,7 @@ defmodule SaveIt.BotTest do
       restore_env(:tesla, SmallSdk.Telegram, previous_small_sdk_telegram)
       restore_env(:ex_gram, previous_ex_gram)
       restore_env(:save_it, previous_save_it)
+      File.rm_rf(storage_dir)
     end)
 
     %{base_url: base_url}
@@ -305,9 +311,9 @@ defmodule SaveIt.BotTest do
     refute_receive {:telegram_download_request, _telegram_env}
     refute_receive {:test_http_request, :get, "/preview.jpg", ""}
 
-    assert File.exists?(Path.join(["./data/storage/files", cached_video_name(base_url)]))
+    assert File.exists?(storage_file_path(cached_video_name(base_url)))
 
-    assert File.read(Path.join(["./data/storage/files", cached_video_preview_name(base_url)])) ==
+    assert File.read(storage_file_path(cached_video_preview_name(base_url))) ==
              {:ok, test_og_jpeg()}
   end
 
@@ -351,7 +357,7 @@ defmodule SaveIt.BotTest do
     assert document["source_message_id"] == 71
     assert document["source_message_url"] == "https://t.me/save_it_test_chat/71"
 
-    assert File.read(Path.join(["./data/storage/files", cached_video_preview_name(base_url)])) ==
+    assert File.read(storage_file_path(cached_video_preview_name(base_url))) ==
              {:ok, test_og_jpeg()}
   end
 
@@ -388,7 +394,7 @@ defmodule SaveIt.BotTest do
     assert document["media_type"] == "video"
     assert document["image"] == Base.encode64(test_og_jpeg())
 
-    assert File.read(Path.join(["./data/storage/files", cached_video_preview_name(base_url)])) ==
+    assert File.read(storage_file_path(cached_video_preview_name(base_url))) ==
              {:ok, test_og_jpeg()}
   end
 
@@ -599,7 +605,7 @@ defmodule SaveIt.BotTest do
 
   test "stores a directly uploaded photo in Typesense and Google Drive", _context do
     chat_id = 12_348
-    stored_file_path = Path.join(["./data/storage/files", "direct-photo.jpg"])
+    stored_file_path = storage_file_path("direct-photo.jpg")
 
     File.rm(stored_file_path)
     configure_google_drive(chat_id)
@@ -649,7 +655,7 @@ defmodule SaveIt.BotTest do
   test "stores a directly uploaded video using its thumbnail for Typesense and uploads the video to Google Drive",
        _context do
     chat_id = 12_347
-    stored_file_path = Path.join(["./data/storage/files", "direct-video.mp4"])
+    stored_file_path = storage_file_path("direct-video.mp4")
 
     File.rm(stored_file_path)
     configure_google_drive(chat_id)
@@ -749,7 +755,7 @@ defmodule SaveIt.BotTest do
   test "indexes a directly uploaded video thumbnail when original video download times out",
        _context do
     chat_id = 12_350
-    stored_file_path = Path.join(["./data/storage/files", "timeout-video.mp4"])
+    stored_file_path = storage_file_path("timeout-video.mp4")
 
     File.rm(stored_file_path)
     configure_google_drive(chat_id)
@@ -868,8 +874,8 @@ defmodule SaveIt.BotTest do
 
   defp cleanup_cached_file(download_url, cached_file_name) do
     hashed_url = :crypto.hash(:sha256, download_url) |> Base.url_encode64(padding: false)
-    url_cache_path = Path.join(["./data/storage/urls", hashed_url])
-    file_path = Path.join(["./data/storage/files", cached_file_name])
+    url_cache_path = storage_url_path(hashed_url)
+    file_path = storage_file_path(cached_file_name)
 
     File.rm(url_cache_path)
     File.rm(file_path)
@@ -887,6 +893,9 @@ defmodule SaveIt.BotTest do
     |> then(&(&1 <> ".jpeg"))
   end
 
+  defp storage_file_path(file_name), do: Path.join(FileHelper.files_dir(), file_name)
+  defp storage_url_path(file_name), do: Path.join(FileHelper.urls_dir(), file_name)
+
   defp sent_message_body do
     %{calls: calls} = :sys.get_state(ExGram.Adapter.Test)
 
@@ -903,8 +912,8 @@ defmodule SaveIt.BotTest do
 
   defp cleanup_cached_folder(cache_key_url) do
     hashed_url = :crypto.hash(:sha256, cache_key_url) |> Base.url_encode64(padding: false)
-    url_cache_path = Path.join(["./data/storage/urls", hashed_url])
-    files_dir_path = Path.join(["./data/storage/files", hashed_url])
+    url_cache_path = storage_url_path(hashed_url)
+    files_dir_path = storage_file_path(hashed_url)
 
     File.rm(url_cache_path)
     File.rm_rf(files_dir_path)
