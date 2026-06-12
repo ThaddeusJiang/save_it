@@ -39,6 +39,7 @@ defmodule SaveIt.LoggerConfigTest do
 
     logger_config = Application.fetch_env!(:logger, :default_formatter)
 
+    assert logger_config[:metadata] == [:status, :file_id, :kind]
     assert logger_config[:colors][:info] == :green
     assert logger_config[:colors][:warning] == :yellow
     assert logger_config[:colors][:error] == :red
