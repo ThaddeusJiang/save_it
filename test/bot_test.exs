@@ -87,6 +87,58 @@ defmodule SaveIt.BotTest do
     assert document["source_message_url"] == "https://t.me/save_it_test_chat/20"
   end
 
+  test "stores the Telegram thumbnail when a user-sent url cannot be resolved", _context do
+    original_url = "https://example.com/unavailable"
+
+    Application.put_env(:tesla, SmallSdk.Telegram, adapter: __MODULE__.TelegramDownloadAdapter)
+
+    ExGramTestAdapter.backdoor_request("/getFile", %{
+      file_id: "link-thumbnail-file-id",
+      file_path: "photos/link-thumbnail.jpg"
+    })
+
+    message = %{
+      chat: %{id: 12_345, username: "save_it_test_chat"},
+      message_id: 101,
+      photo: [
+        %{file_id: "small-link-thumbnail-file-id"},
+        %{file_id: "link-thumbnail-file-id"}
+      ]
+    }
+
+    log =
+      capture_log(fn ->
+        assert {:ok, true} = Bot.handle({:text, original_url, message}, nil)
+      end)
+
+    assert log =~ "Saved Telegram thumbnail fallback after link download failed"
+
+    assert_receive {:test_http_request, :post, "/", cobalt_body}
+    assert Jason.decode!(cobalt_body) == %{"url" => original_url}
+
+    assert_receive {:telegram_download_request, telegram_env}
+    assert String.ends_with?(telegram_env.url, "/file/bottest-token/photos/link-thumbnail.jpg")
+
+    assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
+
+    document = Jason.decode!(typesense_body)
+
+    assert document["url"] == original_url
+    refute Map.has_key?(document, "download_url")
+    assert document["file_id"] == "telegram-photo-file-id"
+    assert document["belongs_to_id"] == "12345"
+    assert document["source_message_id"] == 20
+    assert document["source_message_url"] == "https://t.me/save_it_test_chat/20"
+
+    refute Enum.any?(exgram_calls(), fn
+             {:post, _path, %{text: text}} when is_binary(text) ->
+               String.contains?(text, "Failed")
+
+             _ ->
+               false
+           end)
+  end
+
   test "stores the original user-sent url for every photo in a multi-image download", _context do
     original_url = "https://x.com/JennerItGirls/status/2057529104535023815?s=20"
     purge_url = "https://x.com/JennerItGirls/status/2057529104535023815"
@@ -866,6 +918,9 @@ defmodule SaveIt.BotTest do
             ]
           })
 
+        %{"url" => "https://example.com/unavailable"} ->
+          error_response(%{"error" => "unsupported url"})
+
         unexpected ->
           raise "Unexpected cobalt request body: #{inspect(unexpected)}"
       end
@@ -1018,6 +1073,19 @@ defmodule SaveIt.BotTest do
 
       """
       HTTP/1.1 200 OK\r
+      content-type: application/json\r
+      content-length: #{byte_size(encoded_body)}\r
+      connection: close\r
+      \r
+      #{encoded_body}
+      """
+    end
+
+    defp error_response(body) do
+      encoded_body = Jason.encode!(body)
+
+      """
+      HTTP/1.1 502 Bad Gateway\r
       content-type: application/json\r
       content-length: #{byte_size(encoded_body)}\r
       connection: close\r
