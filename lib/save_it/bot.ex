@@ -419,16 +419,12 @@ defmodule SaveIt.Bot do
   defp send_saved_media(chat_id, %{"media_type" => "video"} = media) do
     ExGram.send_video(chat_id, media["file_id"],
       caption: media["caption"],
-      supports_streaming: true,
-      show_caption_above_media: true
+      supports_streaming: true
     )
   end
 
   defp send_saved_media(chat_id, media) do
-    ExGram.send_photo(chat_id, media["file_id"],
-      caption: media["caption"],
-      show_caption_above_media: true
-    )
+    ExGram.send_photo(chat_id, media["file_id"], caption: media["caption"])
   end
 
   defp saved_media_group_input(%{"media_type" => "video"} = media) do
@@ -436,8 +432,7 @@ defmodule SaveIt.Bot do
       type: "video",
       media: media["file_id"],
       caption: media["caption"],
-      supports_streaming: true,
-      show_caption_above_media: true
+      supports_streaming: true
     }
   end
 
@@ -445,8 +440,7 @@ defmodule SaveIt.Bot do
     %ExGram.Model.InputMediaPhoto{
       type: "photo",
       media: media["file_id"],
-      caption: media["caption"],
-      show_caption_above_media: true
+      caption: media["caption"]
     }
   end
 
@@ -508,7 +502,7 @@ defmodule SaveIt.Bot do
     case HlsDownloader.download(m3u8_url) do
       {:ok, %DownloadedFile{} = file} ->
         update_message(context.chat_id, context.progress_message_id, Enum.slice(@progress, 0..2))
-        bot_send_downloaded_file(context.chat_id, file)
+        bot_send_downloaded_file(context.chat_id, file, caption: download_caption(context))
         finalize_single_download(context, file)
 
       {:error, reason} ->
@@ -526,7 +520,8 @@ defmodule SaveIt.Bot do
 
         bot_send_filenames(context.chat_id, downloaded_files,
           source_url: context.original_url,
-          source_chat: context.chat
+          source_chat: context.chat,
+          caption: download_caption(context)
         )
 
         delete_message(context.chat_id, context.progress_message_id)
@@ -543,7 +538,8 @@ defmodule SaveIt.Bot do
 
         bot_send_files(context.chat_id, files,
           source_url: context.original_url,
-          source_chat: context.chat
+          source_chat: context.chat,
+          caption: download_caption(context)
         )
 
         delete_message(context.chat_id, context.progress_message_id)
@@ -567,7 +563,8 @@ defmodule SaveIt.Bot do
         bot_send_file(context.chat_id, downloaded_file, {:file, downloaded_file},
           source_url: context.original_url,
           download_url: context.download_url,
-          source_chat: context.chat
+          source_chat: context.chat,
+          caption: download_caption(context)
         )
 
         delete_message(context.chat_id, context.progress_message_id)
@@ -584,7 +581,8 @@ defmodule SaveIt.Bot do
 
         bot_send_downloaded_file(context.chat_id, file,
           source_url: context.original_url,
-          source_chat: context.chat
+          source_chat: context.chat,
+          caption: download_caption(context)
         )
 
         finalize_single_download(context, file)
@@ -605,7 +603,8 @@ defmodule SaveIt.Bot do
 
         bot_send_downloaded_file(context.chat_id, file,
           source_url: context.original_url,
-          source_chat: context.chat
+          source_chat: context.chat,
+          caption: download_caption(context)
         )
 
         finalize_thumbnail_download(context, file)
@@ -691,6 +690,35 @@ defmodule SaveIt.Bot do
     :ok
   end
 
+  defp download_caption(%DownloadContext{message: message}) do
+    "created at #{download_date(message)}"
+  end
+
+  defp download_date(message) do
+    case map_get(message, :date) do
+      timestamp when is_integer(timestamp) ->
+        timestamp
+        |> local_date()
+        |> Date.to_iso8601()
+
+      _ ->
+        System.system_time(:second)
+        |> local_date()
+        |> Date.to_iso8601()
+    end
+  end
+
+  defp local_date(timestamp) do
+    timestamp
+    |> DateTime.from_unix!()
+    |> DateTime.shift_zone!(timezone(), Tzdata.TimeZoneDatabase)
+    |> DateTime.to_date()
+  end
+
+  def timezone do
+    Application.fetch_env!(:save_it, :timezone)
+  end
+
   defp send_message(chat_id, text) do
     ExGram.send_message(chat_id, text)
   end
@@ -710,6 +738,7 @@ defmodule SaveIt.Bot do
   defp bot_send_files(chat_id, files, opts) do
     source_url = Keyword.get(opts, :source_url)
     source_chat = Keyword.get(opts, :source_chat)
+    caption = Keyword.get(opts, :caption, "")
 
     if all_images?(files) and length(files) > 1 do
       bot_send_media_group(
@@ -718,16 +747,21 @@ defmodule SaveIt.Bot do
           {file.file_name, {:file_content, file.file_content, file.file_name}, source_url,
            file.download_url}
         end),
-        source_chat: source_chat
+        source_chat: source_chat,
+        caption: caption
       )
     else
       Enum.each(files, fn %DownloadedFile{} = file ->
-        bot_send_downloaded_file(chat_id, file, source_url: source_url, source_chat: source_chat)
+        bot_send_downloaded_file(chat_id, file,
+          source_url: source_url,
+          source_chat: source_chat,
+          caption: caption
+        )
       end)
     end
   end
 
-  defp bot_send_downloaded_file(chat_id, %DownloadedFile{} = file, opts \\ []) do
+  defp bot_send_downloaded_file(chat_id, %DownloadedFile{} = file, opts) do
     bot_send_file(
       chat_id,
       file.file_name,
@@ -739,18 +773,21 @@ defmodule SaveIt.Bot do
   defp bot_send_filenames(chat_id, filenames, opts) do
     source_url = Keyword.get(opts, :source_url)
     source_chat = Keyword.get(opts, :source_chat)
+    caption = Keyword.get(opts, :caption, "")
 
     if all_images?(filenames) and length(filenames) > 1 do
       bot_send_media_group(
         chat_id,
         Enum.map(filenames, fn filename -> {filename, {:file, filename}, source_url} end),
-        source_chat: source_chat
+        source_chat: source_chat,
+        caption: caption
       )
     else
       Enum.each(filenames, fn filename ->
         bot_send_file(chat_id, filename, {:file, filename},
           source_url: source_url,
-          source_chat: source_chat
+          source_chat: source_chat,
+          caption: caption
         )
       end)
     end
@@ -758,8 +795,9 @@ defmodule SaveIt.Bot do
 
   defp bot_send_media_group(chat_id, files, opts) do
     source_chat = Keyword.get(opts, :source_chat) || %{id: chat_id}
+    caption = Keyword.get(opts, :caption, "")
 
-    case Telegram.send_media_group(chat_id, files) do
+    case Telegram.send_media_group(chat_id, files, caption: caption) do
       {:ok, messages} ->
         Enum.zip(files, messages)
         |> Enum.each(fn
@@ -769,7 +807,7 @@ defmodule SaveIt.Bot do
 
             %{
               image: image_base64,
-              caption: "",
+              caption: caption,
               file_id: file_id,
               url: source_url,
               download_url: download_url,
@@ -784,7 +822,7 @@ defmodule SaveIt.Bot do
 
             %{
               image: image_base64,
-              caption: "",
+              caption: caption,
               file_id: file_id,
               url: source_url,
               belongs_to_id: chat_id
@@ -798,7 +836,7 @@ defmodule SaveIt.Bot do
 
             %{
               image: image_base64,
-              caption: "",
+              caption: caption,
               file_id: file_id,
               belongs_to_id: chat_id
             }
@@ -814,17 +852,19 @@ defmodule SaveIt.Bot do
             bot_send_file(chat_id, file_name, content,
               source_url: source_url,
               download_url: download_url,
-              source_chat: source_chat
+              source_chat: source_chat,
+              caption: caption
             )
 
           {file_name, content, source_url} ->
             bot_send_file(chat_id, file_name, content,
               source_url: source_url,
-              source_chat: source_chat
+              source_chat: source_chat,
+              caption: caption
             )
 
           {file_name, content} ->
-            bot_send_file(chat_id, file_name, content, source_chat: source_chat)
+            bot_send_file(chat_id, file_name, content, source_chat: source_chat, caption: caption)
         end)
     end
   end
@@ -881,7 +921,10 @@ defmodule SaveIt.Bot do
         |> safe_index_photo()
 
       ".mp4" ->
-        ExGram.send_video(chat_id, content, supports_streaming: true, caption: caption)
+        ExGram.send_video(chat_id, content,
+          supports_streaming: true,
+          caption: caption
+        )
 
       ".gif" ->
         ExGram.send_animation(chat_id, content, caption: caption)

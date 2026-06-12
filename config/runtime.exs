@@ -1,5 +1,7 @@
 import Config
 
+config :save_it, :timezone, System.get_env("TZ") || "Asia/Tokyo"
+
 config :save_it, :telegram_bot_token, System.get_env("TELEGRAM_BOT_TOKEN")
 config :ex_gram, token: System.get_env("TELEGRAM_BOT_TOKEN")
 
