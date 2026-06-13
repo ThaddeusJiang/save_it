@@ -10,7 +10,7 @@ before the CalVer migration retain their original version labels.
 
 ### Added
 
-- Support configuring self-hosted Cobalt with local Twitter cookies for X links that require authenticated access.
+- Support downloading X resources that require login or verification when self-hosted Cobalt is configured with local cookies.
 
 ### Changed
 
