@@ -14,6 +14,7 @@ before the CalVer migration retain their original version labels.
 
 ### Fixed
 
+- Fail application startup when `TELEGRAM_BOT_TOKEN` is missing instead of starting the bot with repeated ExGram token warnings.
 - Preserve downloaded MP4 video display dimensions when sending to Telegram, and prepare uploads for streaming playback when possible.
 
 ## [2026.6.13] - 2026-06-13

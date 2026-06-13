@@ -25,6 +25,7 @@ defmodule SaveIt.LoggerConfigTest do
     runtime_config = Config.Reader.read!(@runtime_config, env: Mix.env())
 
     assert get_in(runtime_config, [:save_it, :telegram_bot_token]) == "required-token"
+    assert get_in(runtime_config, [:save_it, :start_bot?]) == false
     assert get_in(runtime_config, [:ex_gram, :token]) == "required-token"
     assert get_in(runtime_config, [:ex_gram, :adapter]) == ExGram.Adapter.Req
   end
