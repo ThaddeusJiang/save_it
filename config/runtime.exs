@@ -1,11 +1,16 @@
 import Config
 
-telegram_bot_token =
-  System.get_env("TELEGRAM_BOT_TOKEN") || if config_env() == :test, do: "test-token"
+if config_env() != :test do
+  telegram_bot_token = System.fetch_env!("TELEGRAM_BOT_TOKEN")
 
-config :save_it, :telegram_bot_token, telegram_bot_token
-config :save_it, :start_bot?, config_env() != :test
-config :ex_gram, token: telegram_bot_token, adapter: ExGram.Adapter.Req
+  config :save_it,
+    telegram_bot_token: telegram_bot_token,
+    start_bot?: true
+
+  config :ex_gram,
+    token: telegram_bot_token,
+    adapter: ExGram.Adapter.Req
+end
 
 config :save_it, :cobalt_api_url, System.get_env("COBALT_API_URL", "http://localhost:9001")
 
