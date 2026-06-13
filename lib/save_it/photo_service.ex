@@ -96,7 +96,7 @@ defmodule SaveIt.PhotoService do
 
     data
     |> Map.get("results", [])
-    |> Enum.flat_map(&Map.get(&1, "hits", []))
+    |> prioritized_hits()
     |> Enum.map(&Map.get(&1, "document"))
     |> Enum.reject(&is_nil/1)
     |> unique_photos()
@@ -190,6 +190,15 @@ defmodule SaveIt.PhotoService do
     values
     |> Enum.map_join(", ", &inspect/1)
     |> then(&"[#{&1}]")
+  end
+
+  defp prioritized_hits(results) do
+    Enum.find_value(results, [], fn result ->
+      case Map.get(result, "hits", []) do
+        [] -> nil
+        hits -> hits
+      end
+    end)
   end
 
   defp unique_photos(photos) do

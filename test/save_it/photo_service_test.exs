@@ -21,11 +21,10 @@ defmodule SaveIt.PhotoServiceTest do
     :ok
   end
 
-  test "search_photos prioritizes caption full text matches before image semantic matches" do
+  test "search_photos returns only caption full text matches when captions match" do
     assert [
              %{"id" => "caption-result"},
-             %{"id" => "shared-result"},
-             %{"id" => "image-result"}
+             %{"id" => "shared-result"}
            ] =
              PhotoService.search_photos!("summer beach", belongs_to_id: 12_345)
 
@@ -54,6 +53,15 @@ defmodule SaveIt.PhotoServiceTest do
                }
              ]
            } = Jason.decode!(body)
+  end
+
+  test "search_photos falls back to image semantic matches when captions do not match" do
+    assert [
+             %{"id" => "image-result"}
+           ] =
+             PhotoService.search_photos!("visual only", belongs_to_id: 12_345)
+
+    assert_receive {:test_http_request, :post, "/multi_search", _body}
   end
 
   defp restore_env(key, nil), do: Application.delete_env(:save_it, key)
@@ -120,11 +128,34 @@ defmodule SaveIt.PhotoServiceTest do
     defp handle_socket(socket, test_pid) do
       {method, path, body} = read_http_request(socket)
       send(test_pid, {:test_http_request, method, path, body})
-      :gen_tcp.send(socket, json_response(%{"results" => search_results()}))
+      :gen_tcp.send(socket, json_response(%{"results" => search_results(body)}))
       :gen_tcp.close(socket)
     end
 
-    defp search_results do
+    defp search_results(body) do
+      %{"searches" => [%{"q" => q} | _]} = Jason.decode!(body)
+
+      search_results_for_query(q)
+    end
+
+    defp search_results_for_query("visual only") do
+      [
+        %{"hits" => []},
+        %{
+          "hits" => [
+            %{
+              "document" => %{
+                "id" => "image-result",
+                "caption" => "image match",
+                "file_id" => "image-file-id"
+              }
+            }
+          ]
+        }
+      ]
+    end
+
+    defp search_results_for_query(_q) do
       [
         %{
           "hits" => [
