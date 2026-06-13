@@ -13,6 +13,4 @@ config :logger, :default_formatter,
     error: :red
   ]
 
-if config_env() == :test do
-  import_config "test.exs"
-end
+import_config "#{config_env()}.exs"
