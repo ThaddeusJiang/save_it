@@ -1,4 +1,4 @@
-defmodule SaveIt.TypesenseMigration do
+defmodule SmallSdk.TypesenseMigration do
   @moduledoc false
 
   require Logger
@@ -6,81 +6,112 @@ defmodule SaveIt.TypesenseMigration do
   alias Req.TransportError
   alias SmallSdk.Typesense
 
-  @migration_collection "typesense_migrations"
-  @migrations_path Path.expand("../../priv/typesense/migrations", __DIR__)
+  @default_migration_collection "typesense_migrations"
+  @default_migrations_path Path.expand("priv/typesense/migrations", File.cwd!())
 
-  def migrate! do
-    ensure_migration_collection!()
+  def migrate!(opts \\ []) do
+    ensure_migration_collection!(opts)
 
-    load_migrations!()
-    |> Enum.each(&apply_migration!/1)
+    opts
+    |> load_migrations!()
+    |> Enum.each(&apply_migration!(&1, opts))
   end
 
-  def rollback!(nil) do
-    ensure_migration_collection!()
+  def rollback!(version, opts \\ [])
 
-    case applied_migrations() |> List.last() do
+  def rollback!(nil, opts) do
+    ensure_migration_collection!(opts)
+
+    case applied_migrations(opts) |> List.last() do
       nil ->
         raise "No applied Typesense migration found"
 
       migration ->
-        rollback_migration!(migration, recorded?: true)
+        rollback_migration!(migration, [recorded?: true], opts)
     end
   end
 
-  def rollback!(version) when is_binary(version) do
-    ensure_migration_collection!()
+  def rollback!(version, opts) when is_binary(version) do
+    ensure_migration_collection!(opts)
 
     normalized_version = normalize_version!(version)
-    migration = fetch_migration!(normalized_version)
-    applied_versions = applied_versions()
+    migration = fetch_migration!(normalized_version, opts)
+    applied_versions = applied_versions(opts)
 
     cond do
       normalized_version in applied_versions and List.last(applied_versions) != normalized_version ->
         raise "Typesense migration #{normalized_version} is not the latest applied migration"
 
       normalized_version in applied_versions ->
-        rollback_migration!(migration, recorded?: true)
+        rollback_migration!(migration, [recorded?: true], opts)
 
       true ->
-        rollback_migration!(migration, recorded?: false)
+        rollback_migration!(migration, [recorded?: false], opts)
     end
   end
 
-  def reset! do
-    Typesense.delete_collection("photos")
-    Typesense.delete_collection(@migration_collection)
+  def reset!(opts \\ []) do
+    client = client(opts)
 
-    migrate!()
+    opts
+    |> Keyword.get(:managed_collections, [])
+    |> Enum.each(&client.delete_collection/1)
+
+    client.delete_collection(migration_collection(opts))
+
+    migrate!(opts)
   end
 
-  def run_up!(version) when is_binary(version) do
+  def run_up!(version, opts \\ []) when is_binary(version) do
     version
     |> normalize_version!()
-    |> fetch_migration!()
-    |> invoke_up!()
+    |> fetch_migration!(opts)
+    |> invoke_up!(opts)
   end
 
-  def run_down!(version) when is_binary(version) do
+  def run_down!(version, opts \\ []) when is_binary(version) do
     version
     |> normalize_version!()
-    |> fetch_migration!()
-    |> invoke_down!()
+    |> fetch_migration!(opts)
+    |> invoke_down!(opts)
   end
 
-  def collection(name) when is_binary(name) do
-    Typesense.list_collections!()
+  def create_collection!(schema, opts \\ []) when is_map(schema) do
+    client(opts).create_collection!(schema)
+  end
+
+  def update_collection!(collection_name, schema, opts \\ [])
+      when is_binary(collection_name) and is_map(schema) do
+    client(opts).update_collection!(collection_name, schema)
+  end
+
+  def delete_collection(collection_name, opts \\ []) when is_binary(collection_name) do
+    client(opts).delete_collection(collection_name)
+  end
+
+  def list_documents(collection_name, list_opts \\ [], opts \\ [])
+      when is_binary(collection_name) do
+    client(opts).list_documents(collection_name, list_opts)
+  end
+
+  def update_document!(collection_name, document_id, update_input, opts \\ [])
+      when is_binary(collection_name) and is_binary(document_id) and is_map(update_input) do
+    client(opts).update_document!(collection_name, document_id, update_input)
+  end
+
+  def collection(name, opts \\ []) when is_binary(name) do
+    client(opts).list_collections!()
     |> Enum.find(fn collection -> collection["name"] == name end)
   end
 
-  def has_field?(collection_name, field_name)
+  def has_field?(collection_name, field_name, opts \\ [])
       when is_binary(collection_name) and is_binary(field_name) do
-    field(collection_name, field_name) != nil
+    field(collection_name, field_name, opts) != nil
   end
 
-  def field(collection_name, field_name)
+  def field(collection_name, field_name, opts \\ [])
       when is_binary(collection_name) and is_binary(field_name) do
-    case collection(collection_name) do
+    case collection(collection_name, opts) do
       nil ->
         nil
 
@@ -91,8 +122,9 @@ defmodule SaveIt.TypesenseMigration do
     end
   end
 
-  def load_migrations! do
-    @migrations_path
+  def load_migrations!(opts \\ []) do
+    opts
+    |> migrations_path()
     |> Path.join("*.exs")
     |> Path.wildcard()
     |> Enum.each(&Code.require_file/1)
@@ -113,11 +145,13 @@ defmodule SaveIt.TypesenseMigration do
       function_exported?(module, :applied?, 0)
   end
 
-  defp ensure_migration_collection! do
-    case collection(@migration_collection) do
+  defp ensure_migration_collection!(opts) do
+    migration_collection = migration_collection(opts)
+
+    case collection(migration_collection, opts) do
       nil ->
-        Typesense.create_collection!(%{
-          "name" => @migration_collection,
+        client(opts).create_collection!(%{
+          "name" => migration_collection,
           "fields" => [
             %{"name" => "name", "type" => "string"},
             %{"name" => "applied_at", "type" => "int64"}
@@ -130,7 +164,7 @@ defmodule SaveIt.TypesenseMigration do
     end
   rescue
     error in TransportError ->
-      if timed_out?(error) and collection(@migration_collection) != nil do
+      if timed_out?(error) and collection(migration_collection(opts), opts) != nil do
         Logger.info(
           "Typesense migration collection creation timed out, but the collection now exists. Continuing."
         )
@@ -141,38 +175,38 @@ defmodule SaveIt.TypesenseMigration do
       end
   end
 
-  defp apply_migration!(migration) do
+  defp apply_migration!(migration, opts) do
     version = migration.version()
     name = migration.name()
 
     cond do
-      version in applied_versions() ->
+      version in applied_versions(opts) ->
         Logger.info("Typesense migration #{version} #{name} already recorded, skipping")
 
       migration.applied?() ->
         Logger.info("Typesense migration #{version} #{name} already applied, recording")
-        record_migration!(migration)
+        record_migration!(migration, opts)
 
       true ->
         Logger.info("Applying Typesense migration #{version} #{name}")
-        invoke_up!(migration)
-        record_migration!(migration)
+        invoke_up!(migration, opts)
+        record_migration!(migration, opts)
     end
   end
 
-  defp rollback_migration!(migration, opts) do
+  defp rollback_migration!(migration, rollback_opts, opts) do
     version = migration.version()
     name = migration.name()
 
     Logger.info("Rolling back Typesense migration #{version} #{name}")
-    invoke_down!(migration)
+    invoke_down!(migration, opts)
 
-    if Keyword.fetch!(opts, :recorded?) do
-      delete_migration_record!(version)
+    if Keyword.fetch!(rollback_opts, :recorded?) do
+      delete_migration_record!(version, opts)
     end
   end
 
-  defp invoke_up!(migration) do
+  defp invoke_up!(migration, _opts) do
     migration.up()
   rescue
     error in TransportError ->
@@ -187,7 +221,7 @@ defmodule SaveIt.TypesenseMigration do
       end
   end
 
-  defp invoke_down!(migration) do
+  defp invoke_down!(migration, _opts) do
     migration.down()
   rescue
     error in TransportError ->
@@ -202,24 +236,27 @@ defmodule SaveIt.TypesenseMigration do
       end
   end
 
-  defp applied_migrations do
-    applied_versions = applied_versions()
+  defp applied_migrations(opts) do
+    applied_versions = applied_versions(opts)
 
-    load_migrations!()
+    opts
+    |> load_migrations!()
     |> Enum.filter(fn migration -> migration.version() in applied_versions end)
   end
 
-  defp applied_versions do
-    Typesense.list_documents(@migration_collection, per_page: 200, query_by: "name")
+  defp applied_versions(opts) do
+    opts
+    |> migration_collection()
+    |> client(opts).list_documents(per_page: 200, query_by: "name")
     |> Enum.map(&Map.fetch!(&1, "id"))
     |> Enum.sort()
   end
 
-  defp record_migration!(migration) do
+  defp record_migration!(migration, opts) do
     version = migration.version()
 
-    unless version in applied_versions() do
-      Typesense.create_document!(@migration_collection, %{
+    unless version in applied_versions(opts) do
+      client(opts).create_document!(migration_collection(opts), %{
         "id" => version,
         "name" => migration.name(),
         "applied_at" => DateTime.utc_now() |> DateTime.to_unix()
@@ -227,13 +264,14 @@ defmodule SaveIt.TypesenseMigration do
     end
   end
 
-  defp delete_migration_record!(version) do
-    Typesense.delete_document(@migration_collection, version)
+  defp delete_migration_record!(version, opts) do
+    client(opts).delete_document(migration_collection(opts), version)
     :ok
   end
 
-  defp fetch_migration!(version) do
-    load_migrations!()
+  defp fetch_migration!(version, opts) do
+    opts
+    |> load_migrations!()
     |> Enum.find(fn migration -> migration.version() == version end)
     |> case do
       nil -> raise "Unknown Typesense migration #{version}"
@@ -253,6 +291,13 @@ defmodule SaveIt.TypesenseMigration do
 
     normalized_version
   end
+
+  defp client(opts), do: Keyword.get(opts, :client, Typesense)
+
+  defp migration_collection(opts),
+    do: Keyword.get(opts, :migration_collection, @default_migration_collection)
+
+  defp migrations_path(opts), do: Keyword.get(opts, :migrations_path, @default_migrations_path)
 
   defp timed_out?(error) do
     Exception.message(error)

@@ -1,8 +1,7 @@
 defmodule SaveIt.Typesense.Migrations.AddSourceMessageToPhotos20260611001000 do
   @moduledoc false
 
-  alias SaveIt.TypesenseMigration
-  alias SmallSdk.Typesense
+  alias SmallSdk.TypesenseMigration
 
   @collection_name "photos"
   @fields [
@@ -20,7 +19,7 @@ defmodule SaveIt.Typesense.Migrations.AddSourceMessageToPhotos20260611001000 do
       end)
 
     if fields_to_add != [] do
-      Typesense.update_collection!(@collection_name, %{"fields" => fields_to_add})
+      TypesenseMigration.update_collection!(@collection_name, %{"fields" => fields_to_add})
     end
   end
 
@@ -32,7 +31,7 @@ defmodule SaveIt.Typesense.Migrations.AddSourceMessageToPhotos20260611001000 do
       |> Enum.map(&%{"name" => &1, "drop" => true})
 
     if fields_to_drop != [] do
-      Typesense.update_collection!(@collection_name, %{"fields" => fields_to_drop})
+      TypesenseMigration.update_collection!(@collection_name, %{"fields" => fields_to_drop})
     end
   end
 

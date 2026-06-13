@@ -3,8 +3,7 @@ defmodule SaveIt.Typesense.Migrations.AddFileIdToPhotos20241029000000 do
 
   require Logger
 
-  alias SaveIt.TypesenseMigration
-  alias SmallSdk.Typesense
+  alias SmallSdk.TypesenseMigration
 
   @collection_name "photos"
 
@@ -13,7 +12,7 @@ defmodule SaveIt.Typesense.Migrations.AddFileIdToPhotos20241029000000 do
 
   def up do
     unless TypesenseMigration.has_field?(@collection_name, "file_id") do
-      Typesense.update_collection!(@collection_name, %{
+      TypesenseMigration.update_collection!(@collection_name, %{
         "fields" => [
           %{"name" => "file_id", "type" => "string", "optional" => true}
         ]
@@ -25,7 +24,7 @@ defmodule SaveIt.Typesense.Migrations.AddFileIdToPhotos20241029000000 do
 
   def down do
     if TypesenseMigration.has_field?(@collection_name, "file_id") do
-      Typesense.update_collection!(@collection_name, %{
+      TypesenseMigration.update_collection!(@collection_name, %{
         "fields" => [
           %{"name" => "file_id", "drop" => true}
         ]
@@ -42,7 +41,7 @@ defmodule SaveIt.Typesense.Migrations.AddFileIdToPhotos20241029000000 do
 
     if TypesenseMigration.has_field?(@collection_name, "url") do
       @collection_name
-      |> Typesense.list_documents(per_page: 200, query_by: "url")
+      |> TypesenseMigration.list_documents(per_page: 200, query_by: "url")
       |> Enum.each(fn doc ->
         case {Map.get(doc, "file_id"), Map.get(doc, "url")} do
           {nil, url} when is_binary(url) and url != "" ->
@@ -51,7 +50,7 @@ defmodule SaveIt.Typesense.Migrations.AddFileIdToPhotos20241029000000 do
               |> String.split("/")
               |> List.last()
 
-            Typesense.update_document!(@collection_name, doc["id"], %{
+            TypesenseMigration.update_document!(@collection_name, doc["id"], %{
               "file_id" => file_id
             })
 
@@ -65,7 +64,7 @@ defmodule SaveIt.Typesense.Migrations.AddFileIdToPhotos20241029000000 do
   defp backfill_needed? do
     if TypesenseMigration.has_field?(@collection_name, "url") do
       @collection_name
-      |> Typesense.list_documents(per_page: 200, query_by: "url")
+      |> TypesenseMigration.list_documents(per_page: 200, query_by: "url")
       |> Enum.any?(fn doc ->
         is_nil(Map.get(doc, "file_id")) and is_binary(Map.get(doc, "url"))
       end)

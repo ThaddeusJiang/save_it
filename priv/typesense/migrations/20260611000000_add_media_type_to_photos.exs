@@ -1,8 +1,7 @@
 defmodule SaveIt.Typesense.Migrations.AddMediaTypeToPhotos20260611000000 do
   @moduledoc false
 
-  alias SaveIt.TypesenseMigration
-  alias SmallSdk.Typesense
+  alias SmallSdk.TypesenseMigration
 
   @collection_name "photos"
 
@@ -11,7 +10,7 @@ defmodule SaveIt.Typesense.Migrations.AddMediaTypeToPhotos20260611000000 do
 
   def up do
     unless TypesenseMigration.has_field?(@collection_name, "media_type") do
-      Typesense.update_collection!(@collection_name, %{
+      TypesenseMigration.update_collection!(@collection_name, %{
         "fields" => [
           %{"name" => "media_type", "type" => "string", "optional" => true}
         ]
@@ -21,7 +20,7 @@ defmodule SaveIt.Typesense.Migrations.AddMediaTypeToPhotos20260611000000 do
 
   def down do
     if TypesenseMigration.has_field?(@collection_name, "media_type") do
-      Typesense.update_collection!(@collection_name, %{
+      TypesenseMigration.update_collection!(@collection_name, %{
         "fields" => [
           %{"name" => "media_type", "drop" => true}
         ]
