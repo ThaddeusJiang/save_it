@@ -15,7 +15,7 @@ services:
         condition: service_started
 
   cobalt-api:
-    image: ghcr.io/imputnet/cobalt:10
+    image: ghcr.io/imputnet/cobalt:11
     init: true
     read_only: true
     restart: on-failure
@@ -23,6 +23,11 @@ services:
       - 9001:9000/tcp
     environment:
       API_URL: "http://cobalt-api:9000/"
+      COOKIE_PATH: "/cookies.json"
+    volumes:
+      - type: bind
+        source: ./cobalt-cookies.json
+        target: /cookies.json
 
   typesense:
     image: typesense/typesense:30.2

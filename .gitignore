@@ -37,3 +37,7 @@ _stag*
 _prod*
 nohup.out
 .env
+
+# Local Cobalt service cookies. Keep auth cookies out of git.
+/cobalt-cookies.json
+/cookies.json
