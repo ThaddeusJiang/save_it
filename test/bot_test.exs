@@ -287,6 +287,8 @@ defmodule SaveIt.BotTest do
       adapter: &__MODULE__.TelegramDownloadAdapter.request/1
     )
 
+    Application.put_env(:save_it, :video_metadata_probe, __MODULE__.VideoMetadataProbe)
+
     message = %{
       chat: %{id: 12_345, username: "save_it_test_chat"},
       date: 1_717_170_000,
@@ -305,6 +307,9 @@ defmodule SaveIt.BotTest do
     assert multipart_part(parts, "chat_id") == "12345"
     assert multipart_part(parts, "caption") == "created at 2024-06-01"
     assert multipart_part(parts, "supports_streaming") == "true"
+    assert multipart_part(parts, "width") == "1080"
+    assert multipart_part(parts, "height") == "1920"
+    assert multipart_part(parts, "duration") == "12"
 
     assert_receive {:telegram_download_request, telegram_env}
 
@@ -1244,6 +1249,14 @@ defmodule SaveIt.BotTest do
          file_content: SaveIt.BotTest.test_mp4()
        }}
     end
+  end
+
+  defmodule VideoMetadataProbe do
+    def probe_file_content(_file_content, file_name) when is_binary(file_name) do
+      {:ok, %{width: 1080, height: 1920, duration: 12}}
+    end
+
+    def probe_file(_file_path), do: {:error, :unexpected_probe_file}
   end
 
   defmodule TelegramDirectMediaAdapter do

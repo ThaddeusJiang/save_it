@@ -10,6 +10,7 @@ defmodule SaveIt.Bot do
   alias SaveIt.FileHelper
   alias SaveIt.GoogleDrive
   alias SaveIt.GoogleOAuth2DeviceFlow
+  alias SaveIt.VideoUpload
 
   alias SaveIt.PhotoService
 
@@ -992,9 +993,12 @@ defmodule SaveIt.Bot do
         |> safe_index_photo()
 
       ".mp4" ->
-        case ExGram.send_video(chat_id, content,
-               supports_streaming: true,
-               caption: caption
+        {prepared_content, video_metadata} = VideoUpload.prepare(content)
+
+        case ExGram.send_video(
+               chat_id,
+               prepared_content,
+               video_send_opts(caption, video_metadata)
              ) do
           {:ok, msg} = response ->
             index_sent_video_preview(chat_id, msg,
@@ -1014,6 +1018,20 @@ defmodule SaveIt.Bot do
 
       _ ->
         ExGram.send_document(chat_id, content, caption: caption)
+    end
+  end
+
+  defp video_send_opts(caption, video_metadata) do
+    [supports_streaming: true, caption: caption]
+    |> maybe_put_video_metadata(:width, video_metadata)
+    |> maybe_put_video_metadata(:height, video_metadata)
+    |> maybe_put_video_metadata(:duration, video_metadata)
+  end
+
+  defp maybe_put_video_metadata(opts, key, metadata) when is_map(metadata) do
+    case Map.get(metadata, key) do
+      value when is_integer(value) and value > 0 -> Keyword.put(opts, key, value)
+      _ -> opts
     end
   end
 
