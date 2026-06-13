@@ -20,6 +20,7 @@ before the CalVer migration retain their original version labels.
 
 ### Fixed
 
+- Fail application startup when `TELEGRAM_BOT_TOKEN` is missing instead of starting the bot with repeated ExGram token warnings.
 - Prevent `/similar` photo commands from crashing when Telegram delivers the command as a photo command update instead of a plain photo message.
 - Index Telegram photo captions delivered by ExGram as text updates so caption search can find directly uploaded photos.
 - Preserve downloaded MP4 video display dimensions when sending to Telegram, and prepare uploads for streaming playback when possible.

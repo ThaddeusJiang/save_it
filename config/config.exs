@@ -12,3 +12,5 @@ config :logger, :default_formatter,
     warning: :yellow,
     error: :red
   ]
+
+import_config "#{config_env()}.exs"
