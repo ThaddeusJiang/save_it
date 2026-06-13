@@ -1,13 +1,15 @@
 defmodule SaveIt.BotTest do
   use ExUnit.Case, async: false
 
+  @moduletag :tmp_dir
+
   import ExUnit.CaptureLog
 
   alias ExGram.Adapter.Test, as: ExGramTestAdapter
   alias SaveIt.Bot
   alias SaveIt.FileHelper
 
-  setup do
+  setup %{tmp_dir: tmp_dir} do
     server = start_supervised!({__MODULE__.TestHttpServer, test_pid: self()})
     base_url = "http://127.0.0.1:#{__MODULE__.TestHttpServer.port(server)}"
 
@@ -22,6 +24,7 @@ defmodule SaveIt.BotTest do
     Application.put_env(:save_it, :typesense_url, base_url)
     Application.put_env(:save_it, :typesense_api_key, "test-typesense-key")
     Application.put_env(:save_it, :timezone, System.get_env("TZ") || "Asia/Tokyo")
+    Application.put_env(:save_it, :data_dir, tmp_dir)
 
     if Process.whereis(ExGram.Adapter.Test) do
       ExGramTestAdapter.clean()
@@ -423,7 +426,7 @@ defmodule SaveIt.BotTest do
 
   test "stores a directly uploaded photo in Typesense and Google Drive", _context do
     chat_id = 12_348
-    stored_file_path = Path.join(["./data/storage/files", "direct-photo.jpg"])
+    stored_file_path = storage_file_path("direct-photo.jpg")
 
     File.rm(stored_file_path)
     configure_google_drive(chat_id)
@@ -473,7 +476,7 @@ defmodule SaveIt.BotTest do
   test "stores a directly uploaded video using its thumbnail for Typesense and uploads the video to Google Drive",
        _context do
     chat_id = 12_347
-    stored_file_path = Path.join(["./data/storage/files", "direct-video.mp4"])
+    stored_file_path = storage_file_path("direct-video.mp4")
 
     File.rm(stored_file_path)
     configure_google_drive(chat_id)
@@ -573,7 +576,7 @@ defmodule SaveIt.BotTest do
   test "indexes a directly uploaded video thumbnail when original video download times out",
        _context do
     chat_id = 12_350
-    stored_file_path = Path.join(["./data/storage/files", "timeout-video.mp4"])
+    stored_file_path = storage_file_path("timeout-video.mp4")
 
     File.rm(stored_file_path)
     configure_google_drive(chat_id)
@@ -692,8 +695,8 @@ defmodule SaveIt.BotTest do
 
   defp cleanup_cached_file(download_url, cached_file_name) do
     hashed_url = :crypto.hash(:sha256, download_url) |> Base.url_encode64(padding: false)
-    url_cache_path = Path.join(["./data/storage/urls", hashed_url])
-    file_path = Path.join(["./data/storage/files", cached_file_name])
+    url_cache_path = url_cache_path(hashed_url)
+    file_path = storage_file_path(cached_file_name)
 
     File.rm(url_cache_path)
     File.rm(file_path)
@@ -715,8 +718,8 @@ defmodule SaveIt.BotTest do
 
   defp cleanup_cached_folder(cache_key_url) do
     hashed_url = :crypto.hash(:sha256, cache_key_url) |> Base.url_encode64(padding: false)
-    url_cache_path = Path.join(["./data/storage/urls", hashed_url])
-    files_dir_path = Path.join(["./data/storage/files", hashed_url])
+    url_cache_path = url_cache_path(hashed_url)
+    files_dir_path = storage_file_path(hashed_url)
 
     File.rm(url_cache_path)
     File.rm_rf(files_dir_path)
@@ -742,13 +745,27 @@ defmodule SaveIt.BotTest do
   end
 
   defp configure_google_drive(chat_id) do
-    File.rm_rf("./data/settings/#{chat_id}")
+    settings_dir = chat_settings_dir(chat_id)
+
+    File.rm_rf(settings_dir)
     FileHelper.set_google_access_token(chat_id, "test-drive-token")
     FileHelper.set_google_drive_folder_id(chat_id, "test-drive-folder")
 
     on_exit(fn ->
-      File.rm_rf("./data/settings/#{chat_id}")
+      File.rm_rf(settings_dir)
     end)
+  end
+
+  defp storage_file_path(file_name) do
+    Path.join([FileHelper.data_dir(), "storage", "files", file_name])
+  end
+
+  defp url_cache_path(hashed_url) do
+    Path.join([FileHelper.data_dir(), "storage", "urls", hashed_url])
+  end
+
+  defp chat_settings_dir(chat_id) do
+    Path.join([FileHelper.data_dir(), "settings", to_string(chat_id)])
   end
 
   def test_jpeg do

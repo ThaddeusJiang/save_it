@@ -5,58 +5,55 @@ defmodule SaveIt.FileHelper do
 
   alias SaveIt.DownloadedFile
 
-  @files_dir "./data/storage/files"
-  @urls_dir "./data/storage/urls"
-
   def set_google_drive_folder_id(chat_id, folder_id) do
-    write_file_to_disk("./data/settings/#{chat_id}", "folder_id.txt", folder_id)
+    write_file_to_disk(chat_settings_dir(chat_id), "folder_id.txt", folder_id)
   end
 
   def get_google_drive_folder_id(chat_id) do
-    case File.read(Path.join(["./data/settings/#{chat_id}", "folder_id.txt"])) do
+    case File.read(Path.join([chat_settings_dir(chat_id), "folder_id.txt"])) do
       {:ok, folder_id} -> folder_id
       {:error, _} -> nil
     end
   end
 
   def set_google_device_code(chat_id, device_code) do
-    write_file_to_disk("./data/settings/#{chat_id}", "device_code.txt", device_code)
+    write_file_to_disk(chat_settings_dir(chat_id), "device_code.txt", device_code)
   end
 
   def get_google_device_code(chat_id) do
-    case File.read(Path.join(["./data/settings/#{chat_id}", "device_code.txt"])) do
+    case File.read(Path.join([chat_settings_dir(chat_id), "device_code.txt"])) do
       {:ok, device_code} -> device_code
       {:error, _} -> nil
     end
   end
 
   def set_google_access_token(chat_id, access_token) do
-    write_file_to_disk("./data/settings/#{chat_id}", "access_token.txt", access_token)
+    write_file_to_disk(chat_settings_dir(chat_id), "access_token.txt", access_token)
   end
 
   def get_google_access_token(chat_id) do
-    case File.read(Path.join(["./data/settings/#{chat_id}", "access_token.txt"])) do
+    case File.read(Path.join([chat_settings_dir(chat_id), "access_token.txt"])) do
       {:ok, access_token} -> access_token
       {:error, _} -> nil
     end
   end
 
   @doc """
-  - dir: ./data/settings/<chat_id>.txt TODO: erlang / elixir style
+  - dir: <data_dir>/settings/<chat_id>.txt TODO: erlang / elixir style
 
   settings = %{
     "device_code" => "value"
   }
   """
   def save_chat_settings(chat_id, settings) do
-    write_file_to_disk("./data/settings", "#{chat_id}.txt", settings)
+    write_file_to_disk(settings_dir(), "#{chat_id}.txt", settings)
   end
 
   def write_file(file_name, file_content, download_url) do
-    write_file_to_disk(@files_dir, file_name, file_content)
+    write_file_to_disk(files_dir(), file_name, file_content)
 
     hashed_url = :crypto.hash(:sha256, download_url) |> Base.url_encode64(padding: false)
-    write_file_to_disk(@urls_dir, hashed_url, file_name)
+    write_file_to_disk(urls_dir(), hashed_url, file_name)
   end
 
   def write_folder(original_url, files) do
@@ -64,17 +61,17 @@ defmodule SaveIt.FileHelper do
 
     Enum.each(files, fn
       %DownloadedFile{file_name: file_name, file_content: file_content} ->
-        write_file_to_disk(Path.join(@files_dir, hashed_url), file_name, file_content)
+        write_file_to_disk(Path.join(files_dir(), hashed_url), file_name, file_content)
 
       {file_name, file_content} ->
-        write_file_to_disk(Path.join(@files_dir, hashed_url), file_name, file_content)
+        write_file_to_disk(Path.join(files_dir(), hashed_url), file_name, file_content)
 
       {file_name, file_content, _source_url} ->
-        write_file_to_disk(Path.join(@files_dir, hashed_url), file_name, file_content)
+        write_file_to_disk(Path.join(files_dir(), hashed_url), file_name, file_content)
     end)
 
     write_file_to_disk(
-      @urls_dir,
+      urls_dir(),
       hashed_url,
       Enum.map_join(files, "\n", fn
         %DownloadedFile{file_name: file_name} -> file_name
@@ -103,8 +100,8 @@ defmodule SaveIt.FileHelper do
   def get_downloaded_file(download_url) do
     hashed_url = :crypto.hash(:sha256, download_url) |> Base.url_encode64(padding: false)
 
-    case File.read(Path.join([@urls_dir, hashed_url])) do
-      {:ok, file} -> Path.join([@files_dir, file |> String.trim()])
+    case File.read(Path.join([urls_dir(), hashed_url])) do
+      {:ok, file} -> Path.join([files_dir(), file |> String.trim()])
       {:error, _} -> nil
     end
   end
@@ -112,15 +109,35 @@ defmodule SaveIt.FileHelper do
   def get_downloaded_files(download_url) do
     hashed_url = :crypto.hash(:sha256, download_url) |> Base.url_encode64(padding: false)
 
-    case File.read(Path.join([@urls_dir, hashed_url])) do
+    case File.read(Path.join([urls_dir(), hashed_url])) do
       {:ok, file} ->
         file
         |> String.trim()
         |> String.split("\n")
-        |> Enum.map(&Path.join([@files_dir, hashed_url, &1]))
+        |> Enum.map(&Path.join([files_dir(), hashed_url, &1]))
 
       {:error, _} ->
         nil
     end
+  end
+
+  def data_dir do
+    Application.fetch_env!(:save_it, :data_dir)
+  end
+
+  defp files_dir do
+    Path.join([data_dir(), "storage", "files"])
+  end
+
+  defp urls_dir do
+    Path.join([data_dir(), "storage", "urls"])
+  end
+
+  defp settings_dir do
+    Path.join([data_dir(), "settings"])
+  end
+
+  defp chat_settings_dir(chat_id) do
+    Path.join([settings_dir(), to_string(chat_id)])
   end
 end
