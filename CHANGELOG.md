@@ -8,8 +8,13 @@ before the CalVer migration retain their original version labels.
 
 ## [Unreleased]
 
+### Added
+
+- Support downloading X resources that require login or verification when self-hosted Cobalt is configured with local cookies.
+
 ### Changed
 
+- Upgrade the bundled Cobalt service image from v10 to v11 for local and Zeabur deployments.
 - Use user-provided Telegram text as captions for URL and photo saves, and fall back to URL Open Graph descriptions when a link has no user description.
 
 ### Fixed

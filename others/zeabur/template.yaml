@@ -128,14 +128,24 @@ spec:
       template: PREBUILT_V2
       spec:
         source:
-          image: ghcr.io/imputnet/cobalt:10
+          image: ghcr.io/imputnet/cobalt:11
         ports:
           - id: api
             port: 9000
             type: TCP
+        volumes:
+          - id: cobalt-data
+            dir: /data
+        instructions:
+          - title: Cobalt Twitter Cookies
+            content: Create /data/cookies.json with {"twitter":["auth_token=<token>; ct0=<csrf>"]} to let self-hosted Cobalt download X posts that require login.
+            category: Credentials
         env:
           API_URL:
             default: http://cobalt-api.zeabur.internal:9000
+            expose: false
+          COOKIE_PATH:
+            default: /data/cookies.json
             expose: false
 
         configs: []
