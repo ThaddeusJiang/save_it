@@ -1,3 +1,5 @@
 {
-  "twitter": []
+  "twitter": [
+    "auth_token=<token>; ct0=<csrf>"
+  ]
 }
