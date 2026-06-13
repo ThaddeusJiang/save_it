@@ -8,6 +8,8 @@ services:
     environment:
       COBALT_API_URL: "http://cobalt-api:9000"
       TYPESENSE_URL: "http://typesense:8108"
+    volumes:
+      - save_it_data:/data
     depends_on:
       cobalt-api:
         condition: service_started
@@ -66,5 +68,7 @@ services:
         condition: service_started
 
 volumes:
+  save_it_data:
+    name: save_it_data
   save_it_typesense_data:
     name: save_it_typesense_data
