@@ -11,7 +11,23 @@ before the CalVer migration retain their original version labels.
 ### Changed
 
 - Make the save data directory configurable with `SAVE_IT_DATA_DIR`, defaulting to `./data` locally and `/data` in the Docker image, with Docker Compose persisting `/data` on a named volume.
+- Use user-provided Telegram text as captions for URL and photo saves, and fall back to URL Open Graph descriptions when a link has no user description.
+
+### Fixed
+
+- Preserve downloaded MP4 video display dimensions when sending to Telegram, and prepare uploads for streaming playback when possible.
+
+## [2026.6.13] - 2026-06-13
+
+### Changed
+
 - Simplify photo details to show only the source message URL, original URL, and saved timestamp.
+- Upgrade Telegram and HTTP dependencies, and run Telegram, Google Drive, and Google OAuth requests through Req instead of Tesla.
+- Keep HTTP logs at request-summary level instead of dumping full request and response bodies at debug level.
+
+### Fixed
+
+- Save Telegram video thumbnails as the preferred searchable cover for URL video downloads, falling back to webpage preview images only when Telegram does not provide a thumbnail.
 
 ## [2026.6.12-rc.1] - 2026-06-12
 
@@ -31,6 +47,7 @@ before the CalVer migration retain their original version labels.
 ### Fixed
 
 - Save directly uploaded Telegram photos and downloadable videos to local storage backups.
+- Prevent `/similar` results from echoing the just uploaded Telegram media back into the chat.
 - Save Telegram-provided thumbnails without a user-facing failure message when a user-sent link cannot be downloaded.
 - Prevent directly uploaded Telegram videos from crashing when Telegram refuses, fails, or times out while downloading the original file.
 - Prevent oversized files from being uploaded to Telegram Bot API.

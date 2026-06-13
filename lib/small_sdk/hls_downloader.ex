@@ -63,8 +63,8 @@ defmodule SmallSdk.HlsDownloader do
           download_best_variant(rest, original_url)
       end
     rescue
-      e in ErlangError ->
-        Logger.error("ffmpeg not found: #{inspect(e)}")
+      _e in ErlangError ->
+        Logger.error("ffmpeg not found")
         {:error, "ffmpeg is not installed"}
     after
       File.rm(tmp_path)

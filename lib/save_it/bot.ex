@@ -10,12 +10,14 @@ defmodule SaveIt.Bot do
   alias SaveIt.FileHelper
   alias SaveIt.GoogleDrive
   alias SaveIt.GoogleOAuth2DeviceFlow
+  alias SaveIt.VideoUpload
 
   alias SaveIt.PhotoService
 
   alias SmallSdk.BadNews
   alias SmallSdk.Cobalt
   alias SmallSdk.HlsDownloader
+  alias SmallSdk.LinkPreview
   alias SmallSdk.Telegram
   alias SmallSdk.WebDownloader
 
@@ -87,8 +89,8 @@ defmodule SaveIt.Bot do
         Run `/login` after you have logged in.
         """)
 
-      {:error, error} ->
-        Logger.error("Failed to get device code: #{inspect(error)}")
+      {:error, _error} ->
+        Logger.error("Failed to get device code")
         send_message(chat.id, "Failed to get device code")
     end
   end
@@ -198,6 +200,7 @@ defmodule SaveIt.Bot do
 
   def handle({:text, text, %{chat: chat, message_id: message_id} = message}, _context) do
     urls = extract_urls_from_string(text)
+    message = Map.put_new(message, :text, text)
 
     case urls do
       [] ->
@@ -252,9 +255,10 @@ defmodule SaveIt.Bot do
       {:ok, _response} ->
         :ok
 
-      {:error, reason} ->
+      {:error, _reason} ->
         Logger.warning(
-          "Failed to send similar media group, falling back to individual media: #{inspect(reason)}"
+          "Failed to send similar media group, falling back to individual media",
+          kind: :telegram_media_group_failed
         )
 
         Enum.each(similar_photos, &send_similar_media(chat_id, &1))
@@ -267,9 +271,10 @@ defmodule SaveIt.Bot do
       {:ok, _response} ->
         :ok
 
-      {:error, reason} ->
+      {:error, _reason} ->
         Logger.warning(
-          "Skipping unavailable similar media file_id=#{inspect(media["file_id"])}: #{inspect(reason)}"
+          "Skipping unavailable similar media",
+          file_id: media["file_id"]
         )
 
         :error
@@ -361,8 +366,8 @@ defmodule SaveIt.Bot do
     end
   end
 
-  defp handle_uploaded_video_file_error(reason) do
-    Logger.warning("Skipping local backup for Telegram video: #{inspect(reason)}")
+  defp handle_uploaded_video_file_error(_reason) do
+    Logger.warning("Skipping local backup for Telegram video")
     :error
   end
 
@@ -385,16 +390,40 @@ defmodule SaveIt.Bot do
   defp answer_similar_for_uploaded_media(nil, _chat_id, _caption), do: :ok
 
   defp answer_similar_for_uploaded_media(typesense_photo, chat_id, caption) do
+    similar_photos =
+      typesense_photo["id"]
+      |> safe_typesense_search_similar_photos(
+        distance_threshold: similar_search_distance_threshold(caption),
+        belongs_to_id: chat_id
+      )
+      |> exclude_uploaded_media(typesense_photo)
+
     if search_command_caption?(caption) do
-      typesense_photo["id"]
-      |> safe_typesense_search_similar_photos(distance_threshold: 0.4, belongs_to_id: chat_id)
-      |> then(&answer_similar_photos(chat_id, &1))
+      answer_similar_photos(chat_id, similar_photos)
     else
-      typesense_photo["id"]
-      |> safe_typesense_search_similar_photos(distance_threshold: 0.1, belongs_to_id: chat_id)
-      |> then(&answer_similar_photos_if_any(chat_id, &1))
+      answer_similar_photos_if_any(chat_id, similar_photos)
     end
   end
+
+  defp similar_search_distance_threshold(caption) do
+    if search_command_caption?(caption), do: 0.4, else: 0.1
+  end
+
+  defp exclude_uploaded_media(photos, uploaded_media) when is_list(photos) do
+    uploaded_file_id = Map.get(uploaded_media, "file_id")
+    uploaded_id = Map.get(uploaded_media, "id")
+
+    Enum.reject(photos, fn photo ->
+      same_present_value?(Map.get(photo, "file_id"), uploaded_file_id) or
+        same_present_value?(Map.get(photo, "id"), uploaded_id)
+    end)
+  end
+
+  defp same_present_value?(left, right) when is_binary(left) and is_binary(right) do
+    left != "" and left == right
+  end
+
+  defp same_present_value?(_left, _right), do: false
 
   defp searchable_caption(caption) do
     if search_command_caption?(caption), do: "", else: caption || ""
@@ -477,7 +506,7 @@ defmodule SaveIt.Bot do
       message: message
     }
 
-    case get_download_url(url) do
+    case resolve_download_url(url) do
       {:ok, m3u8_url, :hls} ->
         handle_hls_download(%{context | cache_url: url}, m3u8_url)
 
@@ -496,18 +525,35 @@ defmodule SaveIt.Bot do
     end
   end
 
+  defp resolve_download_url(url) do
+    case Application.get_env(:save_it, :download_url_resolver) do
+      nil -> get_download_url(url)
+      resolver -> resolver.get_download_url(url)
+    end
+  end
+
   defp handle_hls_download(%DownloadContext{} = context, m3u8_url) do
     update_message(context.chat_id, context.progress_message_id, Enum.slice(@progress, 0..1))
 
-    case HlsDownloader.download(m3u8_url) do
+    case hls_downloader().download(m3u8_url) do
       {:ok, %DownloadedFile{} = file} ->
         update_message(context.chat_id, context.progress_message_id, Enum.slice(@progress, 0..2))
-        bot_send_downloaded_file(context.chat_id, file, caption: download_caption(context))
+
+        bot_send_downloaded_file(context.chat_id, file,
+          source_url: context.original_url,
+          source_chat: context.chat,
+          caption: download_caption(context)
+        )
+
         finalize_single_download(context, file)
 
       {:error, reason} ->
         handle_download_failure(context, "💔 Failed downloading HLS video.", reason)
     end
+  end
+
+  defp hls_downloader do
+    Application.get_env(:save_it, :hls_downloader, HlsDownloader)
   end
 
   defp handle_multi_file_download(%DownloadContext{} = context, download_urls) do
@@ -591,32 +637,54 @@ defmodule SaveIt.Bot do
     end
   end
 
-  defp handle_download_failure(%DownloadContext{} = context, failure_message, failure_reason) do
-    case download_message_thumbnail(context.message) do
-      {:ok, %DownloadedFile{} = file} ->
-        Logger.warning(
-          "Saved Telegram thumbnail fallback after link download failed: #{inspect(failure_reason)}"
-        )
+  defp handle_download_failure(%DownloadContext{} = context, failure_message, _failure_reason) do
+    case download_fallback_thumbnail(context) do
+      {:ok, %DownloadedFile{} = file, source} ->
+        log_thumbnail_fallback_success(source)
+        save_thumbnail_fallback(context, file)
 
-        update_message(context.chat_id, context.progress_message_id, Enum.slice(@progress, 0..2))
-
-        bot_send_downloaded_file(context.chat_id, file,
-          source_url: context.original_url,
-          source_chat: context.chat,
-          caption: download_caption(context)
-        )
-
-        finalize_thumbnail_download(context, file)
-
-      {:error, fallback_reason} ->
-        Logger.warning(
-          "No Telegram thumbnail fallback available after link download failed: " <>
-            inspect(%{failure_reason: failure_reason, fallback_reason: fallback_reason})
-        )
+      {:error, _fallback_reasons} ->
+        Logger.warning("No thumbnail fallback available after link download failed")
 
         update_message(context.chat_id, context.progress_message_id, failure_message)
         :error
     end
+  end
+
+  defp download_fallback_thumbnail(%DownloadContext{} = context) do
+    case download_message_thumbnail(context.message) do
+      {:ok, %DownloadedFile{} = file} ->
+        {:ok, file, :telegram_thumbnail}
+
+      {:error, telegram_reason} ->
+        case download_webpage_preview(context) do
+          {:ok, %DownloadedFile{} = file} ->
+            {:ok, file, :webpage_preview}
+
+          {:error, preview_reason} ->
+            {:error, %{telegram_thumbnail: telegram_reason, webpage_preview: preview_reason}}
+        end
+    end
+  end
+
+  defp log_thumbnail_fallback_success(:telegram_thumbnail) do
+    Logger.warning("Saved Telegram thumbnail fallback after link download failed")
+  end
+
+  defp log_thumbnail_fallback_success(:webpage_preview) do
+    Logger.warning("Saved webpage preview fallback after link download failed")
+  end
+
+  defp save_thumbnail_fallback(%DownloadContext{} = context, %DownloadedFile{} = file) do
+    update_message(context.chat_id, context.progress_message_id, Enum.slice(@progress, 0..2))
+
+    bot_send_downloaded_file(context.chat_id, file,
+      source_url: context.original_url,
+      source_chat: context.chat,
+      caption: download_caption(context)
+    )
+
+    finalize_thumbnail_download(context, file)
   end
 
   defp download_message_thumbnail(message) do
@@ -634,6 +702,19 @@ defmodule SaveIt.Bot do
       {:error, reason} -> {:error, reason}
       _ -> {:error, :missing_thumbnail_file_id}
     end
+  end
+
+  defp download_webpage_preview(%DownloadContext{} = context) do
+    context.message
+    |> link_preview_url()
+    |> Kernel.||(context.original_url)
+    |> LinkPreview.download_image()
+  end
+
+  defp link_preview_url(message) do
+    message
+    |> map_get(:link_preview_options)
+    |> map_get(:url)
   end
 
   defp message_thumbnail(nil), do: nil
@@ -689,33 +770,41 @@ defmodule SaveIt.Bot do
     :ok
   end
 
-  defp download_caption(%DownloadContext{message: message}) do
-    "created at #{download_date(message)}"
-  end
-
-  defp download_date(message) do
-    case map_get(message, :date) do
-      timestamp when is_integer(timestamp) ->
-        timestamp
-        |> local_date()
-        |> Date.to_iso8601()
+  defp download_caption(%DownloadContext{message: message, original_url: original_url}) do
+    case user_text_caption(message) do
+      caption when is_binary(caption) and caption != "" ->
+        caption
 
       _ ->
-        System.system_time(:second)
-        |> local_date()
-        |> Date.to_iso8601()
+        link_preview_description(message, original_url)
     end
   end
 
-  defp local_date(timestamp) do
-    timestamp
-    |> DateTime.from_unix!()
-    |> DateTime.shift_zone!(timezone(), Tzdata.TimeZoneDatabase)
-    |> DateTime.to_date()
+  defp user_text_caption(message) do
+    message
+    |> map_get(:text)
+    |> strip_urls_from_text()
   end
 
-  def timezone do
-    Application.fetch_env!(:save_it, :timezone)
+  defp strip_urls_from_text(text) when is_binary(text) do
+    text
+    |> extract_urls_from_string()
+    |> Enum.reduce(text, fn url, acc -> String.replace(acc, url, "") end)
+    |> String.trim()
+  end
+
+  defp strip_urls_from_text(_text), do: ""
+
+  defp link_preview_description(message, original_url) do
+    (link_preview_url(message) || original_url)
+    |> case do
+      url when is_binary(url) -> LinkPreview.get_description(url)
+      _ -> {:error, :missing_preview_url}
+    end
+    |> case do
+      {:ok, description} -> description
+      {:error, _reason} -> ""
+    end
   end
 
   defp send_message(chat_id, text) do
@@ -841,8 +930,8 @@ defmodule SaveIt.Bot do
             |> PhotoService.create_photo!()
         end)
 
-      {:error, reason} ->
-        Logger.error("Failed to send media group: #{inspect(reason)}")
+      {:error, _reason} ->
+        Logger.error("Failed to send media group")
 
         Enum.each(files, fn
           {file_name, content, source_url, _download_url} ->
@@ -913,10 +1002,25 @@ defmodule SaveIt.Bot do
         |> safe_index_photo()
 
       ".mp4" ->
-        ExGram.send_video(chat_id, content,
-          supports_streaming: true,
-          caption: caption
-        )
+        {prepared_content, video_metadata} = VideoUpload.prepare(content)
+
+        case ExGram.send_video(
+               chat_id,
+               prepared_content,
+               video_send_opts(caption, video_metadata)
+             ) do
+          {:ok, msg} = response ->
+            index_sent_video_preview(chat_id, msg,
+              caption: caption,
+              source_url: source_url,
+              source_chat: source_chat
+            )
+
+            response
+
+          {:error, _reason} = error ->
+            error
+        end
 
       ".gif" ->
         ExGram.send_animation(chat_id, content, caption: caption)
@@ -924,6 +1028,71 @@ defmodule SaveIt.Bot do
       _ ->
         ExGram.send_document(chat_id, content, caption: caption)
     end
+  end
+
+  defp video_send_opts(caption, video_metadata) do
+    [supports_streaming: true, caption: caption]
+    |> maybe_put_video_metadata(:width, video_metadata)
+    |> maybe_put_video_metadata(:height, video_metadata)
+    |> maybe_put_video_metadata(:duration, video_metadata)
+  end
+
+  defp maybe_put_video_metadata(opts, key, metadata) when is_map(metadata) do
+    case Map.get(metadata, key) do
+      value when is_integer(value) and value > 0 -> Keyword.put(opts, key, value)
+      _ -> opts
+    end
+  end
+
+  defp index_sent_video_preview(chat_id, msg, opts) do
+    caption = Keyword.fetch!(opts, :caption)
+    source_url = Keyword.get(opts, :source_url)
+    source_chat = Keyword.fetch!(opts, :source_chat)
+
+    with file_id when is_binary(file_id) <- sent_video_file_id(msg),
+         {:ok, %DownloadedFile{} = file} <- download_sent_video_preview(msg, source_url) do
+      %{
+        image: Base.encode64(file.file_content),
+        caption: caption,
+        file_id: file_id,
+        media_type: "video",
+        url: source_url,
+        belongs_to_id: chat_id
+      }
+      |> Map.merge(source_message_fields(source_chat, message_id(msg)))
+      |> safe_index_photo()
+
+      store_sent_video_preview(file, source_url)
+    else
+      nil ->
+        Logger.warning("Skipping video preview indexing: missing sent video file_id")
+        :error
+
+      {:error, _reason} ->
+        Logger.warning("Skipping video preview indexing")
+        :error
+    end
+  end
+
+  defp download_sent_video_preview(msg, source_url) do
+    case download_message_thumbnail(msg) do
+      {:ok, %DownloadedFile{} = file} -> {:ok, file}
+      {:error, _reason} -> LinkPreview.download_image(source_url)
+    end
+  end
+
+  defp store_sent_video_preview(%DownloadedFile{} = file, source_url) do
+    cache_url = file.download_url || source_url
+
+    if is_binary(cache_url) do
+      FileHelper.write_file(file.file_name, file.file_content, cache_url)
+    end
+  end
+
+  defp sent_video_file_id(msg) do
+    msg
+    |> map_get(:video)
+    |> map_get(:file_id)
   end
 
   defp telegram_upload_too_large?({:file_content, file_content, _file_name}) do
@@ -1041,16 +1210,29 @@ defmodule SaveIt.Bot do
   end
 
   defp safe_typesense_create_photo(photo_params) do
-    PhotoService.create_photo!(photo_params)
+    photo_params
+    |> PhotoService.create_photo!()
+    |> include_created_photo_metadata(photo_params)
   rescue
     error ->
       Logger.error("Typesense create_photo failed: #{Exception.message(error)}")
       nil
   catch
-    kind, reason ->
-      Logger.error("Typesense create_photo failed: #{inspect({kind, reason})}")
+    kind, _reason ->
+      Logger.error("Typesense create_photo failed", kind: kind)
       nil
   end
+
+  defp include_created_photo_metadata(photo, photo_params) when is_map(photo) do
+    Enum.reduce([:file_id, :media_type], photo, fn key, acc ->
+      case Map.fetch(photo_params, key) do
+        {:ok, value} -> Map.put_new(acc, Atom.to_string(key), value)
+        :error -> acc
+      end
+    end)
+  end
+
+  defp include_created_photo_metadata(photo, _photo_params), do: photo
 
   defp safe_typesense_search_photos(q, opts) do
     PhotoService.search_photos!(q, opts)
@@ -1059,8 +1241,8 @@ defmodule SaveIt.Bot do
       Logger.error("Typesense search_photos failed: #{Exception.message(error)}")
       []
   catch
-    kind, reason ->
-      Logger.error("Typesense search_photos failed: #{inspect({kind, reason})}")
+    kind, _reason ->
+      Logger.error("Typesense search_photos failed", kind: kind)
       []
   end
 
@@ -1071,8 +1253,8 @@ defmodule SaveIt.Bot do
       Logger.error("Typesense search_similar_photos failed: #{Exception.message(error)}")
       []
   catch
-    kind, reason ->
-      Logger.error("Typesense search_similar_photos failed: #{inspect({kind, reason})}")
+    kind, _reason ->
+      Logger.error("Typesense search_similar_photos failed", kind: kind)
       []
   end
 
@@ -1084,8 +1266,8 @@ defmodule SaveIt.Bot do
         FileHelper.set_google_access_token(chat.id, body["access_token"])
         send_message(chat.id, "Successfully logged in!")
 
-      {:error, error} ->
-        Logger.error("Failed to log in: #{inspect(error)}")
+      {:error, _error} ->
+        Logger.error("Failed to log in")
 
         send_message(chat.id, """
         Failed to log in.
@@ -1159,8 +1341,8 @@ defmodule SaveIt.Bot do
       Logger.error("Typesense get_photo failed: #{Exception.message(error)}")
       nil
   catch
-    kind, reason ->
-      Logger.error("Typesense get_photo failed: #{inspect({kind, reason})}")
+    kind, _reason ->
+      Logger.error("Typesense get_photo failed", kind: kind)
       nil
   end
 end

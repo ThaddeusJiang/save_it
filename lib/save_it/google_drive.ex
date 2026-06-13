@@ -9,16 +9,8 @@ defmodule SaveIt.GoogleDrive do
   alias SaveIt.DownloadedFile
   alias SaveIt.FileHelper
   require Logger
-  use Tesla
 
-  plug(Tesla.Middleware.BaseUrl, "https://www.googleapis.com")
-
-  plug(Tesla.Middleware.Headers, [
-    {"Content-Type", "application/json"}
-  ])
-
-  plug(Tesla.Middleware.JSON)
-
+  @google_api_url "https://www.googleapis.com"
   @upload_type "multipart"
 
   def configured?(chat_id) do
@@ -39,7 +31,9 @@ defmodule SaveIt.GoogleDrive do
       fields: "files(id, name)"
     ]
 
-    get("/drive/v3/files", query: query_params, headers: headers)
+    "/drive/v3/files"
+    |> build_request()
+    |> Req.get(params: query_params, headers: headers)
     |> handle_response()
   end
 
@@ -80,8 +74,11 @@ defmodule SaveIt.GoogleDrive do
       {"Content-Type", "multipart/related; boundary=#{boundary}"}
     ]
 
-    post("/upload/drive/v3/files", multipart_body,
-      query: [uploadType: @upload_type],
+    "/upload/drive/v3/files"
+    |> build_request()
+    |> Req.post(
+      body: multipart_body,
+      params: [uploadType: @upload_type],
       headers: headers
     )
     |> handle_response()
@@ -116,8 +113,11 @@ defmodule SaveIt.GoogleDrive do
       # {"Content-Length", byte_size(multipart_body) |> Integer.to_string()}
     ]
 
-    post("/upload/drive/v3/files", multipart_body,
-      query: [uploadType: @upload_type],
+    "/upload/drive/v3/files"
+    |> build_request()
+    |> Req.post(
+      body: multipart_body,
+      params: [uploadType: @upload_type],
       headers: headers
     )
     |> handle_response()
@@ -136,6 +136,21 @@ defmodule SaveIt.GoogleDrive do
 
   defp configured_value?(value) when is_binary(value), do: String.trim(value) != ""
   defp configured_value?(_value), do: false
+
+  defp build_request(path) do
+    req_options =
+      :save_it
+      |> Application.get_env(:google_drive_req_options, [])
+      |> Keyword.put_new(
+        :base_url,
+        Application.get_env(:save_it, :google_api_url, @google_api_url)
+      )
+      |> Keyword.put_new(:retry, false)
+      |> Keyword.put(:url, path)
+      |> Keyword.put_new(:headers, [{"Content-Type", "application/json"}])
+
+    Req.new(req_options)
+  end
 
   defp build_multipart_body(metadata, file_content, boundary) do
     """
@@ -160,12 +175,12 @@ defmodule SaveIt.GoogleDrive do
   end
 
   defp handle_response({:ok, %{status: status, body: body}}) do
-    Logger.warning("Failed at Google Drive, status: #{status}, body: #{inspect(body)}")
+    Logger.warning("Failed at Google Drive", status: status)
     {:error, %{status: status, body: body}}
   end
 
   defp handle_response({:error, reason}) do
-    Logger.error("Failed at Google Drive, reason: #{inspect(reason)}")
+    Logger.error("Failed at Google Drive")
     {:error, reason}
   end
 end

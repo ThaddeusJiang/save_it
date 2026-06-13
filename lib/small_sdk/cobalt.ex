@@ -22,7 +22,7 @@ defmodule SmallSdk.Cobalt do
         {:ok, url, Enum.map(picker_items, &Map.get(&1, "url"))}
 
       {:ok, _} ->
-        Logger.warning("cobalt response: #{inspect(res)}")
+        Logger.warning("Unexpected cobalt response")
         {:error, "Can't get download url using Cobalt API"}
 
       {:error, msg} ->
@@ -75,13 +75,13 @@ defmodule SmallSdk.Cobalt do
         {:ok, body}
 
       _ ->
-        {:error, "Request failed with status #{status}: #{inspect(body)}"}
+        {:error, "Request failed with status #{status}"}
     end
   end
 
-  def handle_response({:error, reason}) do
-    Logger.error("Request failed: #{inspect(reason)}")
-    {:error, "Request failed: #{inspect(reason)}"}
+  def handle_response({:error, _reason}) do
+    Logger.error("Request failed")
+    {:error, "Request failed"}
   end
 
   def handle_response!(%{status: status, body: body}) do
@@ -90,7 +90,7 @@ defmodule SmallSdk.Cobalt do
         body
 
       status ->
-        Logger.error("Request failed with status #{status}: #{inspect(body)}")
+        Logger.error("Request failed", status: status)
         raise "Request failed with status #{status}"
     end
   end

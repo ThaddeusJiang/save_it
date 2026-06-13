@@ -125,11 +125,11 @@ defmodule SaveIt.FileHelper do
     Application.fetch_env!(:save_it, :data_dir)
   end
 
-  defp files_dir do
+  def files_dir do
     Path.join([data_dir(), "storage", "files"])
   end
 
-  defp urls_dir do
+  def urls_dir do
     Path.join([data_dir(), "storage", "urls"])
   end
 
