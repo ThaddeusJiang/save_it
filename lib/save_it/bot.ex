@@ -200,6 +200,7 @@ defmodule SaveIt.Bot do
 
   def handle({:text, text, %{chat: chat, message_id: message_id} = message}, _context) do
     urls = extract_urls_from_string(text)
+    message = Map.put_new(message, :text, text)
 
     case urls do
       [] ->
@@ -769,33 +770,41 @@ defmodule SaveIt.Bot do
     :ok
   end
 
-  defp download_caption(%DownloadContext{message: message}) do
-    "created at #{download_date(message)}"
-  end
-
-  defp download_date(message) do
-    case map_get(message, :date) do
-      timestamp when is_integer(timestamp) ->
-        timestamp
-        |> local_date()
-        |> Date.to_iso8601()
+  defp download_caption(%DownloadContext{message: message, original_url: original_url}) do
+    case user_text_caption(message) do
+      caption when is_binary(caption) and caption != "" ->
+        caption
 
       _ ->
-        System.system_time(:second)
-        |> local_date()
-        |> Date.to_iso8601()
+        link_preview_description(message, original_url)
     end
   end
 
-  defp local_date(timestamp) do
-    timestamp
-    |> DateTime.from_unix!()
-    |> DateTime.shift_zone!(timezone(), Tzdata.TimeZoneDatabase)
-    |> DateTime.to_date()
+  defp user_text_caption(message) do
+    message
+    |> map_get(:text)
+    |> strip_urls_from_text()
   end
 
-  def timezone do
-    Application.fetch_env!(:save_it, :timezone)
+  defp strip_urls_from_text(text) when is_binary(text) do
+    text
+    |> extract_urls_from_string()
+    |> Enum.reduce(text, fn url, acc -> String.replace(acc, url, "") end)
+    |> String.trim()
+  end
+
+  defp strip_urls_from_text(_text), do: ""
+
+  defp link_preview_description(message, original_url) do
+    (link_preview_url(message) || original_url)
+    |> case do
+      url when is_binary(url) -> LinkPreview.get_description(url)
+      _ -> {:error, :missing_preview_url}
+    end
+    |> case do
+      {:ok, description} -> description
+      {:error, _reason} -> ""
+    end
   end
 
   defp send_message(chat_id, text) do
