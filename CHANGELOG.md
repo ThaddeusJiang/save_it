@@ -10,7 +10,7 @@ before the CalVer migration retain their original version labels.
 
 ### Changed
 
-- Make the save data directory configurable with `SAVE_IT_DATA_DIR`, defaulting to `_data` locally and `/data` in the Docker image, with Docker Compose persisting `/data` on a named volume.
+- Make the save data directory configurable with `SAVE_IT_DATA_DIR`, defaulting to `./data` locally and `/data` in the Docker image, with Docker Compose persisting `/data` on a named volume.
 - Simplify photo details to show only the source message URL, original URL, and saved timestamp.
 
 ## [2026.6.12-rc.1] - 2026-06-12

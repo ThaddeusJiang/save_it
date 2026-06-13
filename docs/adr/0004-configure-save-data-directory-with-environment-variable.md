@@ -2,7 +2,7 @@
 
 ## Context and Problem Statement
 
-`save_it` writes downloaded media cache files and per-chat settings to local disk. The path must differ between local development and container deployments: local runs should default to `_data`, while the Docker image should default to `/data`.
+`save_it` writes downloaded media cache files and per-chat settings to local disk. The path must differ between local development and container deployments: local runs should default to `./data`, while the Docker image should default to `/data`.
 
 The question is how operators should configure this path without adding unnecessary startup complexity.
 
@@ -17,7 +17,7 @@ The question is how operators should configure this path without adding unnecess
 
 Chosen option: "Configure the save data directory with a runtime environment variable", because it matches the existing `config/runtime.exs` pattern, works naturally in Docker and hosting platforms, and keeps the application startup command simple.
 
-The application reads `SAVE_IT_DATA_DIR`, defaults to `_data` when it is unset, and the Docker image sets `SAVE_IT_DATA_DIR=/data`.
+The application reads `SAVE_IT_DATA_DIR`, defaults to `./data` when it is unset, and the Docker image sets `SAVE_IT_DATA_DIR=/data`.
 
 ### Consequences
 
