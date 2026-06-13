@@ -19,14 +19,14 @@ Use this skill when the user asks for an acceptance testing flow based on Docker
 ## Commands
 
 ```bash
-mise run build
+docker build -t save_it:e2e .
 docker compose up -d cobalt-api typesense typelens
 docker compose --profile e2e up -d
 ```
 
 ## Notes
 
-- `docker compose --profile e2e up -d` uses the local `Dockerfile` and tags the result as `save_it:e2e`
+- `docker build -t save_it:e2e .` uses the local `Dockerfile`; the `e2e` Compose profile runs that tagged image
 - `save_it` reads `.env` through `env_file` in `docker-compose.yml`
 - In Compose, `save_it` uses container-safe service URLs:
   - `COBALT_API_URL=http://cobalt-api:9000`
