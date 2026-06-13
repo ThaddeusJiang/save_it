@@ -12,12 +12,6 @@ run = [
   "echo '✅ https://zeabur.com/templates/FTAONK'",
 ]
 
-[tasks.up]
-description = "Up containers"
-run = [
-    "docker compose up -d"
-]
-
 [tasks.dev]
 description = "Run dev"
 run = [
@@ -25,20 +19,23 @@ run = [
     "iex -S mix run --no-halt"
 ]
 
-[tasks.start]
-description = "Run start"
-run = [
-    "docker compose --profile prod up -d"
-]
+[tasks.stop-all]
+description = "Stop all local save_it iex processes"
+run = '''
+stopped=0
 
-[tasks.stop]
-description = "Stop start"
-run = [
-    "docker compose --profile prod down"
-]
+for pid in $(pgrep -f '[m]ix run --no-halt' || true); do
+    cwd=$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')
 
-[tasks.build]
-description = "Build the acceptance testing image locally"
-run = [
-  "docker build -t save_it:e2e .",
-]
+    if [ -n "$cwd" ] && [ -f "$cwd/mix.exs" ] && grep -q 'app: :save_it' "$cwd/mix.exs"; then
+        if kill "$pid" 2>/dev/null; then
+            echo "Stopped save_it process $pid"
+            stopped=1
+        fi
+    fi
+done
+
+if [ "$stopped" -eq 0 ]; then
+    echo "No local save_it iex process found."
+fi
+'''
