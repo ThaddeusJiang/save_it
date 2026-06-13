@@ -92,9 +92,38 @@ defmodule SmallSdk.TypesenseMigrationTest do
     assert_receive {:update_document, "photos", "1", %{"file_id" => "1"}}
   end
 
+  test "loads only migration modules required from the configured migrations path" do
+    migrations_path = migrations_path_with_migration()
+
+    assert [loaded_migration] =
+             SmallSdk.TypesenseMigration.load_migrations!(migrations_path: migrations_path)
+
+    assert loaded_migration.version() == "20260613000000"
+
+    assert SmallSdk.TypesenseMigration.load_migrations!(migrations_path: empty_migrations_path()) ==
+             []
+  end
+
   defp empty_migrations_path do
     path = Path.join(System.tmp_dir!(), "save-it-empty-migrations-#{System.unique_integer()}")
     File.mkdir_p!(path)
+    path
+  end
+
+  defp migrations_path_with_migration do
+    path = Path.join(System.tmp_dir!(), "save-it-migrations-#{System.unique_integer()}")
+    File.mkdir_p!(path)
+
+    File.write!(Path.join(path, "20260613000000_loaded_migration.exs"), """
+    defmodule SaveIt.Typesense.Migrations.LoadedMigration20260613000000 do
+      def version, do: "20260613000000"
+      def name, do: "loaded_migration"
+      def up, do: :ok
+      def down, do: :ok
+      def applied?, do: false
+    end
+    """)
+
     path
   end
 end

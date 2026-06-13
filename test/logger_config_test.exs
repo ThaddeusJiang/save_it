@@ -1,6 +1,7 @@
 defmodule SaveIt.LoggerConfigTest do
   use ExUnit.Case, async: true
 
+  @compile_config Path.expand("../config/config.exs", __DIR__)
   @test_config Path.expand("../config/test.exs", __DIR__)
   @runtime_config Path.expand("../config/runtime.exs", __DIR__)
 
@@ -13,6 +14,13 @@ defmodule SaveIt.LoggerConfigTest do
     assert logger_config[:colors][:info] == :green
     assert logger_config[:colors][:warning] == :yellow
     assert logger_config[:colors][:error] == :red
+  end
+
+  test "compile config imports the current environment config" do
+    compile_config = Config.Reader.read!(@compile_config, env: :test)
+
+    assert get_in(compile_config, [:save_it, :telegram_bot_token]) == "test-token"
+    assert get_in(compile_config, [:save_it, :start_bot?]) == false
   end
 
   test "runtime config requires the Telegram bot token outside test" do

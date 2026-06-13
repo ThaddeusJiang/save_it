@@ -1,6 +1,8 @@
 defmodule SaveIt.MixProject do
   use Mix.Project
 
+  alias SmallSdk.TypesenseMigration.Runner, as: TypesenseMigrationRunner
+
   def project do
     [
       app: :save_it,
@@ -68,6 +70,6 @@ defmodule SaveIt.MixProject do
   defp run_typesense_runner(args) do
     Mix.Task.run("loadpaths")
     Code.require_file("priv/typesense/runner.exs")
-    SmallSdk.TypesenseMigration.Runner.run(args)
+    TypesenseMigrationRunner.run(args)
   end
 end

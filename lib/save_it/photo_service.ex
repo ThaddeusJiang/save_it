@@ -68,12 +68,22 @@ defmodule SaveIt.PhotoService do
     req_body = %{
       "searches" => [
         %{
-          "query_by" => "image_embedding,caption",
+          "query_by" => "caption",
+          "q" => q,
+          "collection" => "photos",
+          "prefix" => true,
+          "drop_tokens_threshold" => 0,
+          "filter_by" => "belongs_to_id:=#{belongs_to_id}",
+          "exclude_fields" => "image_embedding"
+        },
+        %{
+          "query_by" => "image_embedding",
           "q" => q,
           "collection" => "photos",
           "prefix" => false,
-          "vector_query" => "image_embedding:([], k: 20, distance_threshold: 0.785)",
-          "filter_by" => "belongs_to_id:#{belongs_to_id}",
+          "vector_query" => "image_embedding:([], k: 20, distance_threshold: 0.775)",
+          "drop_tokens_threshold" => 0,
+          "filter_by" => "belongs_to_id:=#{belongs_to_id}",
           "exclude_fields" => "image_embedding"
         }
       ]
@@ -84,16 +94,12 @@ defmodule SaveIt.PhotoService do
     data = Typesense.handle_response(res)
     log_search_response("search_photos", %{q: q, belongs_to_id: belongs_to_id}, data)
 
-    results = data["results"]
-
-    if results != [] do
-      results
-      |> hd()
-      |> Map.get("hits")
-      |> Enum.map(&Map.get(&1, "document"))
-    else
-      []
-    end
+    data
+    |> Map.get("results", [])
+    |> Enum.flat_map(&Map.get(&1, "hits", []))
+    |> Enum.map(&Map.get(&1, "document"))
+    |> Enum.reject(&is_nil/1)
+    |> unique_photos()
   end
 
   def search_similar_photos!(photo_id, opts \\ []) when is_binary(photo_id) do
@@ -157,7 +163,7 @@ defmodule SaveIt.PhotoService do
 
   defp log_search_response(action, metadata, data) do
     results = Map.get(data, "results", [])
-    hits = results |> List.first(%{}) |> Map.get("hits", [])
+    hits = Enum.flat_map(results, &Map.get(&1, "hits", []))
 
     hits_count =
       length(hits)
@@ -184,6 +190,25 @@ defmodule SaveIt.PhotoService do
     values
     |> Enum.map_join(", ", &inspect/1)
     |> then(&"[#{&1}]")
+  end
+
+  defp unique_photos(photos) do
+    photos
+    |> Enum.reduce({[], MapSet.new()}, fn photo, {acc, seen_keys} ->
+      key = photo_key(photo)
+
+      if is_nil(key) or MapSet.member?(seen_keys, key) do
+        {acc, seen_keys}
+      else
+        {[photo | acc], MapSet.put(seen_keys, key)}
+      end
+    end)
+    |> elem(0)
+    |> Enum.reverse()
+  end
+
+  defp photo_key(photo) do
+    Map.get(photo, "id") || Map.get(photo, "file_id")
   end
 
   defp normalize_photo_urls(photo_params) do

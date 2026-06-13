@@ -57,6 +57,18 @@ https://github.com/user-attachments/assets/b0dedcc0-3305-42b2-8101-6b0b5d32f17a
 
 ## Option 2: Docker Compose
 
+For X posts that require login or sensitive-content access, provide Cobalt cookies through a local ignored file:
+
+```json
+{
+  "twitter": [
+    "auth_token=<token>; ct0=<csrf>"
+  ]
+}
+```
+
+Save the file as `cobalt-cookies.json` at the repository root before starting Docker Compose.
+
 ```sh
 docker-compose --profile prod up -d
 ```

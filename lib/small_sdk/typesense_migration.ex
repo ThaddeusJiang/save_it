@@ -127,13 +127,35 @@ defmodule SmallSdk.TypesenseMigration do
     |> migrations_path()
     |> Path.join("*.exs")
     |> Path.wildcard()
-    |> Enum.each(&Code.require_file/1)
-    |> then(fn _ ->
-      :code.all_loaded()
-      |> Enum.map(fn {module, _path} -> module end)
-    end)
+    |> Enum.sort()
+    |> Enum.flat_map(&require_migration_file/1)
+    |> Enum.uniq()
     |> Enum.filter(&migration_module?/1)
     |> Enum.sort_by(&Function.capture(&1, :version, 0).())
+  end
+
+  defp require_migration_file(path) do
+    case Code.require_file(path) do
+      nil -> loaded_modules_from_file(path)
+      modules -> Enum.map(modules, fn {module, _bytecode} -> module end)
+    end
+  end
+
+  defp loaded_modules_from_file(path) do
+    expanded_path = Path.expand(path)
+
+    :code.all_loaded()
+    |> Enum.map(fn {module, _path} -> module end)
+    |> Enum.filter(&(module_source(&1) == expanded_path))
+  end
+
+  defp module_source(module) do
+    case module.module_info(:compile) |> Keyword.get(:source) do
+      nil -> nil
+      source -> source |> to_string() |> Path.expand()
+    end
+  rescue
+    _error -> nil
   end
 
   defp migration_module?(module) do
