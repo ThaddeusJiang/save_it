@@ -14,11 +14,14 @@ before the CalVer migration retain their original version labels.
 
 ### Changed
 
+- Improve photo search to support caption full-text matching and high-confidence image semantic matching.
 - Upgrade the bundled Cobalt service image from v10 to v11 for local and Zeabur deployments.
 - Use user-provided Telegram text as captions for URL and photo saves, and fall back to URL Open Graph descriptions when a link has no user description.
 
 ### Fixed
 
+- Prevent `/similar` photo commands from crashing when Telegram delivers the command as a photo command update instead of a plain photo message.
+- Index Telegram photo captions delivered by ExGram as text updates so caption search can find directly uploaded photos.
 - Preserve downloaded MP4 video display dimensions when sending to Telegram, and prepare uploads for streaming playback when possible.
 
 ## [2026.6.13] - 2026-06-13

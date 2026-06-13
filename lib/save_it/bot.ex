@@ -156,6 +156,10 @@ defmodule SaveIt.Bot do
     send_message(chat.id, "Upload a photo with /similar for finding similar photos.")
   end
 
+  def handle({:command, :similar, %{chat: chat, photo: [_ | _] = photos} = message}, _context) do
+    handle_uploaded_photo(message, chat, "/similar", photos)
+  end
+
   def handle({:command, :detail, %{chat: chat, reply_to_message: nil}}, _context) do
     send_message(chat.id, "reply a photo with /detail command.")
   end
@@ -198,23 +202,18 @@ defmodule SaveIt.Bot do
     handle_uploaded_video(message, chat, Map.get(message, :caption), video)
   end
 
-  def handle({:text, text, %{chat: chat, message_id: message_id} = message}, _context) do
-    urls = extract_urls_from_string(text)
-    message = Map.put_new(message, :text, text)
+  def handle({:text, text, %{chat: chat, photo: [_ | _] = photos} = message}, _context)
+      when is_binary(text) do
+    case extract_urls_from_string(text) do
+      [] -> handle_uploaded_photo(message, chat, text, photos)
+      urls -> handle_text_urls(text, message, urls)
+    end
+  end
 
-    case urls do
-      [] ->
-        :ok
-
-      _ ->
-        has_success? =
-          urls
-          |> Enum.map(&process_url(chat, &1, message))
-          |> Enum.any?(&(&1 == :ok))
-
-        if has_success? do
-          delete_message(chat.id, message_id)
-        end
+  def handle({:text, text, message}, _context) do
+    case extract_urls_from_string(text) do
+      [] -> :ok
+      urls -> handle_text_urls(text, message, urls)
     end
   end
 
@@ -263,6 +262,19 @@ defmodule SaveIt.Bot do
 
         Enum.each(similar_photos, &send_similar_media(chat_id, &1))
         :ok
+    end
+  end
+
+  defp handle_text_urls(text, %{chat: chat, message_id: message_id} = message, urls) do
+    message = Map.put_new(message, :text, text)
+
+    has_success? =
+      urls
+      |> Enum.map(&process_url(chat, &1, message))
+      |> Enum.any?(&(&1 == :ok))
+
+    if has_success? do
+      delete_message(chat.id, message_id)
     end
   end
 

@@ -458,6 +458,41 @@ defmodule SaveIt.BotTest do
            ]
   end
 
+  test "handles /similar command attached to a photo", _context do
+    Application.put_env(:save_it, :telegram_req_options,
+      adapter: &__MODULE__.TelegramDownloadAdapter.request/1
+    )
+
+    ExGramTestAdapter.backdoor_request(:get_file, %{
+      file_id: "uploaded-photo-file-id",
+      file_path: "photos/uploaded.jpg"
+    })
+
+    ExGramTestAdapter.backdoor_request(:send_message, %{message_id: 29})
+
+    ExGramTestAdapter.backdoor_request(:send_media_group, [
+      %{message_id: 30},
+      %{message_id: 31}
+    ])
+
+    message = %{
+      chat: %{id: 12_354},
+      text: nil,
+      photo: [%{file_id: "uploaded-photo-file-id"}]
+    }
+
+    assert :ok = Bot.handle({:command, :similar, message}, nil)
+
+    calls = exgram_calls()
+
+    assert {:post, :send_message, %{chat_id: 12_354, text: "Similar photos found."}} in calls
+
+    assert Enum.any?(calls, fn
+             {:post, :send_media_group, %{chat_id: 12_354}} -> true
+             _ -> false
+           end)
+  end
+
   test "announces similar photos and sends multiple results as one media group", _context do
     Application.put_env(:save_it, :telegram_req_options,
       adapter: &__MODULE__.TelegramDownloadAdapter.request/1
@@ -713,6 +748,45 @@ defmodule SaveIt.BotTest do
     assert binary_contains?(drive_body, ~s("name":"direct-photo.jpg"))
     assert binary_contains?(drive_body, "test-drive-folder")
     assert File.read(stored_file_path) == {:ok, test_jpeg()}
+  end
+
+  test "stores a photo caption delivered as text by ExGram", _context do
+    chat_id = 12_355
+    stored_file_path = storage_file_path("caption-text-photo.jpg")
+
+    File.rm(stored_file_path)
+
+    Application.put_env(:save_it, :telegram_req_options,
+      adapter: &__MODULE__.TelegramDirectMediaAdapter.request/1
+    )
+
+    on_exit(fn ->
+      File.rm(stored_file_path)
+    end)
+
+    ExGramTestAdapter.backdoor_request(:get_file, %{
+      file_id: "uploaded-photo-file-id",
+      file_path: "photos/caption-text-photo.jpg"
+    })
+
+    message = %{
+      chat: %{id: chat_id, username: "save_it_directs"},
+      message_id: 322,
+      photo: [%{file_id: "uploaded-photo-file-id"}]
+    }
+
+    Bot.handle({:text, "short-text", message}, nil)
+
+    assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
+
+    document = Jason.decode!(typesense_body)
+
+    assert document["caption"] == "short-text"
+    assert document["file_id"] == "uploaded-photo-file-id"
+    assert document["belongs_to_id"] == Integer.to_string(chat_id)
+    assert document["media_type"] == "photo"
+    assert document["source_message_id"] == 322
+    assert document["source_message_url"] == "https://t.me/save_it_directs/322"
   end
 
   test "stores an empty caption for a directly uploaded photo without user text", _context do
