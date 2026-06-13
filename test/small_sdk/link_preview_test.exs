@@ -34,4 +34,16 @@ defmodule SmallSdk.LinkPreviewTest do
            ) ==
              {:ok, "https://gyazo.com/e3f4b97ec5d43ec64ef4fd112c658017/max_size/2000"}
   end
+
+  test "extracts an og description" do
+    html = """
+    <html>
+      <head>
+        <meta property="og:description" content="Photo Page OG Description" />
+      </head>
+    </html>
+    """
+
+    assert LinkPreview.get_description_from_html(html) == {:ok, "Photo Page OG Description"}
+  end
 end

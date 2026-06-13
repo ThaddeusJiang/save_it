@@ -35,7 +35,6 @@ defmodule SaveIt.MixProject do
       {:sentry, "13.2.0"},
       {:jason, "1.4.5"},
       {:req, "0.5.18"},
-      {:tzdata, "1.1.3"},
       {:credo, "1.7.19", only: [:dev, :test], runtime: false},
       {:dialyxir, "1.4.7", only: [:dev, :test], runtime: false},
       {:ex_doc, "0.40.3", only: :dev, runtime: false}

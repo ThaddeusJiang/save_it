@@ -8,6 +8,10 @@ before the CalVer migration retain their original version labels.
 
 ## [Unreleased]
 
+### Changed
+
+- Use user-provided Telegram text as captions for URL and photo saves, and fall back to URL Open Graph descriptions when a link has no user description.
+
 ### Fixed
 
 - Preserve downloaded MP4 video display dimensions when sending to Telegram, and prepare uploads for streaming playback when possible.
