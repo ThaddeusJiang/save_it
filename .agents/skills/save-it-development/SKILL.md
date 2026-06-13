@@ -60,10 +60,10 @@ mix test
 mix format
 mix credo --strict
 mix dialyzer
-mix quality
+mix checks
 ```
 
-`mix quality` is the common check-only suite and must not rewrite files.
+`mix checks` is the common check-only suite and must not rewrite files.
 
 ## Typesense Migrations
 

@@ -16,7 +16,7 @@ defmodule SaveIt.MixProject do
   def cli do
     [
       preferred_envs: [
-        quality: :dev
+        checks: :dev
       ]
     ]
   end
@@ -46,8 +46,8 @@ defmodule SaveIt.MixProject do
 
   defp aliases do
     [
-      quality: [
-        "format",
+      checks: [
+        "format --check-formatted",
         "compile --warnings-as-errors",
         "credo --strict",
         "dialyzer"
