@@ -21,10 +21,11 @@ defmodule SaveIt.PhotoServiceTest do
     :ok
   end
 
-  test "search_photos returns only caption full text matches when captions match" do
+  test "search_photos returns caption matches before high-confidence image semantic matches" do
     assert [
              %{"id" => "caption-result"},
-             %{"id" => "shared-result"}
+             %{"id" => "shared-result"},
+             %{"id" => "image-result"}
            ] =
              PhotoService.search_photos!("summer beach", belongs_to_id: 12_345)
 
@@ -47,21 +48,12 @@ defmodule SaveIt.PhotoServiceTest do
                  "query_by" => "image_embedding",
                  "filter_by" => "belongs_to_id:=12345",
                  "prefix" => false,
-                 "vector_query" => "image_embedding:([], k: 20, distance_threshold: 0.785)",
+                 "vector_query" => "image_embedding:([], k: 20, distance_threshold: 0.775)",
                  "drop_tokens_threshold" => 0,
                  "exclude_fields" => "image_embedding"
                }
              ]
            } = Jason.decode!(body)
-  end
-
-  test "search_photos falls back to image semantic matches when captions do not match" do
-    assert [
-             %{"id" => "image-result"}
-           ] =
-             PhotoService.search_photos!("visual only", belongs_to_id: 12_345)
-
-    assert_receive {:test_http_request, :post, "/multi_search", _body}
   end
 
   defp restore_env(key, nil), do: Application.delete_env(:save_it, key)
@@ -128,34 +120,11 @@ defmodule SaveIt.PhotoServiceTest do
     defp handle_socket(socket, test_pid) do
       {method, path, body} = read_http_request(socket)
       send(test_pid, {:test_http_request, method, path, body})
-      :gen_tcp.send(socket, json_response(%{"results" => search_results(body)}))
+      :gen_tcp.send(socket, json_response(%{"results" => search_results()}))
       :gen_tcp.close(socket)
     end
 
-    defp search_results(body) do
-      %{"searches" => [%{"q" => q} | _]} = Jason.decode!(body)
-
-      search_results_for_query(q)
-    end
-
-    defp search_results_for_query("visual only") do
-      [
-        %{"hits" => []},
-        %{
-          "hits" => [
-            %{
-              "document" => %{
-                "id" => "image-result",
-                "caption" => "image match",
-                "file_id" => "image-file-id"
-              }
-            }
-          ]
-        }
-      ]
-    end
-
-    defp search_results_for_query(_q) do
+    defp search_results do
       [
         %{
           "hits" => [

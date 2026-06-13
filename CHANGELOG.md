@@ -18,7 +18,7 @@ before the CalVer migration retain their original version labels.
 - Prevent `/similar` photo commands from crashing when Telegram delivers the command as a photo command update instead of a plain photo message.
 - Index Telegram photo captions delivered by ExGram as text updates so caption search can find directly uploaded photos.
 - Match caption prefixes in photo search so queries such as `short` can find captions like `short-test`.
-- Avoid mixing image semantic fallback results into caption search results when captions already match the query.
+- Tighten image semantic search matching so text queries only include highly relevant visual matches.
 - Preserve downloaded MP4 video display dimensions when sending to Telegram, and prepare uploads for streaming playback when possible.
 
 ## [2026.6.13] - 2026-06-13
