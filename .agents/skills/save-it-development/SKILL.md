@@ -11,6 +11,8 @@ Use this skill for routine development work in the `save_it` repository.
 
 ## Setup
 
+If the current checkout is a git worktree and this project has not completed setup yet, run `worktree init` skill first, then run the full setup below.
+
 Run from the repository root:
 
 ```bash
