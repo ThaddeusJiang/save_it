@@ -8,10 +8,22 @@ before the CalVer migration retain their original version labels.
 
 ## [Unreleased]
 
+### Added
+
+- Store public link preview thumbnail URLs in Typesense for URL media saves and webpage preview fallbacks.
+
+### Changed
+
+- Use YouTube Open Graph titles as captions for URL-only saves, keep X captions based on Open Graph descriptions with title fallback, and log fetched link preview metadata.
+
 ### Fixed
 
 - Fix Zeabur Cobalt cookie setup to use a file config at `/cookies.json` instead of mounting a volume as a file.
 - Keep GHCR prerelease images reachable through the `stag` tag after stable `latest` images are published.
+- Log link preview metadata fetch failures so missing URL captions and thumbnail URLs can be diagnosed from runtime logs.
+- Send URL-downloaded media back to the source Telegram topic, build private supergroup topic source message URLs with the message thread id, and stop indexing the unused `source_message_id` field.
+- Stop storing invalid Telegram `source_message_url` values for private DM saves, where Telegram does not provide a direct message URL.
+- Store resolved media download URLs in Typesense for successful URL photo, video, HLS, and multi-image saves.
 
 ## [2026.6.14] - 2026-06-14
 
