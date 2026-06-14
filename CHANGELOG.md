@@ -11,6 +11,7 @@ before the CalVer migration retain their original version labels.
 ### Fixed
 
 - Fix Zeabur Cobalt cookie setup to use a file config at `/cookies.json` instead of mounting a volume as a file.
+- Keep GHCR prerelease images reachable through the `stag` tag after stable `latest` images are published.
 
 ## [2026.6.14] - 2026-06-14
 
