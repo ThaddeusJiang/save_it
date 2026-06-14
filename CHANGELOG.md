@@ -8,6 +8,10 @@ before the CalVer migration retain their original version labels.
 
 ## [Unreleased]
 
+### Added
+
+- Show chat type, public visibility, bot admin status, and bot Privacy Mode status in the `/about` command.
+
 ### Fixed
 
 - Fix Zeabur Cobalt cookie setup to use a file config at `/cookies.json` instead of mounting a volume as a file.
