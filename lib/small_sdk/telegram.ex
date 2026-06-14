@@ -9,8 +9,9 @@ defmodule SmallSdk.Telegram do
     token = get_env()
     path = "/bot#{token}/sendMediaGroup"
     caption = Keyword.get(opts, :caption, "")
+    message_thread_id = Keyword.get(opts, :message_thread_id)
 
-    {media_entries, multipart_fields} =
+    {media_entries, file_fields} =
       files
       |> Enum.with_index()
       |> Enum.reduce({[], []}, fn {file, index}, {media_acc, fields_acc} ->
@@ -39,11 +40,9 @@ defmodule SmallSdk.Telegram do
     media_json = media_entries |> Enum.reverse() |> Jason.encode!()
 
     multipart_fields =
-      [
-        {"chat_id", to_string(chat_id)},
-        {"media", media_json}
-        | Enum.reverse(multipart_fields)
-      ]
+      [{"chat_id", to_string(chat_id)}]
+      |> maybe_append_multipart_field("message_thread_id", message_thread_id)
+      |> Kernel.++([{"media", media_json} | Enum.reverse(file_fields)])
 
     path
     |> build_request()
@@ -63,6 +62,12 @@ defmodule SmallSdk.Telegram do
   defp put_caption(media, ""), do: media
   defp put_caption(media, nil), do: media
   defp put_caption(media, caption), do: Map.put(media, :caption, caption)
+
+  defp maybe_append_multipart_field(fields, _name, nil), do: fields
+  defp maybe_append_multipart_field(fields, name, value), do: fields ++ [{name, to_string(value)}]
+
+  defp media_group_file_parts({file_name, content, _source_url, _download_url, _thumbnail_url}),
+    do: {file_name, content}
 
   defp media_group_file_parts({file_name, content, _source_url, _download_url}),
     do: {file_name, content}

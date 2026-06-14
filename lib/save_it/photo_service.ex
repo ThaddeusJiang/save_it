@@ -212,7 +212,7 @@ defmodule SaveIt.PhotoService do
   end
 
   defp normalize_photo_urls(photo_params) do
-    Enum.reduce([:url, :download_url], photo_params, &normalize_photo_url_field/2)
+    Enum.reduce([:url, :download_url, :thumbnail_url], photo_params, &normalize_photo_url_field/2)
   end
 
   defp normalize_photo_url_field(field, acc) do
