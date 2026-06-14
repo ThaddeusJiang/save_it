@@ -63,6 +63,85 @@ defmodule SaveIt.BotTest do
     %{base_url: base_url}
   end
 
+  test "about reports private chat status and bot privacy mode", _context do
+    ExGramTestAdapter.backdoor_request(:get_me, %{
+      id: 9_001,
+      username: "save_it_bot",
+      can_read_all_group_messages: false
+    })
+
+    message = %{
+      chat: %{id: 12_345, type: "private"},
+      message_id: 11
+    }
+
+    assert {:ok, %{message_id: 10}} = Bot.handle({:command, :about, message}, nil)
+
+    request_body = sent_message_body()
+
+    assert request_body.chat_id == 12_345
+    assert request_body.text =~ "Chat: dm"
+    assert request_body.text =~ "Public: no"
+    assert request_body.text =~ "Bot admin: n/a"
+    assert request_body.text =~ "Privacy Mode: enabled"
+  end
+
+  test "about reports public group status and bot admin membership", _context do
+    ExGramTestAdapter.backdoor_request(:get_me, %{
+      id: 9_001,
+      username: "save_it_bot",
+      can_read_all_group_messages: true
+    })
+
+    ExGramTestAdapter.backdoor_request(:get_chat_member, fn body ->
+      assert body == %{chat_id: -100_123, user_id: 9_001}
+      %{status: "administrator", user: %{id: 9_001, is_bot: true}}
+    end)
+
+    message = %{
+      chat: %{id: -100_123, type: "supergroup", username: "save_it_group"},
+      message_id: 12
+    }
+
+    assert {:ok, %{message_id: 10}} = Bot.handle({:command, :about, message}, nil)
+
+    request_body = sent_message_body()
+
+    assert request_body.chat_id == -100_123
+    assert request_body.text =~ "Chat: group"
+    assert request_body.text =~ "Public: yes"
+    assert request_body.text =~ "Bot admin: yes"
+    assert request_body.text =~ "Privacy Mode: disabled"
+  end
+
+  test "about reports private channel status and non-admin membership", _context do
+    ExGramTestAdapter.backdoor_request(:get_me, %{
+      id: 9_001,
+      username: "save_it_bot",
+      can_read_all_group_messages: false
+    })
+
+    ExGramTestAdapter.backdoor_request(:get_chat_member, fn body ->
+      assert body == %{chat_id: -100_456, user_id: 9_001}
+      %{status: "member", user: %{id: 9_001, is_bot: true}}
+    end)
+
+    message = %{
+      chat: %{id: -100_456, type: "channel"},
+      message_id: 13
+    }
+
+    assert {:ok, %{message_id: 10}} = Bot.handle({:command, :about, message}, nil)
+
+    request_body = sent_message_body()
+
+    assert request_body.chat_id == -100_456
+    assert request_body.text =~ "Chat: channel"
+    assert request_body.text =~ "Public: no"
+    assert request_body.text =~ "Bot admin: no"
+    assert request_body.text =~ "Privacy Mode: enabled"
+  end
+
   test "uses user text as the caption when indexing a downloaded URL photo", %{base_url: base_url} do
     original_url = "https://x.com/example/status/1?utm_source=telegram"
     message_text = "summer reference #{original_url}"

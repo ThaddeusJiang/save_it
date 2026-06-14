@@ -59,9 +59,16 @@ defmodule SaveIt.Bot do
     answer(context, "Hi! I'm a bot that can download images and videos, just give me a link.")
   end
 
-  def handle({:command, :about, _msg}, context) do
-    answer(context, """
+  def handle({:command, :about, %{chat: chat}}, _context) do
+    bot_info = about_bot_info()
+
+    send_message(chat.id, """
     SaveIt can download images and videos, just give me a link.
+
+    Chat: #{about_chat_type(chat)}
+    Public: #{about_public_status(chat)}
+    Bot admin: #{about_bot_admin_status(chat, bot_info)}
+    Privacy Mode: #{about_privacy_mode_status(bot_info)}
 
     Created by @ThaddeusJiang, powered by Cobalt, Typesense, and Elixir.Access
 
@@ -956,6 +963,49 @@ defmodule SaveIt.Bot do
   defp send_message(chat_id, text) do
     ExGram.send_message(chat_id, text)
   end
+
+  defp about_chat_type(%{type: "private"}), do: "dm"
+  defp about_chat_type(%{type: "group"}), do: "group"
+  defp about_chat_type(%{type: "supergroup"}), do: "group"
+  defp about_chat_type(%{type: "channel"}), do: "channel"
+  defp about_chat_type(%{type: type}) when is_binary(type), do: type
+  defp about_chat_type(_chat), do: "unknown"
+
+  defp about_public_status(%{username: username}) when is_binary(username) do
+    if String.trim(username) == "", do: "no", else: "yes"
+  end
+
+  defp about_public_status(_chat), do: "no"
+
+  defp about_bot_info, do: ExGram.get_me()
+
+  defp about_bot_admin_status(%{type: "private"}, _bot_info), do: "n/a"
+
+  defp about_bot_admin_status(%{id: chat_id}, bot_info) do
+    case about_bot_id(bot_info) do
+      nil ->
+        "unknown"
+
+      bot_id ->
+        case ExGram.get_chat_member(chat_id, bot_id) do
+          {:ok, %{status: status}} when status in ["administrator", "creator", "owner"] -> "yes"
+          {:ok, %{status: _status}} -> "no"
+          {:error, _reason} -> "unknown"
+        end
+    end
+  end
+
+  defp about_bot_admin_status(_chat, _bot_info), do: "unknown"
+
+  defp about_bot_id({:ok, %{id: bot_id}}), do: bot_id
+  defp about_bot_id(%{id: bot_id}), do: bot_id
+  defp about_bot_id(_bot_info), do: nil
+
+  defp about_privacy_mode_status({:ok, %{can_read_all_group_messages: true}}), do: "disabled"
+  defp about_privacy_mode_status({:ok, %{can_read_all_group_messages: false}}), do: "enabled"
+  defp about_privacy_mode_status(%{can_read_all_group_messages: true}), do: "disabled"
+  defp about_privacy_mode_status(%{can_read_all_group_messages: false}), do: "enabled"
+  defp about_privacy_mode_status(_bot_info), do: "unknown"
 
   defp update_message(chat_id, message_id, texts) when is_list(texts) do
     ExGram.edit_message_text(Enum.join(texts, "\n"), chat_id: chat_id, message_id: message_id)

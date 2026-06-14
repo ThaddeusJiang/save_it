@@ -10,6 +10,7 @@ before the CalVer migration retain their original version labels.
 
 ### Added
 
+- Show chat type, public visibility, bot admin status, and bot Privacy Mode status in the `/about` command.
 - Store public link preview thumbnail URLs in Typesense for URL media saves and webpage preview fallbacks.
 
 ### Changed
