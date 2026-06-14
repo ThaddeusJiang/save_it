@@ -5,13 +5,14 @@ defmodule SaveIt.LoggerConfigTest do
   @test_config Path.expand("../config/test.exs", __DIR__)
   @runtime_config Path.expand("../config/runtime.exs", __DIR__)
 
-  test "runtime logger uses distinct severity colors" do
+  test "runtime logger uses green only for resource creation notices" do
     assert Application.fetch_env!(:logger, :level) == :info
 
     logger_config = Application.fetch_env!(:logger, :default_formatter)
 
     assert logger_config[:metadata] == [:status, :file_id, :kind]
-    assert logger_config[:colors][:info] == :green
+    assert logger_config[:colors][:info] == :normal
+    assert logger_config[:colors][:notice] == :green
     assert logger_config[:colors][:warning] == :yellow
     assert logger_config[:colors][:error] == :red
   end

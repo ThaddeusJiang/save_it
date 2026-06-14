@@ -158,7 +158,7 @@ defmodule SmallSdk.LinkPreview do
   defp blank_to_nil(value), do: value
 
   defp log_metadata(page_url, metadata) do
-    Logger.info(
+    Logger.debug(
       "Link preview metadata fetched: " <>
         "page_url=#{format_log_url(page_url)} " <>
         "og_title=#{format_log_value(metadata.title)} " <>

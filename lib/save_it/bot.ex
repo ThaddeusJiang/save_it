@@ -225,7 +225,7 @@ defmodule SaveIt.Bot do
   end
 
   def handle({:edited_message, %{photo: nil}}, _context) do
-    Logger.warning("this is an edited message, ignore it")
+    Logger.debug("Ignoring edited message without photo")
     # Edited search commands are ignored for now.
     {:ok, nil}
   end
@@ -236,12 +236,12 @@ defmodule SaveIt.Bot do
   end
 
   def handle({:update, _update}, _context) do
-    Logger.warning("this is an update, ignore it")
+    Logger.debug("Ignoring unsupported update")
     {:ok, nil}
   end
 
   def handle({:message, _message}, _context) do
-    Logger.warning("this is a message, ignore it")
+    Logger.debug("Ignoring unsupported message")
     {:ok, nil}
   end
 
@@ -396,6 +396,16 @@ defmodule SaveIt.Bot do
     else
       :ok
     end
+  end
+
+  defp log_resource_created(source, %DownloadedFile{file_name: file_name}) do
+    Logger.notice("resource_created source=#{source} file_name=#{file_name}", kind: :resource)
+  end
+
+  defp log_resources_created(source, files) when is_list(files) do
+    Logger.notice("resource_created source=#{source} file_count=#{length(files)}",
+      kind: :resource
+    )
   end
 
   defp video_thumbnail(video) do
@@ -598,6 +608,7 @@ defmodule SaveIt.Bot do
         delete_message(context.chat_id, context.progress_message_id)
         FileHelper.write_folder(context.purge_url, files)
         GoogleDrive.upload_files(context.chat_id, files)
+        log_resources_created(:url_download, files)
         :ok
 
       {:error, reason} ->
@@ -826,6 +837,7 @@ defmodule SaveIt.Bot do
     delete_message(context.chat_id, context.progress_message_id)
     FileHelper.write_file(file.file_name, file.file_content, context.original_url)
     GoogleDrive.upload_file_content(context.chat_id, file.file_content, file.file_name)
+    log_resource_created(:thumbnail_fallback, file)
     :ok
   end
 
@@ -833,6 +845,7 @@ defmodule SaveIt.Bot do
     delete_message(context.chat_id, context.progress_message_id)
     FileHelper.write_file(file.file_name, file.file_content, context.cache_url)
     GoogleDrive.upload_file_content(context.chat_id, file.file_content, file.file_name)
+    log_resource_created(:url_download, file)
     :ok
   end
 
@@ -864,7 +877,7 @@ defmodule SaveIt.Bot do
   defp link_preview_caption(_message, original_url, metadata) when is_map(metadata) do
     case caption_from_link_preview_metadata(metadata, original_url) do
       {:ok, caption, source} ->
-        Logger.info("Link preview caption selected: source=#{source}", kind: :link_preview)
+        Logger.debug("Link preview caption selected: source=#{source}", kind: :link_preview)
         caption
 
       {:error, _reason} ->
@@ -886,7 +899,7 @@ defmodule SaveIt.Bot do
   defp fetch_link_preview_caption(preview_url, original_url) when is_binary(preview_url) do
     with {:ok, metadata} <- LinkPreview.get_metadata(preview_url),
          {:ok, caption, source} <- caption_from_link_preview_metadata(metadata, original_url) do
-      Logger.info("Link preview caption selected: source=#{source}", kind: :link_preview)
+      Logger.debug("Link preview caption selected: source=#{source}", kind: :link_preview)
       {:ok, caption}
     end
   end

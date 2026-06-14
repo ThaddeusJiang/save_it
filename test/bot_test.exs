@@ -245,7 +245,17 @@ defmodule SaveIt.BotTest do
       message_id: 97
     }
 
-    assert {:ok, true} = Bot.handle({:text, original_url, message}, nil)
+    log =
+      capture_log(fn ->
+        assert {:ok, true} = Bot.handle({:text, original_url, message}, nil)
+      end)
+
+    refute log =~ "[notice] resource_created"
+    refute log =~ "download_file started"
+    refute log =~ "download_file succeeded"
+    refute log =~ "File.write succeeded"
+    refute log =~ "Link preview metadata fetched"
+    refute log =~ "Link preview caption selected"
 
     assert_receive {:test_http_request, :post, "/", cobalt_body}
     assert Jason.decode!(cobalt_body) == %{"url" => original_url}
@@ -331,7 +341,7 @@ defmodule SaveIt.BotTest do
     assert document["source_message_url"] == "https://t.me/c/1234567890/42/77"
   end
 
-  test "falls back to the x.com URL og title as caption and logs preview metadata",
+  test "falls back to the x.com URL og title as caption without logging preview metadata by default",
        %{base_url: base_url} do
     original_url = "https://x.com/example/status/1?utm_source=telegram"
     preview_url = base_url <> "/x-title-only-page"
@@ -349,10 +359,13 @@ defmodule SaveIt.BotTest do
         assert {:ok, true} = Bot.handle({:text, original_url, message}, nil)
       end)
 
-    assert log =~ "Link preview metadata fetched"
-    assert log =~ "og_title=\"X Title Only Page OG Title\""
-    assert log =~ "og_description=nil"
-    assert log =~ "og_image=\"#{base_url}/preview.jpg\""
+    refute log =~ "Link preview metadata fetched"
+    refute log =~ "Link preview caption selected"
+    assert log =~ "[notice] resource_created"
+    assert log =~ "source=url_download"
+    refute log =~ "download_file started"
+    refute log =~ "download_file succeeded"
+    refute log =~ "File.write succeeded"
 
     assert_receive {:test_http_request, :post, "/", cobalt_body}
     assert Jason.decode!(cobalt_body) == %{"url" => "https://x.com/example/status/1"}
