@@ -110,6 +110,42 @@ defmodule SaveIt.BotTest do
            end)
   end
 
+  test "does not store a source message URL for private DM saves", %{base_url: base_url} do
+    original_url = "https://x.com/example/status/1?utm_source=telegram"
+    message_text = "dm reference #{original_url}"
+    download_url = base_url <> "/downloaded/photo.jpg"
+    cached_file_name = "bot-private-dm-source-url-test.jpg"
+    cached_file_content = <<255, 216, 255, 224, 0, 16, 74, 70, 73, 70>>
+
+    FileHelper.write_file(cached_file_name, cached_file_content, download_url)
+
+    on_exit(fn ->
+      cleanup_cached_file(download_url, cached_file_name)
+    end)
+
+    message = %{
+      chat: %{id: 12_345, type: "private", username: "save_it_test_chat"},
+      date: 1_717_170_000,
+      message_id: 100,
+      text: message_text
+    }
+
+    assert {:ok, true} = Bot.handle({:text, message_text, message}, nil)
+
+    assert_receive {:test_http_request, :post, "/", cobalt_body}
+    assert Jason.decode!(cobalt_body) == %{"url" => "https://x.com/example/status/1"}
+
+    assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
+
+    document = Jason.decode!(typesense_body)
+
+    assert document["url"] == original_url
+    assert document["download_url"] == download_url
+    assert document["caption"] == "dm reference"
+    refute Map.has_key?(document, "source_message_id")
+    refute Map.has_key?(document, "source_message_url")
+  end
+
   test "uses the URL og description as the caption when user text only contains the URL", %{
     base_url: base_url
   } do

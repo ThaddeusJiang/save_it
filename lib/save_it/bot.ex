@@ -1431,11 +1431,15 @@ defmodule SaveIt.Bot do
   defp source_message_fields(_chat, _message_id, _message_thread_id), do: %{}
 
   defp telegram_message_url(chat, message_id, message_thread_id) do
+    chat_type = map_value(chat, :type)
     username = map_value(chat, :username)
     chat_id = map_value(chat, :id)
     private_channel_id = telegram_private_channel_id(chat_id)
 
     cond do
+      chat_type == "private" ->
+        nil
+
       is_binary(username) and username != "" ->
         "https://t.me/#{username}/#{message_id}"
 
