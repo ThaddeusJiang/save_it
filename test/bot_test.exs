@@ -294,6 +294,39 @@ defmodule SaveIt.BotTest do
            end)
   end
 
+  test "logs link preview metadata fetch failures", %{base_url: base_url} do
+    original_url = "https://x.com/example/status/1"
+    preview_url = base_url <> "/missing-preview-page"
+
+    message = %{
+      chat: %{id: 12_345, username: "save_it_test_chat"},
+      date: 1_717_170_000,
+      message_id: 102,
+      text: original_url,
+      link_preview_options: %{url: preview_url}
+    }
+
+    log =
+      capture_log(fn ->
+        assert {:ok, true} = Bot.handle({:text, original_url, message}, nil)
+      end)
+
+    assert log =~ "Link preview metadata fetch failed"
+    assert log =~ "page_url=\"#{preview_url}\""
+    assert log =~ "reason={:preview_page_status, 404}"
+
+    assert_receive {:test_http_request, :post, "/", cobalt_body}
+    assert Jason.decode!(cobalt_body) == %{"url" => original_url}
+    assert_receive {:test_http_request, :get, "/downloaded/photo.jpg", ""}
+    assert_receive {:test_http_request, :get, "/missing-preview-page", ""}
+    assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
+
+    document = Jason.decode!(typesense_body)
+
+    assert document["caption"] == ""
+    refute Map.has_key?(document, "thumbnail_url")
+  end
+
   test "uses the youtube.com URL og title as the caption when user text only contains the URL",
        %{base_url: base_url} do
     original_url = "https://www.youtube.com/shorts/clip123"

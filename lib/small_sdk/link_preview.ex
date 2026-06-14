@@ -74,9 +74,12 @@ defmodule SmallSdk.LinkPreview do
         {:ok, metadata}
 
       {:ok, %{status: status}} ->
-        {:error, {:preview_page_status, status}}
+        reason = {:preview_page_status, status}
+        log_metadata_error(page_url, reason)
+        {:error, reason}
 
       {:error, reason} ->
+        log_metadata_error(page_url, reason)
         {:error, reason}
     end
   end
@@ -165,6 +168,15 @@ defmodule SmallSdk.LinkPreview do
     )
   end
 
+  defp log_metadata_error(page_url, reason) do
+    Logger.warning(
+      "Link preview metadata fetch failed: " <>
+        "page_url=#{format_log_url(page_url)} " <>
+        "reason=#{format_log_reason(reason)}",
+      kind: :link_preview
+    )
+  end
+
   defp format_log_url(nil), do: "nil"
 
   defp format_log_url(url) when is_binary(url) do
@@ -179,6 +191,12 @@ defmodule SmallSdk.LinkPreview do
     value
     |> truncate_log_value()
     |> inspect()
+  end
+
+  defp format_log_reason(reason) do
+    reason
+    |> inspect()
+    |> truncate_log_value()
   end
 
   defp truncate_log_value(value) do
