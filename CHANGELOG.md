@@ -8,6 +8,8 @@ before the CalVer migration retain their original version labels.
 
 ## [Unreleased]
 
+## [2026.6.14] - 2026-06-14
+
 ### Added
 
 - Support downloading X resources that require login or verification when self-hosted Cobalt is configured with local cookies.
