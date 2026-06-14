@@ -25,8 +25,6 @@ defmodule SmallSdk.WebDownloader do
 
   # Stream responses are not supported yet.
   def download_file(url) do
-    Logger.info("download_file started, url: #{url}")
-
     case Req.get(url) do
       {:ok, %{status: status, body: ""}} ->
         Logger.warning("Downloaded an empty file, status: #{status}")
@@ -34,7 +32,6 @@ defmodule SmallSdk.WebDownloader do
 
       {:ok, %{status: status, body: body, headers: headers}} when status in 200..209 ->
         filename = parse_filename_for_url(url, headers)
-        Logger.notice("download_file succeeded, url: #{url}")
 
         {:ok,
          %DownloadedFile{

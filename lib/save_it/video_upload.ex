@@ -12,7 +12,7 @@ defmodule SaveIt.VideoUpload do
         {{:file_content, prepared_content, file_name}, metadata}
 
       {:error, reason} ->
-        Logger.warning("Skipping video faststart preparation: #{inspect(reason)}")
+        Logger.debug("Skipping video faststart preparation: #{inspect(reason)}")
         {{:file_content, file_content, file_name}, probe_file_content(file_content, file_name)}
     end
   end
@@ -25,7 +25,7 @@ defmodule SaveIt.VideoUpload do
         prepare({:file_content, file_content, file_name})
 
       {:error, reason} ->
-        Logger.warning("Skipping video metadata probing: #{inspect(reason)}")
+        Logger.debug("Skipping video metadata probing: #{inspect(reason)}")
         {{:file, file_path}, %{}}
     end
   end
@@ -36,7 +36,7 @@ defmodule SaveIt.VideoUpload do
         metadata
 
       {:error, reason} ->
-        Logger.warning("Skipping video metadata probing: #{inspect(reason)}")
+        Logger.debug("Skipping video metadata probing: #{inspect(reason)}")
         %{}
     end
   end

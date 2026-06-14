@@ -15,7 +15,8 @@ before the CalVer migration retain their original version labels.
 ### Changed
 
 - Keep ordinary informational logs uncolored and reserve green logs for successful resource creation events.
-- Use YouTube Open Graph titles as captions for URL-only saves, keep X captions based on Open Graph descriptions with title fallback, and log fetched link preview metadata.
+- Reduce default runtime log noise by moving successful intermediate download, file-write, link-preview, search, and video-probing details out of the normal log stream.
+- Use YouTube Open Graph titles as captions for URL-only saves, and keep X captions based on Open Graph descriptions with title fallback.
 
 ### Fixed
 

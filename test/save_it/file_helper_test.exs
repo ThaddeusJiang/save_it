@@ -30,14 +30,14 @@ defmodule SaveIt.FileHelperTest do
     :ok
   end
 
-  test "logs file writes as resource creation notices" do
+  test "does not log successful file writes at the default level" do
     log =
       capture_log(fn ->
         FileHelper.write_file("photo.jpg", "image-bytes", "https://example.com/photo.jpg")
       end)
 
-    assert log =~ "[notice]"
-    assert log =~ "File.write succeeded"
+    refute log =~ "[notice]"
+    refute log =~ "File.write succeeded"
   end
 
   defp restore_env(key, nil), do: Application.delete_env(:save_it, key)

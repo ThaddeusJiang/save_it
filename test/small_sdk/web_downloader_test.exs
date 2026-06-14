@@ -5,7 +5,7 @@ defmodule SmallSdk.WebDownloaderTest do
 
   alias SmallSdk.WebDownloader
 
-  test "logs download start as ordinary info and successful downloads as resource creation notices" do
+  test "does not log successful downloads at the default level" do
     server = start_supervised!({__MODULE__.TestHttpServer, test_pid: self()})
     port = GenServer.call(server, :port)
 
@@ -17,8 +17,8 @@ defmodule SmallSdk.WebDownloaderTest do
         assert downloaded_file.file_content == "file-bytes"
       end)
 
-    assert log =~ "[info] download_file started"
-    assert log =~ "[notice] download_file succeeded"
+    refute log =~ "download_file started"
+    refute log =~ "download_file succeeded"
   end
 
   defmodule TestHttpServer do

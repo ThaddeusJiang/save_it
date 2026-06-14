@@ -31,7 +31,7 @@ defmodule SmallSdk.HlsDownloader do
     filename = gen_filename(original_url) <> ".mp4"
     tmp_path = Path.join(System.tmp_dir!(), filename)
 
-    Logger.info("HLS: trying variant #{variant.resolution} (#{variant.bandwidth} bps)")
+    Logger.debug("HLS: trying variant #{variant.resolution} (#{variant.bandwidth} bps)")
 
     args =
       build_ffmpeg_args(variant, tmp_path)

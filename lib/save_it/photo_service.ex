@@ -173,7 +173,7 @@ defmodule SaveIt.PhotoService do
       |> Enum.take(5)
       |> Enum.map(&Map.get(&1, "vector_distance"))
 
-    Logger.info(
+    Logger.debug(
       "Typesense #{action} response: " <>
         "metadata=#{format_log_fields(metadata)} " <>
         "hits_count=#{hits_count} " <>
