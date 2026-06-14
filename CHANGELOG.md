@@ -8,6 +8,10 @@ before the CalVer migration retain their original version labels.
 
 ## [Unreleased]
 
+### Fixed
+
+- Fix Zeabur Cobalt cookie setup to use a file config at `/cookies.json` instead of mounting a volume as a file.
+
 ## [2026.6.14] - 2026-06-14
 
 ### Added

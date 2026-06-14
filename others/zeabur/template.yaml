@@ -133,19 +133,22 @@ spec:
           - id: api
             port: 9000
             type: TCP
-        volumes:
-          - id: cobalt-data
-            dir: /data
         instructions:
           - title: Cobalt Twitter Cookies
-            content: Create /data/cookies.json with {"twitter":["auth_token=<token>; ct0=<csrf>"]} to let self-hosted Cobalt download X posts that require login.
+            content: Edit /cookies.json with {"twitter":["auth_token=<token>; ct0=<csrf>"]} to let self-hosted Cobalt download X posts that require login.
             category: Credentials
         env:
           API_URL:
             default: http://cobalt-api.zeabur.internal:9000
             expose: false
           COOKIE_PATH:
-            default: /data/cookies.json
+            default: /cookies.json
             expose: false
 
-        configs: []
+        configs:
+          - path: /cookies.json
+            template: |
+              {
+                "twitter": []
+              }
+            permission: 256
