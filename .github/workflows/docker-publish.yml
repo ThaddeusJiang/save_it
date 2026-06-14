@@ -31,6 +31,7 @@ jobs:
           images: ghcr.io/thaddeusjiang/save_it
           tags: |
             type=raw,value=latest,enable=${{ !inputs.is_prerelease }}
+            type=raw,value=stag,enable=${{ inputs.is_prerelease }}
             type=raw,value=${{ inputs.version }},enable=${{ inputs.version != '' }}
 
       - name: Set up QEMU
