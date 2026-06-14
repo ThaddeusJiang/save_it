@@ -34,6 +34,7 @@ defmodule SmallSdk.WebDownloader do
 
       {:ok, %{status: status, body: body, headers: headers}} when status in 200..209 ->
         filename = parse_filename_for_url(url, headers)
+        Logger.notice("download_file succeeded, url: #{url}")
 
         {:ok,
          %DownloadedFile{
