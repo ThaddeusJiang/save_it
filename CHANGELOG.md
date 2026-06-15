@@ -8,6 +8,10 @@ before the CalVer migration retain their original version labels.
 
 ## [Unreleased]
 
+### Fixed
+
+- Preserve URL video preview aspect ratios by sending accurate display dimensions and square-pixel Telegram covers/thumbnails.
+
 ## [2026.6.15] - 2026-06-15
 
 ### Added

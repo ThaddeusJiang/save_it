@@ -579,7 +579,7 @@ defmodule SaveIt.BotTest do
            end)
   end
 
-  test "indexes a downloaded URL video using the Telegram video thumbnail before the webpage preview",
+  test "indexes a downloaded URL video using a generated cover before Telegram and webpage previews",
        %{base_url: base_url} do
     original_url = base_url <> "/video-page-with-telegram-thumbnail"
     download_url = base_url <> "/downloaded/video.mp4"
@@ -592,6 +592,7 @@ defmodule SaveIt.BotTest do
     )
 
     Application.put_env(:save_it, :video_metadata_probe, __MODULE__.VideoMetadataProbe)
+    Application.put_env(:save_it, :video_cover_generator, __MODULE__.VideoCoverGenerator)
 
     message = %{
       chat: %{id: 12_345, username: "save_it_test_chat"},
@@ -615,6 +616,66 @@ defmodule SaveIt.BotTest do
     assert multipart_part(parts, "width") == "1080"
     assert multipart_part(parts, "height") == "1920"
     assert multipart_part(parts, "duration") == "12"
+    assert multipart_part(parts, "thumbnail") == :file_content
+    assert multipart_file_content(parts, "thumbnail") == test_video_cover()
+    assert multipart_part(parts, "cover") == :file_content
+    assert multipart_file_content(parts, "cover") == test_video_cover()
+
+    refute_receive {:telegram_download_request, _telegram_env}
+
+    assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
+
+    document = Jason.decode!(typesense_body)
+
+    assert document["url"] == original_url
+    assert document["download_url"] == download_url
+    refute Map.has_key?(document, "thumbnail_url")
+    assert document["caption"] == "clip notes"
+    assert document["file_id"] == "sent-video-file-id"
+    assert document["media_type"] == "video"
+    assert document["image"] == Base.encode64(test_video_cover())
+    refute Map.has_key?(document, "source_message_id")
+    assert document["source_message_url"] == "https://t.me/save_it_test_chat/70"
+
+    assert_receive {:test_http_request, :get, "/video-page-with-telegram-thumbnail", ""}
+    refute_receive {:test_http_request, :get, "/video-preview.jpg", ""}
+    refute_receive {:test_http_request, :get, "/preview.jpg", ""}
+
+    assert File.exists?(storage_file_path(cached_video_name(base_url)))
+
+    assert File.read(storage_file_path(cached_video_cover_name(base_url))) ==
+             {:ok, test_video_cover()}
+  end
+
+  test "falls back to the Telegram video thumbnail when generated cover is unavailable",
+       %{base_url: base_url} do
+    original_url = base_url <> "/video-page-with-telegram-thumbnail"
+    download_url = base_url <> "/downloaded/video.mp4"
+
+    Application.put_env(:ex_gram, :adapter, __MODULE__.UrlVideoThumbnailAdapter)
+
+    Application.put_env(:save_it, :telegram_req_options,
+      adapter: &__MODULE__.TelegramDownloadAdapter.request/1
+    )
+
+    Application.put_env(:save_it, :video_metadata_probe, __MODULE__.VideoMetadataProbe)
+    Application.put_env(:save_it, :video_cover_generator, __MODULE__.FailingVideoCoverGenerator)
+
+    message = %{
+      chat: %{id: 12_345, username: "save_it_test_chat"},
+      date: 1_717_170_000,
+      message_id: 104,
+      text: original_url,
+      link_preview_options: %{url: original_url}
+    }
+
+    assert {:ok, true} = Bot.handle({:text, original_url, message}, nil)
+
+    assert_receive {:test_http_request, :get, "/downloaded/video.mp4", ""}
+    assert_receive {:exgram_request, :post, "/bottest-token/sendVideo", {:multipart, parts}}
+
+    refute multipart_part(parts, "thumbnail")
+    refute multipart_part(parts, "cover")
 
     assert_receive {:telegram_download_request, telegram_env}
 
@@ -629,20 +690,9 @@ defmodule SaveIt.BotTest do
     assert document["url"] == original_url
     assert document["download_url"] == download_url
     assert document["thumbnail_url"] == base_url <> "/video-preview.jpg"
-    assert document["caption"] == "clip notes"
     assert document["file_id"] == "sent-video-file-id"
     assert document["media_type"] == "video"
     assert document["image"] == Base.encode64(test_jpeg())
-    refute Map.has_key?(document, "source_message_id")
-    assert document["source_message_url"] == "https://t.me/save_it_test_chat/70"
-
-    assert_receive {:test_http_request, :get, "/video-page-with-telegram-thumbnail", ""}
-    refute_receive {:test_http_request, :get, "/video-preview.jpg", ""}
-    refute_receive {:test_http_request, :get, "/preview.jpg", ""}
-
-    assert File.exists?(storage_file_path(cached_video_name(base_url)))
-
-    assert File.read(storage_file_path("sent.jpg")) == {:ok, test_jpeg()}
   end
 
   test "indexes a downloaded video using the webpage preview when Telegram has no thumbnail", %{
@@ -1476,6 +1526,12 @@ defmodule SaveIt.BotTest do
     |> then(&(&1 <> ".jpeg"))
   end
 
+  defp cached_video_cover_name(base_url) do
+    base_url
+    |> cached_video_name()
+    |> String.replace_suffix(".mp4", "-cover.jpg")
+  end
+
   defp storage_file_path(file_name), do: Path.join(FileHelper.files_dir(), file_name)
   defp storage_url_path(file_name), do: Path.join(FileHelper.urls_dir(), file_name)
 
@@ -1532,6 +1588,10 @@ defmodule SaveIt.BotTest do
     <<255, 216, 255, 224, 0, 16, 79, 71, 73, 70>>
   end
 
+  def test_video_cover do
+    <<255, 216, 255, 224, 0, 16, 67, 79, 86, 69, 82>>
+  end
+
   def test_mp4 do
     <<0, 0, 0, 24, 102, 116, 121, 112, 109, 112, 52, 50>>
   end
@@ -1557,6 +1617,13 @@ defmodule SaveIt.BotTest do
     Enum.find_value(parts, fn
       {^name, value} -> value
       {_file_content, ^name, _content, _file_name} -> :file_content
+      _part -> nil
+    end)
+  end
+
+  defp multipart_file_content(parts, name) when is_list(parts) do
+    Enum.find_value(parts, fn
+      {:file_content, ^name, content, _file_name} -> content
       _part -> nil
     end)
   end
@@ -1752,6 +1819,20 @@ defmodule SaveIt.BotTest do
     end
 
     def probe_file(_file_path), do: {:error, :unexpected_probe_file}
+  end
+
+  defmodule VideoCoverGenerator do
+    def cover_file_content(_file_content, file_name, %{width: 180, height: 320})
+        when is_binary(file_name) do
+      {:ok, SaveIt.BotTest.test_video_cover()}
+    end
+  end
+
+  defmodule FailingVideoCoverGenerator do
+    def cover_file_content(_file_content, file_name, %{width: 180, height: 320})
+        when is_binary(file_name) do
+      {:error, :cover_unavailable}
+    end
   end
 
   defmodule TelegramDirectMediaAdapter do

@@ -1294,11 +1294,12 @@ defmodule SaveIt.Bot do
 
       ".mp4" ->
         {prepared_content, video_metadata} = VideoUpload.prepare(content)
+        video_cover = VideoUpload.cover(prepared_content, video_metadata)
 
         case ExGram.send_video(
                chat_id,
                prepared_content,
-               video_send_opts(caption, video_metadata, message_thread_id)
+               video_send_opts(caption, video_metadata, video_cover, message_thread_id)
              ) do
           {:ok, msg} = response ->
             index_sent_video_preview(chat_id, msg,
@@ -1306,7 +1307,8 @@ defmodule SaveIt.Bot do
               source_url: source_url,
               download_url: download_url,
               thumbnail_url: thumbnail_url,
-              source_chat: source_chat
+              source_chat: source_chat,
+              video_cover: video_cover
             )
 
             response
@@ -1328,11 +1330,12 @@ defmodule SaveIt.Bot do
     |> put_optional_keyword(:message_thread_id, message_thread_id)
   end
 
-  defp video_send_opts(caption, video_metadata, message_thread_id) do
+  defp video_send_opts(caption, video_metadata, video_cover, message_thread_id) do
     [supports_streaming: true, caption: caption]
     |> maybe_put_video_metadata(:width, video_metadata)
     |> maybe_put_video_metadata(:height, video_metadata)
     |> maybe_put_video_metadata(:duration, video_metadata)
+    |> maybe_put_video_preview_files(video_cover)
     |> put_optional_keyword(:message_thread_id, message_thread_id)
   end
 
@@ -1343,16 +1346,32 @@ defmodule SaveIt.Bot do
     end
   end
 
+  defp maybe_put_video_preview_files(
+         opts,
+         {:ok, %{file_content: file_content, file_name: file_name}}
+       )
+       when is_binary(file_content) and is_binary(file_name) do
+    opts
+    |> Keyword.put(:cover, {:file_content, file_content, file_name})
+    |> Keyword.put(:thumbnail, {:file_content, file_content, file_name})
+  end
+
+  defp maybe_put_video_preview_files(opts, _video_cover), do: opts
+
   defp index_sent_video_preview(chat_id, msg, opts) do
     caption = Keyword.fetch!(opts, :caption)
     source_url = Keyword.get(opts, :source_url)
     download_url = Keyword.get(opts, :download_url)
     thumbnail_url = Keyword.get(opts, :thumbnail_url)
     source_chat = Keyword.fetch!(opts, :source_chat)
+    video_cover = Keyword.get(opts, :video_cover)
+
+    indexed_thumbnail_url =
+      if match?({:ok, _cover}, video_cover), do: nil, else: thumbnail_url
 
     with file_id when is_binary(file_id) <- sent_video_file_id(msg),
          {:ok, %DownloadedFile{} = file} <-
-           download_sent_video_preview(msg, source_url, thumbnail_url) do
+           download_sent_video_preview(msg, source_url, thumbnail_url, video_cover) do
       %{
         image: Base.encode64(file.file_content),
         caption: caption,
@@ -1362,7 +1381,7 @@ defmodule SaveIt.Bot do
         belongs_to_id: chat_id
       }
       |> put_optional(:download_url, download_url)
-      |> put_optional(:thumbnail_url, thumbnail_url)
+      |> put_optional(:thumbnail_url, indexed_thumbnail_url)
       |> Map.merge(source_message_fields(source_chat, msg))
       |> safe_index_photo()
 
@@ -1378,7 +1397,15 @@ defmodule SaveIt.Bot do
     end
   end
 
-  defp download_sent_video_preview(msg, source_url, thumbnail_url) do
+  defp download_sent_video_preview(_msg, _source_url, _thumbnail_url, {:ok, video_cover}) do
+    {:ok,
+     %DownloadedFile{
+       file_name: video_cover.file_name,
+       file_content: video_cover.file_content
+     }}
+  end
+
+  defp download_sent_video_preview(msg, source_url, thumbnail_url, _video_cover) do
     case download_message_thumbnail(msg) do
       {:ok, %DownloadedFile{} = file} -> {:ok, file}
       {:error, _reason} -> download_preview_image(thumbnail_url, source_url)
