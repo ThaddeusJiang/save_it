@@ -42,6 +42,7 @@ Directory overview:
 - Use `.agents/skills/acceptance-testing/SKILL.md` for Docker-based acceptance testing.
 - Use `.agents/skills/save-it-release/SKILL.md` for release preparation, verification, and publication.
 - Use `.agents/skills/save-it-changelog/SKILL.md` at the end of repository work to maintain `CHANGELOG.md`.
+- Create or update ADRs in `docs/adr/` promptly when work introduces or changes architecture decisions, long-lived conventions, or implementation constraints.
 
 ## Postmortems
 
