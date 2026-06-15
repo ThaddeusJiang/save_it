@@ -265,7 +265,7 @@ defmodule SaveIt.BotTest do
         assert {:ok, true} = Bot.handle({:text, original_url, message}, nil)
       end)
 
-    refute log =~ "[notice] resource_created"
+    refute log =~ "resource_created"
     refute log =~ "download_file started"
     refute log =~ "download_file succeeded"
     refute log =~ "File.write succeeded"
@@ -376,8 +376,11 @@ defmodule SaveIt.BotTest do
 
     refute log =~ "Link preview metadata fetched"
     refute log =~ "Link preview caption selected"
-    assert log =~ "[notice] resource_created"
+    assert log =~ "[info] resource_created"
+    assert log =~ IO.ANSI.green()
     assert log =~ "source=url_download"
+    refute log =~ "kind=resource"
+    refute log =~ "[notice]"
     refute log =~ "download_file started"
     refute log =~ "download_file succeeded"
     refute log =~ "File.write succeeded"
