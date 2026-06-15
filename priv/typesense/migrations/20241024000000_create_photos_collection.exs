@@ -1,8 +1,7 @@
 defmodule SaveIt.Typesense.Migrations.CreatePhotosCollection20241024000000 do
   @moduledoc false
 
-  alias SaveIt.TypesenseMigration
-  alias SmallSdk.Typesense
+  alias SmallSdk.TypesenseMigration
 
   @collection_name "photos"
 
@@ -12,7 +11,7 @@ defmodule SaveIt.Typesense.Migrations.CreatePhotosCollection20241024000000 do
   def up do
     case TypesenseMigration.collection(@collection_name) do
       nil ->
-        Typesense.create_collection!(%{
+        TypesenseMigration.create_collection!(%{
           "name" => @collection_name,
           "fields" => [
             %{"name" => "image", "type" => "image", "store" => false},
@@ -40,7 +39,7 @@ defmodule SaveIt.Typesense.Migrations.CreatePhotosCollection20241024000000 do
   end
 
   def down do
-    Typesense.delete_collection(@collection_name)
+    TypesenseMigration.delete_collection(@collection_name)
     :ok
   end
 

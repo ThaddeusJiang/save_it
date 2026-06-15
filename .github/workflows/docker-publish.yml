@@ -15,6 +15,7 @@ on:
 
 jobs:
   build-and-push:
+    name: docker (${{ inputs.version }})
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -22,32 +23,53 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Docker metadata
+      - name: Docker metadata (${{ inputs.version }})
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: ghcr.io/thaddeusjiang/save_it
           tags: |
             type=raw,value=latest,enable=${{ !inputs.is_prerelease }}
+            type=raw,value=stag,enable=${{ inputs.is_prerelease }}
             type=raw,value=${{ inputs.version }},enable=${{ inputs.version != '' }}
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push
-        uses: docker/build-push-action@v6
+      - name: Capture existing stag digest
+        id: stag_before
+        if: ${{ !inputs.is_prerelease }}
+        env:
+          STAG_TAG: ghcr.io/thaddeusjiang/save_it:stag
+        run: |
+          set -euo pipefail
+
+          if output="$(docker buildx imagetools inspect "$STAG_TAG" 2>/dev/null)"; then
+            digest="$(printf '%s\n' "$output" | awk '/^Digest:/ { print $2; exit }')"
+            if [ -z "$digest" ]; then
+              echo "Could not resolve digest for $STAG_TAG"
+              exit 1
+            fi
+            echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          else
+            echo "No existing $STAG_TAG tag found; nothing to preserve."
+            echo "digest=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and push (${{ inputs.version }})
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           file: ./Dockerfile
@@ -57,7 +79,16 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
-      - name: Verify published manifests
+      - name: Restore stag digest after stable publish
+        if: ${{ !inputs.is_prerelease && steps.stag_before.outputs.digest != '' }}
+        env:
+          STAG_IMAGE: ghcr.io/thaddeusjiang/save_it
+          STAG_DIGEST: ${{ steps.stag_before.outputs.digest }}
+        run: |
+          set -euo pipefail
+          docker buildx imagetools create --tag "$STAG_IMAGE:stag" "$STAG_IMAGE@$STAG_DIGEST"
+
+      - name: Verify published manifests (${{ inputs.version }})
         env:
           TAGS: ${{ steps.meta.outputs.tags }}
         run: |
@@ -65,3 +96,16 @@ jobs:
             [ -n "$tag" ] || continue
             docker buildx imagetools inspect "$tag"
           done
+
+      - name: Verify stag digest was preserved
+        if: ${{ !inputs.is_prerelease && steps.stag_before.outputs.digest != '' }}
+        env:
+          STAG_TAG: ghcr.io/thaddeusjiang/save_it:stag
+          STAG_DIGEST: ${{ steps.stag_before.outputs.digest }}
+        run: |
+          set -euo pipefail
+          current_digest="$(docker buildx imagetools inspect "$STAG_TAG" | awk '/^Digest:/ { print $2; exit }')"
+          if [ "$current_digest" != "$STAG_DIGEST" ]; then
+            echo "$STAG_TAG digest changed from $STAG_DIGEST to $current_digest"
+            exit 1
+          fi

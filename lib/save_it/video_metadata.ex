@@ -14,7 +14,7 @@ defmodule SaveIt.VideoMetadata do
       "-select_streams",
       "v:0",
       "-show_entries",
-      "stream=width,height,duration:stream_tags=rotate:side_data=rotation:format=duration",
+      "stream=width,height,duration,sample_aspect_ratio,display_aspect_ratio:stream_tags=rotate:stream_side_data=rotation:format=duration",
       "-of",
       "json",
       file_path
@@ -22,7 +22,7 @@ defmodule SaveIt.VideoMetadata do
 
     case System.cmd("ffprobe", args, stderr_to_stdout: true) do
       {json, 0} ->
-        decode_metadata(json)
+        decode_ffprobe_json(json)
 
       {output, exit_code} ->
         {:error, {:ffprobe_failed, exit_code, output}}
@@ -32,7 +32,7 @@ defmodule SaveIt.VideoMetadata do
       {:error, {:ffprobe_unavailable, error}}
   end
 
-  defp decode_metadata(json) do
+  def decode_ffprobe_json(json) do
     with {:ok, decoded} <- Jason.decode(json),
          %{} = stream <- decoded |> Map.get("streams", []) |> List.first(),
          {:ok, width} <- positive_integer(stream["width"]),
@@ -42,7 +42,9 @@ defmodule SaveIt.VideoMetadata do
           get_in(decoded, ["format", "duration"])
 
       {display_width, display_height} =
-        display_dimensions(width, height, rotation(stream))
+        stream
+        |> display_dimensions(width, height)
+        |> rotate_dimensions(rotation(stream))
 
       metadata =
         %{
@@ -63,10 +65,16 @@ defmodule SaveIt.VideoMetadata do
     end
   end
 
-  defp display_dimensions(width, height, rotation) when rotation in [90, 270, -90, -270],
+  defp display_dimensions(stream, width, height) do
+    ratio_dimensions(width, height, stream["display_aspect_ratio"]) ||
+      sample_aspect_dimensions(width, height, stream["sample_aspect_ratio"]) ||
+      {width, height}
+  end
+
+  defp rotate_dimensions({width, height}, rotation) when rotation in [90, 270, -90, -270],
     do: {height, width}
 
-  defp display_dimensions(width, height, _rotation), do: {width, height}
+  defp rotate_dimensions({width, height}, _rotation), do: {width, height}
 
   defp rotation(stream) do
     [
@@ -94,6 +102,20 @@ defmodule SaveIt.VideoMetadata do
     end
   end
 
+  defp ratio_dimensions(_width, height, ratio) do
+    case positive_ratio(ratio) do
+      {:ok, numerator, denominator} -> {round(height * numerator / denominator), height}
+      _ -> nil
+    end
+  end
+
+  defp sample_aspect_dimensions(width, height, ratio) do
+    case positive_ratio(ratio) do
+      {:ok, numerator, denominator} -> {round(width * numerator / denominator), height}
+      _ -> nil
+    end
+  end
+
   defp positive_integer(value) when is_integer(value) and value > 0, do: {:ok, value}
 
   defp positive_integer(value) do
@@ -112,6 +134,21 @@ defmodule SaveIt.VideoMetadata do
       :error -> nil
     end
   end
+
+  defp positive_ratio(value) when is_binary(value) do
+    case String.split(value, ":", parts: 2) do
+      [numerator, denominator] ->
+        with {:ok, numerator} <- positive_integer(numerator),
+             {:ok, denominator} <- positive_integer(denominator) do
+          {:ok, numerator, denominator}
+        end
+
+      _ ->
+        :error
+    end
+  end
+
+  defp positive_ratio(_value), do: :error
 
   defp with_temp_file(file_name, file_content, fun) do
     tmp_dir =

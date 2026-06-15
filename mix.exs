@@ -1,14 +1,20 @@
 defmodule SaveIt.MixProject do
   use Mix.Project
 
+  alias SmallSdk.TypesenseMigration.Runner, as: TypesenseMigrationRunner
+
   def project do
     [
       app: :save_it,
-      version: "2026.6.13",
+      version: "2026.6.15",
       elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       aliases: aliases(),
+      test_coverage: [
+        output: "cover",
+        summary: [threshold: 50]
+      ],
       dialyzer: [plt_add_apps: [:mix]]
     ]
   end
@@ -16,7 +22,8 @@ defmodule SaveIt.MixProject do
   def cli do
     [
       preferred_envs: [
-        checks: :dev
+        checks: :dev,
+        coverage: :test
       ]
     ]
   end
@@ -43,6 +50,10 @@ defmodule SaveIt.MixProject do
 
   defp aliases do
     [
+      coverage: "test --cover",
+      "ts.migrate": &ts_migrate/1,
+      "ts.rollback": &ts_rollback/1,
+      "ts.reset": &ts_reset/1,
       checks: [
         "format --check-formatted",
         "compile --warnings-as-errors",
@@ -50,5 +61,15 @@ defmodule SaveIt.MixProject do
         "dialyzer"
       ]
     ]
+  end
+
+  defp ts_migrate(args), do: run_typesense_runner(["migrate" | args])
+  defp ts_rollback(args), do: run_typesense_runner(["rollback" | args])
+  defp ts_reset(args), do: run_typesense_runner(["reset" | args])
+
+  defp run_typesense_runner(args) do
+    Mix.Task.run("loadpaths")
+    Code.require_file("priv/typesense/runner.exs")
+    TypesenseMigrationRunner.run(args)
   end
 end

@@ -1,5 +1,6 @@
 # Manually create and publish a GitHub pre-release from the selected branch and tag.
 name: Release (manual)
+run-name: Release manual ${{ inputs.tag }}
 
 on:
   workflow_dispatch:
@@ -23,11 +24,12 @@ jobs:
     outputs:
       version: ${{ steps.prepare.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout (${{ inputs.tag }})
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
 
-      - name: Prepare release metadata
+      - name: Prepare release metadata (${{ inputs.tag }})
         id: prepare
         env:
           INPUT_TAG: ${{ inputs.tag }}
@@ -37,7 +39,7 @@ jobs:
       - name: Ensure GitHub CLI
         run: gh --version
 
-      - name: Create published GitHub pre-release
+      - name: Create published GitHub pre-release (${{ inputs.tag }})
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_BRANCH: ${{ github.ref_name }}

@@ -1,21 +1,30 @@
 defmodule SaveIt.FileHelperTest do
   use ExUnit.Case, async: false
 
+  import ExUnit.CaptureLog
+
   alias SaveIt.DownloadedFile
   alias SaveIt.FileHelper
 
-  setup %{tmp_dir: tmp_dir} do
-    previous_save_it = Application.get_all_env(:save_it)
-    Application.put_env(:save_it, :data_dir, tmp_dir)
+  setup do
+    previous_data_dir = Application.get_env(:save_it, :data_dir)
+
+    data_dir =
+      Path.join(
+        System.tmp_dir!(),
+        "save_it_file_helper_test_#{System.unique_integer([:positive])}"
+      )
+
+    Application.put_env(:save_it, :data_dir, data_dir)
 
     on_exit(fn ->
-      restore_env(:save_it, previous_save_it)
+      restore_env(:data_dir, previous_data_dir)
+      File.rm_rf!(data_dir)
     end)
 
-    %{data_dir: tmp_dir}
+    %{data_dir: data_dir}
   end
 
-  @tag :tmp_dir
   test "stores downloaded file cache under configured data directory", %{data_dir: data_dir} do
     download_url = "https://example.com/photo.jpg"
     hashed_url = hashed_url(download_url)
@@ -31,7 +40,6 @@ defmodule SaveIt.FileHelperTest do
              Path.join([data_dir, "storage", "files", "photo.jpg"])
   end
 
-  @tag :tmp_dir
   test "stores downloaded folders under configured data directory", %{data_dir: data_dir} do
     original_url = "https://example.com/gallery"
     hashed_url = hashed_url(original_url)
@@ -53,7 +61,6 @@ defmodule SaveIt.FileHelperTest do
            ]
   end
 
-  @tag :tmp_dir
   test "stores Google settings under configured data directory", %{data_dir: data_dir} do
     chat_id = 123
 
@@ -71,17 +78,20 @@ defmodule SaveIt.FileHelperTest do
              {:ok, "access-token"}
   end
 
+  test "does not log successful file writes at the default level" do
+    log =
+      capture_log(fn ->
+        FileHelper.write_file("photo.jpg", "image-bytes", "https://example.com/photo.jpg")
+      end)
+
+    refute log =~ "[notice]"
+    refute log =~ "File.write succeeded"
+  end
+
   defp hashed_url(url) do
     :crypto.hash(:sha256, url) |> Base.url_encode64(padding: false)
   end
 
-  defp restore_env(app, env) do
-    Application.get_all_env(app)
-    |> Keyword.keys()
-    |> Enum.each(&Application.delete_env(app, &1))
-
-    Enum.each(env, fn {key, value} ->
-      Application.put_env(app, key, value)
-    end)
-  end
+  defp restore_env(key, nil), do: Application.delete_env(:save_it, key)
+  defp restore_env(key, value), do: Application.put_env(:save_it, key, value)
 end

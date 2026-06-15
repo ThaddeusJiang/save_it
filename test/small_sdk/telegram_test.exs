@@ -28,7 +28,8 @@ defmodule SmallSdk.TelegramTest do
                [
                  {"photo.jpg", {:file_content, <<1, 2, 3>>, "photo.jpg"}, "https://x.com/example"}
                ],
-               caption: "created at 2024-06-01"
+               caption: "created at 2024-06-01",
+               message_thread_id: 42
              )
 
     assert_receive {:telegram_request, env}
@@ -38,6 +39,8 @@ defmodule SmallSdk.TelegramTest do
 
     assert multipart =~ ~s(name="chat_id")
     assert multipart =~ "123"
+    assert multipart =~ ~s(name="message_thread_id")
+    assert multipart =~ "42"
 
     assert multipart =~ ~s(name="media0"; filename="photo.jpg")
     assert multipart =~ <<1, 2, 3>>

@@ -11,10 +11,51 @@ before the CalVer migration retain their original version labels.
 ### Changed
 
 - Make the save data directory configurable with `SAVE_IT_DATA_DIR`, defaulting to `./data` locally and `/data` in the Docker image, with Docker Compose persisting `/data` on a named volume.
+
+### Fixed
+
+- Use random UUIDv7 filenames for downloaded resources while preserving the original file extension.
+- Preserve URL video preview aspect ratios by sending accurate display dimensions and square-pixel Telegram covers/thumbnails.
+
+## [2026.6.15] - 2026-06-15
+
+### Added
+
+- Show chat type, public visibility, bot admin status, and bot Privacy Mode status in the `/about` command.
+- Store public link preview thumbnail URLs in Typesense for URL media saves and webpage preview fallbacks.
+
+### Changed
+
+- Keep ordinary informational logs uncolored and reserve green logs for successful resource creation events.
+- Reduce default runtime log noise by moving successful intermediate download, file-write, link-preview, search, and video-probing details out of the normal log stream.
+- Use YouTube Open Graph titles as captions for URL-only saves, and keep X captions based on Open Graph descriptions with title fallback.
+
+### Fixed
+
+- Fix Zeabur Cobalt cookie setup to use a file config at `/cookies.json` instead of mounting a volume as a file.
+- Keep GHCR prerelease images reachable through the `stag` tag after stable `latest` images are published.
+- Log link preview metadata fetch failures so missing URL captions and thumbnail URLs can be diagnosed from runtime logs.
+- Send URL-downloaded media back to the source Telegram topic, build private supergroup topic source message URLs with the message thread id, and stop indexing the unused `source_message_id` field.
+- Stop storing invalid Telegram `source_message_url` values for private DM saves, where Telegram does not provide a direct message URL.
+- Store resolved media download URLs in Typesense for successful URL photo, video, HLS, and multi-image saves.
+
+## [2026.6.14] - 2026-06-14
+
+### Added
+
+- Support downloading X resources that require login or verification when self-hosted Cobalt is configured with local cookies.
+
+### Changed
+
+- Improve photo search to support caption full-text matching and high-confidence image semantic matching.
+- Upgrade the bundled Cobalt service image from v10 to v11 for local and Zeabur deployments.
 - Use user-provided Telegram text as captions for URL and photo saves, and fall back to URL Open Graph descriptions when a link has no user description.
 
 ### Fixed
 
+- Fail application startup when `TELEGRAM_BOT_TOKEN` is missing instead of starting the bot with repeated ExGram token warnings.
+- Prevent `/similar` photo commands from crashing when Telegram delivers the command as a photo command update instead of a plain photo message.
+- Index Telegram photo captions delivered by ExGram as text updates so caption search can find directly uploaded photos.
 - Preserve downloaded MP4 video display dimensions when sending to Telegram, and prepare uploads for streaming playback when possible.
 
 ## [2026.6.13] - 2026-06-13

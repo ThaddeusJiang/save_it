@@ -86,7 +86,7 @@ defmodule SaveIt.FileHelper do
       :ok ->
         case File.write(Path.join([dir, file_name]), file_content) do
           :ok ->
-            Logger.info("File.write succeeded")
+            :ok
 
           {:error, reason} ->
             Logger.error("File.write failed, reason: #{reason}")

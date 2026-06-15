@@ -1,8 +1,7 @@
 defmodule SaveIt.Typesense.Migrations.AddDownloadUrlToPhotos20260525000000 do
   @moduledoc false
 
-  alias SaveIt.TypesenseMigration
-  alias SmallSdk.Typesense
+  alias SmallSdk.TypesenseMigration
 
   @collection_name "photos"
 
@@ -12,7 +11,7 @@ defmodule SaveIt.Typesense.Migrations.AddDownloadUrlToPhotos20260525000000 do
   def up do
     case TypesenseMigration.field(@collection_name, "download_url") do
       nil ->
-        Typesense.update_collection!(@collection_name, %{
+        TypesenseMigration.update_collection!(@collection_name, %{
           "fields" => [
             %{"name" => "download_url", "type" => "string", "optional" => true}
           ]
@@ -22,13 +21,13 @@ defmodule SaveIt.Typesense.Migrations.AddDownloadUrlToPhotos20260525000000 do
         :ok
 
       _field ->
-        Typesense.update_collection!(@collection_name, %{
+        TypesenseMigration.update_collection!(@collection_name, %{
           "fields" => [
             %{"name" => "download_url", "drop" => true}
           ]
         })
 
-        Typesense.update_collection!(@collection_name, %{
+        TypesenseMigration.update_collection!(@collection_name, %{
           "fields" => [
             %{"name" => "download_url", "type" => "string", "optional" => true}
           ]
@@ -38,7 +37,7 @@ defmodule SaveIt.Typesense.Migrations.AddDownloadUrlToPhotos20260525000000 do
 
   def down do
     if TypesenseMigration.has_field?(@collection_name, "download_url") do
-      Typesense.update_collection!(@collection_name, %{
+      TypesenseMigration.update_collection!(@collection_name, %{
         "fields" => [
           %{"name" => "download_url", "drop" => true}
         ]

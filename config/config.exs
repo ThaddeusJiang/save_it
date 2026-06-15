@@ -8,7 +8,10 @@ config :logger, :default_formatter,
   colors: [
     enabled: true,
     debug: :cyan,
-    info: :green,
+    info: :normal,
+    notice: :green,
     warning: :yellow,
     error: :red
   ]
+
+import_config "#{config_env()}.exs"

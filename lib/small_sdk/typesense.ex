@@ -3,8 +3,6 @@ defmodule SmallSdk.Typesense do
 
   require Logger
 
-  import SaveIt.SmallHelper.UrlHelper, only: [validate_url!: 1]
-
   @migration_receive_timeout :timer.minutes(5)
 
   def create_collection!(schema) do
@@ -147,6 +145,16 @@ defmodule SmallSdk.Typesense do
     api_key = Application.fetch_env!(:save_it, :typesense_api_key)
 
     {url, api_key}
+  end
+
+  defp validate_url!(url) do
+    uri = URI.parse(url)
+
+    if uri.scheme in ["http", "https"] and uri.host do
+      url
+    else
+      raise ArgumentError, "Invalid URL: #{url}"
+    end
   end
 
   defp build_request(path, opts \\ [])

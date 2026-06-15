@@ -1,5 +1,6 @@
 # Publish Docker image when a GitHub release is published.
 name: Release
+run-name: Release ${{ github.event.release.tag_name }}
 
 on:
   release:
@@ -16,12 +17,13 @@ concurrency:
 
 jobs:
   prepare:
+    name: prepare (${{ github.event.release.tag_name }})
     runs-on: ubuntu-latest
     outputs:
       is_prerelease: ${{ steps.prepare.outputs.is_prerelease }}
       version: ${{ steps.prepare.outputs.version }}
     steps:
-      - name: Derive image version from release tag
+      - name: Derive image version from release tag (${{ github.event.release.tag_name }})
         id: prepare
         env:
           IS_PRERELEASE: ${{ github.event.release.prerelease }}
@@ -36,6 +38,7 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
   docker:
+    name: docker (${{ needs.prepare.outputs.version }})
     needs: prepare
     uses: ./.github/workflows/docker-publish.yml
     with:
