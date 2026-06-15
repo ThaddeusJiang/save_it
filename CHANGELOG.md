@@ -8,6 +8,8 @@ before the CalVer migration retain their original version labels.
 
 ## [Unreleased]
 
+## [2026.6.15] - 2026-06-15
+
 ### Added
 
 - Show chat type, public visibility, bot admin status, and bot Privacy Mode status in the `/about` command.
