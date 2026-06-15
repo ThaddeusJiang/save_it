@@ -472,6 +472,8 @@ defmodule SaveIt.BotTest do
 
     assert document["url"] == original_url
     assert document["caption"] == "YouTube Page OG Title"
+
+    assert_storage_file_with_uuidv7_extension(".mp4")
   end
 
   test "stores the Telegram thumbnail when a user-sent url cannot be resolved", _context do
@@ -641,10 +643,8 @@ defmodule SaveIt.BotTest do
     refute_receive {:test_http_request, :get, "/video-preview.jpg", ""}
     refute_receive {:test_http_request, :get, "/preview.jpg", ""}
 
-    assert File.exists?(storage_file_path(cached_video_name(base_url)))
-
-    assert File.read(storage_file_path(cached_video_cover_name(base_url))) ==
-             {:ok, test_video_cover()}
+    assert_storage_file_with_uuidv7_extension(".mp4")
+    assert_storage_file_content_with_uuidv7_extension(".jpg", test_video_cover())
   end
 
   test "falls back to the Telegram video thumbnail when generated cover is unavailable",
@@ -738,8 +738,7 @@ defmodule SaveIt.BotTest do
     refute Map.has_key?(document, "source_message_id")
     assert document["source_message_url"] == "https://t.me/save_it_test_chat/71"
 
-    assert File.read(storage_file_path(cached_video_preview_name(base_url))) ==
-             {:ok, test_og_jpeg()}
+    assert_storage_file_content_with_uuidv7_extension(".jpg", test_og_jpeg())
   end
 
   test "stores the webpage preview for a downloaded HLS URL video", %{base_url: base_url} do
@@ -777,8 +776,7 @@ defmodule SaveIt.BotTest do
     assert document["media_type"] == "video"
     assert document["image"] == Base.encode64(test_og_jpeg())
 
-    assert File.read(storage_file_path(cached_video_preview_name(base_url))) ==
-             {:ok, test_og_jpeg()}
+    assert_storage_file_content_with_uuidv7_extension(".jpg", test_og_jpeg())
   end
 
   test "stores the original user-sent url for every photo in a multi-image download", %{
@@ -1514,22 +1512,41 @@ defmodule SaveIt.BotTest do
     File.rm(file_path)
   end
 
-  defp cached_video_name(base_url) do
-    :crypto.hash(:sha256, base_url <> "/downloaded/video.mp4")
-    |> Base.url_encode64(padding: false)
-    |> then(&(&1 <> ".mp4"))
+  defp assert_storage_file_with_uuidv7_extension(extension) do
+    assert [file_name] =
+             extension
+             |> storage_file_names()
+             |> Enum.filter(&uuidv7_file_name?(&1, extension))
+
+    file_name
   end
 
-  defp cached_video_preview_name(base_url) do
-    :crypto.hash(:sha256, base_url <> "/video-preview.jpg")
-    |> Base.url_encode64(padding: false)
-    |> then(&(&1 <> ".jpeg"))
+  defp assert_storage_file_content_with_uuidv7_extension(extension, expected_content) do
+    assert [file_name] =
+             extension
+             |> storage_file_names()
+             |> Enum.filter(&uuidv7_file_name?(&1, extension))
+             |> Enum.filter(fn file_name ->
+               File.read(storage_file_path(file_name)) == {:ok, expected_content}
+             end)
+
+    file_name
   end
 
-  defp cached_video_cover_name(base_url) do
-    base_url
-    |> cached_video_name()
-    |> String.replace_suffix(".mp4", "-cover.jpg")
+  defp storage_file_names(extension) do
+    case File.ls(FileHelper.files_dir()) do
+      {:ok, file_names} -> Enum.filter(file_names, &(Path.extname(&1) == extension))
+      {:error, _reason} -> []
+    end
+  end
+
+  defp uuidv7_file_name?(file_name, extension) do
+    Regex.match?(
+      Regex.compile!(
+        "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}#{Regex.escape(extension)}$"
+      ),
+      file_name
+    )
   end
 
   defp storage_file_path(file_name), do: Path.join(FileHelper.files_dir(), file_name)
@@ -1807,7 +1824,7 @@ defmodule SaveIt.BotTest do
     def download(_m3u8_url) do
       {:ok,
        %SaveIt.DownloadedFile{
-         file_name: "hls-video.mp4",
+         file_name: SaveIt.DownloadedFileName.random("hls-output.mp4"),
          file_content: SaveIt.BotTest.test_mp4()
        }}
     end
@@ -2066,7 +2083,7 @@ defmodule SaveIt.BotTest do
 
       """
       HTTP/1.1 200 OK\r
-      content-type: video/mp4\r
+      content-type: video/mp4; codecs="avc1.4d401f"\r
       content-length: #{byte_size(mp4)}\r
       connection: close\r
       \r

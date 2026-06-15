@@ -4,6 +4,7 @@ defmodule SmallSdk.WebDownloader do
   require Logger
 
   alias SaveIt.DownloadedFile
+  alias SaveIt.DownloadedFileName
 
   def download_files(urls) do
     res =
@@ -31,7 +32,7 @@ defmodule SmallSdk.WebDownloader do
         {:error, "💔 Downloaded an empty file"}
 
       {:ok, %{status: status, body: body, headers: headers}} when status in 200..209 ->
-        filename = parse_filename_for_url(url, headers)
+        filename = file_name_for_url(url, headers)
 
         {:ok,
          %DownloadedFile{
@@ -50,41 +51,68 @@ defmodule SmallSdk.WebDownloader do
     end
   end
 
-  defp parse_filename_for_url(url, headers) do
-    if String.contains?(url, "/tunnel") do
-      parse_filename(url, :content_disposition, headers)
-    else
-      parse_filename(url, :content_type, headers)
+  defp file_name_for_url(url, headers) do
+    original =
+      if String.contains?(url, "/tunnel") do
+        content_disposition_filename(headers) || url
+      else
+        url
+      end
+
+    DownloadedFileName.random(original, fallback_extension: content_type_extension(headers))
+  end
+
+  defp content_type_extension(headers) do
+    headers
+    |> header_first("content-type")
+    |> case do
+      nil ->
+        nil
+
+      content_type ->
+        content_type
+        |> String.split(";", parts: 2)
+        |> List.first()
+        |> String.trim()
+        |> String.split("/")
+        |> List.last()
     end
   end
 
-  defp parse_filename(url, :content_type, headers) do
-    ext =
-      headers
-      |> Map.get("content-type")
-      |> List.first()
-      |> String.split("/")
-      |> List.last()
+  defp content_disposition_filename(headers) do
+    headers
+    |> header_first("content-disposition")
+    |> case do
+      nil ->
+        nil
 
-    gen_file_name(url) <> "." <> ext
+      content_disposition ->
+        content_disposition
+        |> String.split(";")
+        |> Enum.find(fn x -> String.contains?(x, "filename") end)
+        |> case do
+          nil ->
+            nil
+
+          filename ->
+            filename
+            |> String.split("=", parts: 2)
+            |> List.last()
+            |> String.trim()
+            |> String.replace("\"", "")
+            |> Path.basename()
+            |> blank_to_nil()
+        end
+    end
   end
 
-  defp parse_filename(_url, :content_disposition, headers) do
-    filename =
-      headers
-      |> Map.get("content-disposition")
-      |> List.first()
-      |> String.split(";")
-      |> Enum.find(fn x -> String.contains?(x, "filename") end)
-      |> String.split("=")
-      |> List.last()
-      |> String.trim()
-      |> String.replace("\"", "")
-
-    filename
+  defp header_first(headers, name) do
+    headers
+    |> Map.get(name, [])
+    |> List.first()
   end
 
-  defp gen_file_name(url) do
-    :crypto.hash(:sha256, url) |> Base.url_encode64(padding: false)
+  defp blank_to_nil(value) do
+    if value == "", do: nil, else: value
   end
 end

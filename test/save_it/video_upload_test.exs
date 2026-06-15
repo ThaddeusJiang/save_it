@@ -23,8 +23,15 @@ defmodule SaveIt.VideoUploadTest do
              })
 
     assert cover.file_content == "cover-bytes"
-    assert cover.file_name == "clip-cover.jpg"
+    assert_uuidv7_filename(cover.file_name, ".jpg")
     assert_received {:cover_dimensions, %{width: 90, height: 320}}
+  end
+
+  defp assert_uuidv7_filename(file_name, extension) do
+    assert file_name =~
+             Regex.compile!(
+               "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}#{Regex.escape(extension)}$"
+             )
   end
 
   defmodule CoverGenerator do

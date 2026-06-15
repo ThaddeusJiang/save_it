@@ -10,6 +10,7 @@ before the CalVer migration retain their original version labels.
 
 ### Fixed
 
+- Use random UUIDv7 filenames for downloaded resources while preserving the original file extension.
 - Preserve URL video preview aspect ratios by sending accurate display dimensions and square-pixel Telegram covers/thumbnails.
 
 ## [2026.6.15] - 2026-06-15
