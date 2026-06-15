@@ -4,7 +4,7 @@ defmodule SmallSdk.HlsDownloader do
   require Logger
 
   alias SaveIt.DownloadedFile
-  alias SaveIt.DownloadedFileName
+  alias SaveIt.FilenameGenerator
 
   # Telegram bot API file upload limit is 50MB
   @max_file_size 49 * 1024 * 1024
@@ -29,7 +29,7 @@ defmodule SmallSdk.HlsDownloader do
   end
 
   defp download_best_variant([variant | rest], original_url) do
-    filename = DownloadedFileName.random("hls-output.mp4")
+    filename = FilenameGenerator.random("hls-output.mp4")
     tmp_path = Path.join(System.tmp_dir!(), filename)
 
     Logger.debug("HLS: trying variant #{variant.resolution} (#{variant.bandwidth} bps)")

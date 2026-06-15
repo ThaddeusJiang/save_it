@@ -1,4 +1,4 @@
-defmodule SaveIt.DownloadedFileName do
+defmodule SaveIt.FilenameGenerator do
   @moduledoc false
 
   def random(original, opts \\ []) when is_binary(original) and is_list(opts) do

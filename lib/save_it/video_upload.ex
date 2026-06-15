@@ -3,7 +3,7 @@ defmodule SaveIt.VideoUpload do
 
   require Logger
 
-  alias SaveIt.DownloadedFileName
+  alias SaveIt.FilenameGenerator
   alias SaveIt.VideoMetadata
 
   @telegram_cover_max_dimension 320
@@ -97,7 +97,7 @@ defmodule SaveIt.VideoUpload do
 
   defp cover_dimensions(_metadata), do: {:error, :missing_video_display_dimensions}
 
-  defp cover_file_name(_file_name), do: DownloadedFileName.random("cover.jpg")
+  defp cover_file_name(_file_name), do: FilenameGenerator.random("cover.jpg")
 
   defmodule FFmpegFaststart do
     @moduledoc false

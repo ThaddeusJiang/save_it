@@ -10,7 +10,7 @@ Filename generation was spread across `SmallSdk.WebDownloader`, `SmallSdk.HlsDow
 
 ## Fix applied
 
-Filename generation is now centralized in `SaveIt.DownloadedFileName`. Downloaded resources use a random UUIDv7 basename. The extension comes from the original filename or URL path when available, including `Content-Disposition` for tunnel downloads; `content-type` is only a fallback when the original source has no extension. HLS output and generated video covers also use UUIDv7 basenames with their output extensions.
+Filename generation is now centralized in `SaveIt.FilenameGenerator`. Downloaded resources use a random UUIDv7 basename. The extension comes from the original filename or URL path when available, including `Content-Disposition` for tunnel downloads; `content-type` is only a fallback when the original source has no extension. HLS output and generated video covers also use UUIDv7 basenames with their output extensions.
 
 ## What we learned
 

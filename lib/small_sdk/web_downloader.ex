@@ -4,7 +4,7 @@ defmodule SmallSdk.WebDownloader do
   require Logger
 
   alias SaveIt.DownloadedFile
-  alias SaveIt.DownloadedFileName
+  alias SaveIt.FilenameGenerator
 
   def download_files(urls) do
     res =
@@ -59,7 +59,7 @@ defmodule SmallSdk.WebDownloader do
         url
       end
 
-    DownloadedFileName.random(original, fallback_extension: content_type_extension(headers))
+    FilenameGenerator.random(original, fallback_extension: content_type_extension(headers))
   end
 
   defp content_type_extension(headers) do

@@ -1824,7 +1824,7 @@ defmodule SaveIt.BotTest do
     def download(_m3u8_url) do
       {:ok,
        %SaveIt.DownloadedFile{
-         file_name: SaveIt.DownloadedFileName.random("hls-output.mp4"),
+         file_name: SaveIt.FilenameGenerator.random("hls-output.mp4"),
          file_content: SaveIt.BotTest.test_mp4()
        }}
     end
