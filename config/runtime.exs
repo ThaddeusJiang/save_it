@@ -1,5 +1,8 @@
 import Config
 
+config :save_it, :timezone, System.get_env("TZ") || "Asia/Tokyo"
+config :save_it, :data_dir, System.get_env("SAVE_IT_DATA_DIR", "./data")
+
 if config_env() != :test do
   telegram_bot_token = System.fetch_env!("TELEGRAM_BOT_TOKEN")
 

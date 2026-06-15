@@ -1,21 +1,20 @@
 defmodule SaveIt.BotTest do
   use ExUnit.Case, async: false
 
+  @moduletag :tmp_dir
+
   import ExUnit.CaptureLog
 
   alias ExGram.Adapter.Test, as: ExGramTestAdapter
   alias SaveIt.Bot
   alias SaveIt.FileHelper
 
-  setup do
+  setup %{tmp_dir: tmp_dir} do
     server = start_supervised!({__MODULE__.TestHttpServer, test_pid: self()})
     base_url = "http://127.0.0.1:#{__MODULE__.TestHttpServer.port(server)}"
 
     previous_ex_gram = Application.get_all_env(:ex_gram)
     previous_save_it = Application.get_all_env(:save_it)
-
-    storage_dir =
-      Path.join(System.tmp_dir!(), "save-it-bot-test-#{System.unique_integer([:positive])}")
 
     Application.put_env(:ex_gram, :adapter, ExGram.Adapter.Test)
     Application.put_env(:ex_gram, :token, "test-token")
@@ -29,8 +28,8 @@ defmodule SaveIt.BotTest do
 
     Application.put_env(:save_it, :typesense_url, base_url)
     Application.put_env(:save_it, :typesense_api_key, "test-typesense-key")
-    Application.put_env(:save_it, :storage_files_dir, Path.join(storage_dir, "files"))
-    Application.put_env(:save_it, :storage_urls_dir, Path.join(storage_dir, "urls"))
+    Application.put_env(:save_it, :timezone, System.get_env("TZ") || "Asia/Tokyo")
+    Application.put_env(:save_it, :data_dir, tmp_dir)
 
     if Process.whereis(ExGram.Adapter.Test) do
       ExGramTestAdapter.clean()
@@ -57,7 +56,6 @@ defmodule SaveIt.BotTest do
 
       restore_env(:ex_gram, previous_ex_gram)
       restore_env(:save_it, previous_save_it)
-      File.rm_rf(storage_dir)
     end)
 
     %{base_url: base_url}
@@ -1525,9 +1523,9 @@ defmodule SaveIt.BotTest do
     assert [file_name] =
              extension
              |> storage_file_names()
-             |> Enum.filter(&uuidv7_file_name?(&1, extension))
              |> Enum.filter(fn file_name ->
-               File.read(storage_file_path(file_name)) == {:ok, expected_content}
+               uuidv7_file_name?(file_name, extension) and
+                 File.read(storage_file_path(file_name)) == {:ok, expected_content}
              end)
 
     file_name
@@ -1588,13 +1586,19 @@ defmodule SaveIt.BotTest do
   end
 
   defp configure_google_drive(chat_id) do
-    File.rm_rf("./data/settings/#{chat_id}")
+    settings_dir = chat_settings_dir(chat_id)
+
+    File.rm_rf(settings_dir)
     FileHelper.set_google_access_token(chat_id, "test-drive-token")
     FileHelper.set_google_drive_folder_id(chat_id, "test-drive-folder")
 
     on_exit(fn ->
-      File.rm_rf("./data/settings/#{chat_id}")
+      File.rm_rf(settings_dir)
     end)
+  end
+
+  defp chat_settings_dir(chat_id) do
+    Path.join([FileHelper.data_dir(), "settings", to_string(chat_id)])
   end
 
   def test_jpeg do

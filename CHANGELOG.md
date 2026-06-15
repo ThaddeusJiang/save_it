@@ -8,6 +8,10 @@ before the CalVer migration retain their original version labels.
 
 ## [Unreleased]
 
+### Changed
+
+- Make the save data directory configurable with `SAVE_IT_DATA_DIR`, defaulting to `./data` locally and `/data` in the Docker image, with Docker Compose persisting `/data` on a named volume.
+
 ### Fixed
 
 - Use random UUIDv7 filenames for downloaded resources while preserving the original file extension.

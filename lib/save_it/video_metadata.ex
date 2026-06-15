@@ -103,17 +103,15 @@ defmodule SaveIt.VideoMetadata do
   end
 
   defp ratio_dimensions(_width, height, ratio) do
-    with {:ok, numerator, denominator} <- positive_ratio(ratio) do
-      {round(height * numerator / denominator), height}
-    else
+    case positive_ratio(ratio) do
+      {:ok, numerator, denominator} -> {round(height * numerator / denominator), height}
       _ -> nil
     end
   end
 
   defp sample_aspect_dimensions(width, height, ratio) do
-    with {:ok, numerator, denominator} <- positive_ratio(ratio) do
-      {round(width * numerator / denominator), height}
-    else
+    case positive_ratio(ratio) do
+      {:ok, numerator, denominator} -> {round(width * numerator / denominator), height}
       _ -> nil
     end
   end
