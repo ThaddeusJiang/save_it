@@ -14,6 +14,7 @@ before the CalVer migration retain their original version labels.
 
 ### Fixed
 
+- Use the original MissAV URL as the saved caption while still reading preview metadata for thumbnails and logging a scoped fallback when Cloudflare blocks server-side requests.
 - Use random UUIDv7 filenames for downloaded resources while preserving the original file extension.
 - Preserve URL video preview aspect ratios by sending accurate display dimensions and square-pixel Telegram covers/thumbnails.
 

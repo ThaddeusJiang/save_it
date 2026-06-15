@@ -855,7 +855,11 @@ defmodule SaveIt.Bot do
         caption
 
       _ ->
-        link_preview_caption(message, original_url, metadata)
+        if missav_url?(original_url) do
+          original_url
+        else
+          link_preview_caption(message, original_url, metadata)
+        end
     end
   end
 
@@ -972,6 +976,22 @@ defmodule SaveIt.Bot do
   end
 
   defp x_url?(_url), do: false
+
+  defp missav_url?(url) when is_binary(url) do
+    case URI.parse(url) do
+      %URI{host: host} when is_binary(host) ->
+        host = String.downcase(host)
+
+        host == "missav.ai" or String.ends_with?(host, ".missav.ai")
+
+      _ ->
+        false
+    end
+  rescue
+    _ -> false
+  end
+
+  defp missav_url?(_url), do: false
 
   defp send_message(chat_id, text) do
     ExGram.send_message(chat_id, text)

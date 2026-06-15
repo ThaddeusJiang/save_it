@@ -73,7 +73,45 @@ defmodule SmallSdk.LinkPreviewTest do
     assert LinkPreview.get_metadata_from_html("https://example.com/posts/1", html) == %{
              title: "Preview Page OG Title",
              description: "Preview Page OG Description",
+             keywords: nil,
              image_url: "https://example.com/preview.jpg"
            }
+  end
+
+  test "extracts og title, og description, and meta keywords from html" do
+    html = """
+    <html>
+      <head>
+        <meta property="og:title" content="MissAV OG Title" />
+        <meta property="og:description" content="MissAV OG Description" />
+        <meta name="keywords" content="missav, sdam-101, uncensored leak" />
+        <meta property="og:image" content="/cover-n.jpg" />
+      </head>
+    </html>
+    """
+
+    assert LinkPreview.get_metadata_from_html(
+             "https://missav.ai/ja/sdam-101-uncensored-leak",
+             html
+           ) ==
+             %{
+               title: "MissAV OG Title",
+               description: "MissAV OG Description",
+               keywords: "missav, sdam-101, uncensored leak",
+               image_url: "https://missav.ai/cover-n.jpg"
+             }
+  end
+
+  test "builds MissAV fallback metadata from the page URL" do
+    assert LinkPreview.get_metadata_from_url_fallback(
+             "https://missav.ai/ja/sdam-101-uncensored-leak"
+           ) ==
+             {:ok,
+              %{
+                title: "SDAM-101 Uncensored Leak",
+                description: nil,
+                keywords: nil,
+                image_url: "https://fourhoi.com/sdam-101-uncensored-leak/cover-n.jpg"
+              }}
   end
 end

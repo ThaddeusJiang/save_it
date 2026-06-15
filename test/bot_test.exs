@@ -739,6 +739,144 @@ defmodule SaveIt.BotTest do
     assert_storage_file_content_with_uuidv7_extension(".jpg", test_og_jpeg())
   end
 
+  test "uses the MissAV URL as the caption while still fetching readable preview metadata", %{
+    base_url: base_url
+  } do
+    original_url = "https://missav.ai/ja/readable-missav-page"
+    download_url = base_url <> "/downloaded/video.mp4"
+
+    Application.put_env(:ex_gram, :adapter, __MODULE__.UrlVideoWithoutThumbnailAdapter)
+    Application.put_env(:save_it, :missav_preview_image_url, base_url <> "/missav-cover.jpg")
+
+    Application.put_env(:save_it, :link_preview_req_options,
+      adapter: &__MODULE__.ReadableMissavPreviewAdapter.request/1
+    )
+
+    message = %{
+      chat: %{id: 12_345, username: "save_it_test_chat"},
+      date: 1_717_170_000,
+      message_id: 106,
+      text: original_url,
+      link_preview_options: %{url: original_url}
+    }
+
+    assert {:ok, true} = Bot.handle({:text, original_url, message}, nil)
+
+    assert_receive {:test_http_request, :post, "/", cobalt_body}
+    assert Jason.decode!(cobalt_body) == %{"url" => original_url}
+    assert_receive {:test_http_request, :get, "/downloaded/video.mp4", ""}
+    assert_receive {:missav_preview_request, "https://missav.ai/ja/readable-missav-page"}
+
+    assert_receive {:exgram_request, :post, "/bottest-token/sendVideo", {:multipart, parts}}
+    assert multipart_part(parts, "caption") == original_url
+
+    assert_receive {:test_http_request, :get, "/missav-cover.jpg", ""}
+    assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
+
+    document = Jason.decode!(typesense_body)
+
+    assert document["url"] == original_url
+    assert document["download_url"] == download_url
+    assert document["thumbnail_url"] == base_url <> "/missav-cover.jpg"
+    assert document["caption"] == original_url
+    assert document["file_id"] == "sent-video-file-id"
+    assert document["media_type"] == "video"
+    assert document["image"] == Base.encode64(test_og_jpeg())
+  end
+
+  test "indexes a MissAV video using fallback metadata when the preview page is blocked", %{
+    base_url: base_url
+  } do
+    original_url = "https://missav.ai/ja/sdam-101-uncensored-leak"
+    download_url = base_url <> "/downloaded/video.mp4"
+
+    Application.put_env(:ex_gram, :adapter, __MODULE__.UrlVideoWithoutThumbnailAdapter)
+    Application.put_env(:save_it, :missav_cover_base_url, base_url)
+
+    Application.put_env(:save_it, :link_preview_req_options,
+      adapter: &__MODULE__.BlockedMissavPreviewAdapter.request/1
+    )
+
+    message = %{
+      chat: %{id: 12_345, username: "save_it_test_chat"},
+      date: 1_717_170_000,
+      message_id: 106,
+      text: original_url,
+      link_preview_options: %{url: original_url}
+    }
+
+    log =
+      capture_log(fn ->
+        assert {:ok, true} = Bot.handle({:text, original_url, message}, nil)
+      end)
+
+    refute log =~ "Link preview metadata fetch failed"
+    assert log =~ "Link preview metadata fallback selected"
+    assert log =~ "reason={:preview_page_status, 403}"
+    assert_receive {:missav_preview_request, "https://missav.ai/ja/sdam-101-uncensored-leak"}
+
+    assert_receive {:test_http_request, :post, "/", cobalt_body}
+    assert Jason.decode!(cobalt_body) == %{"url" => original_url}
+    assert_receive {:test_http_request, :get, "/downloaded/video.mp4", ""}
+
+    assert_receive {:exgram_request, :post, "/bottest-token/sendVideo", {:multipart, parts}}
+    assert multipart_part(parts, "caption") == original_url
+
+    assert_receive {:test_http_request, :get, "/sdam-101-uncensored-leak/cover-n.jpg", ""}
+    assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
+
+    document = Jason.decode!(typesense_body)
+
+    assert document["url"] == original_url
+    assert document["download_url"] == download_url
+    assert document["thumbnail_url"] == base_url <> "/sdam-101-uncensored-leak/cover-n.jpg"
+    assert document["caption"] == original_url
+    assert document["file_id"] == "sent-video-file-id"
+    assert document["media_type"] == "video"
+    assert document["image"] == Base.encode64(test_og_jpeg())
+  end
+
+  test "uses the MissAV source URL as the caption when preview html is readable", %{
+    base_url: base_url
+  } do
+    original_url = "https://missav.ai/ja/readable-missav-page"
+    preview_url = base_url <> "/missav-page"
+    download_url = base_url <> "/downloaded/video.mp4"
+
+    Application.put_env(:ex_gram, :adapter, __MODULE__.UrlVideoWithoutThumbnailAdapter)
+
+    message = %{
+      chat: %{id: 12_345, username: "save_it_test_chat"},
+      date: 1_717_170_000,
+      message_id: 107,
+      text: original_url,
+      link_preview_options: %{url: preview_url}
+    }
+
+    assert {:ok, true} = Bot.handle({:text, original_url, message}, nil)
+
+    assert_receive {:test_http_request, :post, "/", cobalt_body}
+    assert Jason.decode!(cobalt_body) == %{"url" => original_url}
+    assert_receive {:test_http_request, :get, "/downloaded/video.mp4", ""}
+    assert_receive {:test_http_request, :get, "/missav-page", ""}
+
+    assert_receive {:exgram_request, :post, "/bottest-token/sendVideo", {:multipart, parts}}
+    assert multipart_part(parts, "caption") == original_url
+
+    assert_receive {:test_http_request, :get, "/missav-cover.jpg", ""}
+    assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
+
+    document = Jason.decode!(typesense_body)
+
+    assert document["url"] == original_url
+    assert document["download_url"] == download_url
+    assert document["thumbnail_url"] == base_url <> "/missav-cover.jpg"
+    assert document["caption"] == original_url
+    assert document["file_id"] == "sent-video-file-id"
+    assert document["media_type"] == "video"
+    assert document["image"] == Base.encode64(test_og_jpeg())
+  end
+
   test "stores the webpage preview for a downloaded HLS URL video", %{base_url: base_url} do
     original_url = base_url <> "/hls-video-page"
 
@@ -1963,6 +2101,47 @@ defmodule SaveIt.BotTest do
     end
   end
 
+  defmodule ReadableMissavPreviewAdapter do
+    def request(%Req.Request{method: :get} = request) do
+      send(self(), {:missav_preview_request, URI.to_string(request.url)})
+
+      image_url = Application.fetch_env!(:save_it, :missav_preview_image_url)
+
+      body = """
+      <!doctype html>
+      <html>
+        <head>
+          <meta property="og:title" content="MissAV OG Title">
+          <meta property="og:description" content="MissAV OG Description">
+          <meta name="keywords" content="missav, sdam-101, uncensored leak">
+          <meta property="og:image" content="#{image_url}">
+        </head>
+        <body>missav preview</body>
+      </html>
+      """
+
+      {request,
+       %Req.Response{
+         status: 200,
+         headers: %{"content-type" => ["text/html"]},
+         body: body
+       }}
+    end
+  end
+
+  defmodule BlockedMissavPreviewAdapter do
+    def request(%Req.Request{method: :get} = request) do
+      send(self(), {:missav_preview_request, URI.to_string(request.url)})
+
+      {request,
+       %Req.Response{
+         status: 403,
+         headers: %{"content-type" => ["text/html"]},
+         body: "blocked"
+       }}
+    end
+  end
+
   defmodule TestHttpServer do
     use GenServer
 
@@ -2176,6 +2355,30 @@ defmodule SaveIt.BotTest do
       """
     end
 
+    defp response_for("/missav-page", port, _body) do
+      html = """
+      <!doctype html>
+      <html>
+        <head>
+          <meta property="og:title" content="MissAV OG Title">
+          <meta property="og:description" content="MissAV OG Description">
+          <meta name="keywords" content="missav, sdam-101, uncensored leak">
+          <meta property="og:image" content="http://127.0.0.1:#{port}/missav-cover.jpg">
+        </head>
+        <body>missav preview</body>
+      </html>
+      """
+
+      """
+      HTTP/1.1 200 OK\r
+      content-type: text/html\r
+      content-length: #{byte_size(html)}\r
+      connection: close\r
+      \r
+      #{html}
+      """
+    end
+
     defp response_for("/youtube-page", port, _body) do
       html = """
       <!doctype html>
@@ -2282,6 +2485,32 @@ defmodule SaveIt.BotTest do
       """
     end
 
+    defp response_for("/sdam-101-uncensored-leak/cover-n.jpg", _port, _body) do
+      jpeg = SaveIt.BotTest.test_og_jpeg()
+
+      """
+      HTTP/1.1 200 OK\r
+      content-type: image/jpeg\r
+      content-length: #{byte_size(jpeg)}\r
+      connection: close\r
+      \r
+      #{jpeg}
+      """
+    end
+
+    defp response_for("/missav-cover.jpg", _port, _body) do
+      jpeg = SaveIt.BotTest.test_og_jpeg()
+
+      """
+      HTTP/1.1 200 OK\r
+      content-type: image/jpeg\r
+      content-length: #{byte_size(jpeg)}\r
+      connection: close\r
+      \r
+      #{jpeg}
+      """
+    end
+
     defp response_for("/preview.jpg", _port, _body) do
       jpeg = <<255, 216, 255, 224, 0, 16, 74, 70, 73, 70>>
 
@@ -2324,6 +2553,14 @@ defmodule SaveIt.BotTest do
     end
 
     defp cobalt_response(%{"url" => "https://www.youtube.com/shorts/clip123"}, port) do
+      json_response(%{"url" => "http://127.0.0.1:#{port}/downloaded/video.mp4"})
+    end
+
+    defp cobalt_response(%{"url" => "https://missav.ai/ja/sdam-101-uncensored-leak"}, port) do
+      json_response(%{"url" => "http://127.0.0.1:#{port}/downloaded/video.mp4"})
+    end
+
+    defp cobalt_response(%{"url" => "https://missav.ai/ja/readable-missav-page"}, port) do
       json_response(%{"url" => "http://127.0.0.1:#{port}/downloaded/video.mp4"})
     end
 
