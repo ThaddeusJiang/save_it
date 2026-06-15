@@ -9,7 +9,6 @@ config :logger, :default_formatter,
     enabled: true,
     debug: :cyan,
     info: :normal,
-    notice: :green,
     warning: :yellow,
     error: :red
   ]

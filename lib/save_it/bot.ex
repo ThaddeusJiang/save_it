@@ -398,16 +398,6 @@ defmodule SaveIt.Bot do
     end
   end
 
-  defp log_resource_created(source, %DownloadedFile{file_name: file_name}) do
-    Logger.notice("resource_created source=#{source} file_name=#{file_name}", kind: :resource)
-  end
-
-  defp log_resources_created(source, files) when is_list(files) do
-    Logger.notice("resource_created source=#{source} file_count=#{length(files)}",
-      kind: :resource
-    )
-  end
-
   defp video_thumbnail(video) do
     Map.get(video, :thumbnail) || Map.get(video, :thumb)
   end
@@ -608,7 +598,11 @@ defmodule SaveIt.Bot do
         delete_message(context.chat_id, context.progress_message_id)
         FileHelper.write_folder(context.purge_url, files)
         GoogleDrive.upload_files(context.chat_id, files)
-        log_resources_created(:url_download, files)
+
+        Logger.info("resource_created source=url_download file_count=#{length(files)}",
+          ansi_color: :green
+        )
+
         :ok
 
       {:error, reason} ->
@@ -837,7 +831,11 @@ defmodule SaveIt.Bot do
     delete_message(context.chat_id, context.progress_message_id)
     FileHelper.write_file(file.file_name, file.file_content, context.original_url)
     GoogleDrive.upload_file_content(context.chat_id, file.file_content, file.file_name)
-    log_resource_created(:thumbnail_fallback, file)
+
+    Logger.info("resource_created source=thumbnail_fallback file_name=#{file.file_name}",
+      ansi_color: :green
+    )
+
     :ok
   end
 
@@ -845,7 +843,11 @@ defmodule SaveIt.Bot do
     delete_message(context.chat_id, context.progress_message_id)
     FileHelper.write_file(file.file_name, file.file_content, context.cache_url)
     GoogleDrive.upload_file_content(context.chat_id, file.file_content, file.file_name)
-    log_resource_created(:url_download, file)
+
+    Logger.info("resource_created source=url_download file_name=#{file.file_name}",
+      ansi_color: :green
+    )
+
     :ok
   end
 

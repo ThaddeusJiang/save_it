@@ -14,6 +14,7 @@ before the CalVer migration retain their original version labels.
 
 ### Fixed
 
+- Render successful resource creation info logs in green in runtime logger output.
 - Use random UUIDv7 filenames for downloaded resources while preserving the original file extension.
 - Preserve URL video preview aspect ratios by sending accurate display dimensions and square-pixel Telegram covers/thumbnails.
 
