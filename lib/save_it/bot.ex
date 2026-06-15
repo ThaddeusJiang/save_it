@@ -1010,14 +1010,17 @@ defmodule SaveIt.Bot do
 
   defp about_bot_admin_status(_chat, _bot_info), do: "unknown"
 
-  defp about_bot_id({:ok, %{id: bot_id}}), do: bot_id
-  defp about_bot_id(%{id: bot_id}), do: bot_id
+  defp about_bot_id({:ok, bot_info}), do: Map.get(bot_info, :id)
   defp about_bot_id(_bot_info), do: nil
 
-  defp about_privacy_mode_status({:ok, %{can_read_all_group_messages: true}}), do: "disabled"
-  defp about_privacy_mode_status({:ok, %{can_read_all_group_messages: false}}), do: "enabled"
-  defp about_privacy_mode_status(%{can_read_all_group_messages: true}), do: "disabled"
-  defp about_privacy_mode_status(%{can_read_all_group_messages: false}), do: "enabled"
+  defp about_privacy_mode_status({:ok, bot_info}) do
+    case Map.get(bot_info, :can_read_all_group_messages) do
+      true -> "disabled"
+      false -> "enabled"
+      _other -> "unknown"
+    end
+  end
+
   defp about_privacy_mode_status(_bot_info), do: "unknown"
 
   defp update_message(chat_id, message_id, texts) when is_list(texts) do

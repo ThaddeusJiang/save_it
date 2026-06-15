@@ -142,6 +142,23 @@ defmodule SaveIt.BotTest do
     assert request_body.text =~ "Privacy Mode: enabled"
   end
 
+  test "about reports unknown bot status when get me fails", _context do
+    ExGramTestAdapter.backdoor_error(:get_me, "get me failed")
+
+    message = %{
+      chat: %{id: -100_789, type: "supergroup"},
+      message_id: 14
+    }
+
+    assert {:ok, %{message_id: 10}} = Bot.handle({:command, :about, message}, nil)
+
+    request_body = sent_message_body()
+
+    assert request_body.chat_id == -100_789
+    assert request_body.text =~ "Bot admin: unknown"
+    assert request_body.text =~ "Privacy Mode: unknown"
+  end
+
   test "uses user text as the caption when indexing a downloaded URL photo", %{base_url: base_url} do
     original_url = "https://x.com/example/status/1?utm_source=telegram"
     message_text = "summer reference #{original_url}"
