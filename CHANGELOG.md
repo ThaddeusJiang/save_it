@@ -11,6 +11,8 @@ before the CalVer migration retain their original version labels.
 ### Changed
 
 - Make the save data directory configurable with `SAVE_IT_DATA_DIR`, defaulting to `./data` locally and `/data` in the Docker image, with Docker Compose persisting `/data` on a named volume.
+- Replace the Google Drive bot commands with `/google_drive_login` and `/google_drive_folder`, removing the old `/code`, `/login`, and `/folder` command entries.
+- Merge image-based similar search into `/search`, so text input searches saved photos and photo input finds visually similar media.
 - Store URL Open Graph metadata in dedicated Typesense fields instead of using it as the saved caption, keeping captions limited to user-provided Telegram text.
 - Use local Twitter cookies from `cobalt-cookies.json` to fetch authenticated X metadata for login-restricted posts before falling back to public Open Graph metadata.
 

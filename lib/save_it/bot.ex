@@ -43,13 +43,11 @@ defmodule SaveIt.Bot do
   command("start")
 
   command("search", description: "Search photos")
-  command("similar", description: "Find similar photos")
   command("delete", description: "Delete message")
   command("detail", description: "Show photo details")
 
-  command("login", description: "Login")
-  command("code", description: "Get code for login")
-  command("folder", description: "Update Google Drive folder ID")
+  command("google_drive_login", description: "Connect Google Drive")
+  command("google_drive_folder", description: "Set Google Drive folder ID")
 
   command("about", description: "Know more about this bot")
 
@@ -78,73 +76,39 @@ defmodule SaveIt.Bot do
     """)
   end
 
-  def handle({:command, :code, %{chat: chat}}, _context) do
-    case GoogleOAuth2DeviceFlow.get_device_code() do
-      {:ok, response} ->
-        FileHelper.set_google_device_code(chat.id, response["device_code"])
-        # SettingsStore.update_google_device_code(msg.chat.id, response["device_code"])
-
-        send_message(chat.id, """
-        Open the following URL in your browser:
-        #{response["verification_url"]}
-        Enter code: 👇
-        """)
-
-        send_message(chat.id, """
-        #{response["user_code"]}
-        """)
-
-        send_message(chat.id, """
-        Run `/login` after you have logged in.
-        """)
-
-      {:error, _error} ->
-        Logger.error("Failed to get device code")
-        send_message(chat.id, "Failed to get device code")
-    end
-  end
-
-  def handle({:command, :login, %{chat: chat, from: from}}, _context) do
-    case chat.type do
-      "private" ->
+  def handle({:command, :google_drive_login, %{chat: chat} = message}, _context) do
+    case google_drive_login_permission(chat, Map.get(message, :from)) do
+      :ok ->
         login_google(chat)
 
-      x when x == "group" or x == "supergroup" ->
-        {:ok, members} = ExGram.get_chat_administrators(chat.id)
+      {:error, :not_admin} ->
+        send_message(chat.id, "You are not an administrator, you can't connect Google Drive.")
 
-        cond do
-          from.is_bot ->
-            login_google(chat)
-
-          # 其他语言写法 fn member -> member.user.id == from.id end
-          Enum.any?(members, &(&1.user.id == from.id)) ->
-            login_google(chat)
-
-          true ->
-            send_message(chat.id, "You are not an administrator, you can't login.")
-        end
-
-      _ ->
-        send_message(chat.id, "You can't login in this chat.")
+      {:error, :unsupported_chat} ->
+        send_message(chat.id, "You can't connect Google Drive in this chat.")
     end
   end
 
-  def handle({:command, :folder, %{chat: chat, text: text}}, _context) do
-    case text do
-      nil ->
-        send_message(chat.id, "Please provide a folder ID.")
+  def handle({:command, :google_drive_folder, %{chat: chat, text: text}}, _context) do
+    folder_id = normalize_command_text(text)
 
-      "" ->
-        send_message(chat.id, "Please provide a folder ID.")
-
-      _ ->
-        FileHelper.set_google_drive_folder_id(chat.id, text)
-        send_message(chat.id, "Folder ID set successfully.")
+    if folder_id == "" do
+      send_message(chat.id, "Please provide a Google Drive folder ID.")
+    else
+      FileHelper.set_google_drive_folder_id(chat.id, folder_id)
+      send_message(chat.id, "Google Drive folder ID set successfully.")
     end
+  end
+
+  def handle({:command, :search, %{chat: chat, photo: [_ | _] = photos} = message}, _context) do
+    handle_uploaded_photo(message, chat, "/search", photos)
   end
 
   def handle({:command, :search, %{chat: chat, text: nil}}, _context) do
-    send_message(chat.id, "What do you want to search? animal, food, etc.")
+    send_message(
+      chat.id,
+      "What do you want to search? animal, food, etc. Or upload a photo with /search."
+    )
   end
 
   def handle({:command, :search, %{chat: chat, text: text}}, _context)
@@ -159,14 +123,6 @@ defmodule SaveIt.Bot do
         photos = safe_typesense_search_photos(q, belongs_to_id: chat.id)
         answer_photos(chat.id, photos)
     end
-  end
-
-  def handle({:command, :similar, %{chat: chat, photo: nil}}, _context) do
-    send_message(chat.id, "Upload a photo with /similar for finding similar photos.")
-  end
-
-  def handle({:command, :similar, %{chat: chat, photo: [_ | _] = photos} = message}, _context) do
-    handle_uploaded_photo(message, chat, "/similar", photos)
   end
 
   def handle({:command, :detail, %{chat: chat, reply_to_message: nil}}, _context) do
@@ -202,7 +158,7 @@ defmodule SaveIt.Bot do
   end
 
   # caption: nil -> find same photos
-  # caption: contains /similar or /search -> search similar photos; otherwise, find same photos
+  # caption: contains /search -> search similar photos; otherwise, find same photos
   def handle({:message, %{chat: chat, photo: [_ | _] = photos} = message}, _ctx) do
     handle_uploaded_photo(message, chat, Map.get(message, :caption), photos)
   end
@@ -451,7 +407,7 @@ defmodule SaveIt.Bot do
   end
 
   defp search_command_caption?(caption) when is_binary(caption) do
-    String.contains?(caption, ["/similar", "/search"])
+    String.contains?(caption, "/search")
   end
 
   defp search_command_caption?(_caption), do: false
@@ -1800,21 +1756,97 @@ defmodule SaveIt.Bot do
   defp login_google(chat) do
     device_code = FileHelper.get_google_device_code(chat.id)
 
-    case GoogleOAuth2DeviceFlow.exchange_device_code_for_token(device_code) do
-      {:ok, body} ->
-        FileHelper.set_google_access_token(chat.id, body["access_token"])
-        send_message(chat.id, "Successfully logged in!")
+    if present_text?(device_code) do
+      exchange_google_device_code(chat, device_code)
+    else
+      request_google_device_code(chat)
+    end
+  end
 
-      {:error, _error} ->
-        Logger.error("Failed to log in")
+  defp request_google_device_code(chat) do
+    case GoogleOAuth2DeviceFlow.get_device_code() do
+      {:ok, response} ->
+        FileHelper.set_google_device_code(chat.id, response["device_code"])
 
         send_message(chat.id, """
-        Failed to log in.
+        Open the following URL in your browser:
+        #{response["verification_url"] || response["verification_uri"]}
+        Enter code:
+        """)
 
-        Please run `/code` to get a new code, then run `/login` again.
+        send_message(chat.id, """
+        #{response["user_code"]}
+        """)
+
+        send_message(chat.id, """
+        After approving access, run `/google_drive_login` again.
+        """)
+
+      {:error, _error} ->
+        Logger.error("Failed to get Google Drive login code")
+        send_message(chat.id, "Failed to get Google Drive login code.")
+    end
+  end
+
+  defp exchange_google_device_code(chat, device_code) do
+    case GoogleOAuth2DeviceFlow.exchange_device_code_for_token(device_code) do
+      {:ok, %{"access_token" => access_token}} when is_binary(access_token) ->
+        FileHelper.set_google_access_token(chat.id, access_token)
+        FileHelper.set_google_device_code(chat.id, "")
+        send_message(chat.id, "Google Drive connected.")
+
+      {:error, %{body: %{"error" => "authorization_pending"}}} ->
+        send_message(chat.id, """
+        Google authorization is not complete yet.
+
+        Approve access in your browser, then run `/google_drive_login` again.
+        """)
+
+      {:error, %{body: %{"error" => error}}} when error in ["access_denied", "expired_token"] ->
+        FileHelper.set_google_device_code(chat.id, "")
+
+        send_message(chat.id, """
+        Google Drive login code expired or was denied.
+
+        Run `/google_drive_login` to get a new code.
+        """)
+
+      {:error, _error} ->
+        Logger.error("Failed to connect Google Drive")
+
+        send_message(chat.id, """
+        Failed to connect Google Drive.
+
+        Please run `/google_drive_login` again.
         """)
     end
   end
+
+  defp google_drive_login_permission(%{type: "private"}, _from), do: :ok
+
+  defp google_drive_login_permission(%{type: type} = chat, from)
+       when type == "group" or type == "supergroup" do
+    {:ok, members} = ExGram.get_chat_administrators(chat.id)
+
+    cond do
+      Map.get(from || %{}, :is_bot) ->
+        :ok
+
+      Enum.any?(members, &(&1.user.id == Map.get(from || %{}, :id))) ->
+        :ok
+
+      true ->
+        {:error, :not_admin}
+    end
+  end
+
+  defp google_drive_login_permission(_chat, _from), do: {:error, :unsupported_chat}
+
+  defp normalize_command_text(text) when is_binary(text), do: String.trim(text)
+  defp normalize_command_text(_text), do: ""
+
+  defp present_text?(text) when is_binary(text), do: String.trim(text) != ""
+  defp present_text?(_text), do: false
 
   defp handle_delete_command(chat_id, message_id, reply_to_message) do
     case reply_to_message do

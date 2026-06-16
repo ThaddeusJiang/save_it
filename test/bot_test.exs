@@ -61,6 +61,98 @@ defmodule SaveIt.BotTest do
     %{base_url: base_url}
   end
 
+  test "declares current bot commands without legacy command entries", _context do
+    command_names = Enum.map(Bot.commands(), & &1[:command])
+
+    assert "search" in command_names
+    refute "similar" in command_names
+    assert "google_drive_login" in command_names
+    assert "google_drive_folder" in command_names
+    refute "login" in command_names
+    refute "code" in command_names
+    refute "folder" in command_names
+  end
+
+  test "google drive login starts the device flow when there is no pending code", _context do
+    configure_google_oauth()
+
+    message = %{
+      chat: %{id: 12_345, type: "private"},
+      from: %{id: 1, is_bot: false}
+    }
+
+    assert {:ok, %{message_id: 10}} = Bot.handle({:command, :google_drive_login, message}, nil)
+
+    assert_receive {:google_oauth_request, request}
+    assert request.method == :post
+    assert request.url.path == "/device/code"
+    assert FileHelper.get_google_device_code(12_345) == "device-code"
+
+    sent_texts = sent_message_texts()
+
+    assert Enum.any?(sent_texts, &String.contains?(&1, "https://www.google.com/device"))
+    assert Enum.any?(sent_texts, &String.contains?(&1, "USER-CODE"))
+    assert Enum.any?(sent_texts, &String.contains?(&1, "/google_drive_login"))
+  end
+
+  test "google drive login exchanges a pending device code", _context do
+    configure_google_oauth()
+    FileHelper.set_google_device_code(12_345, "device-code")
+
+    message = %{
+      chat: %{id: 12_345, type: "private"},
+      from: %{id: 1, is_bot: false}
+    }
+
+    assert {:ok, %{message_id: 10}} = Bot.handle({:command, :google_drive_login, message}, nil)
+
+    assert_receive {:google_oauth_request, request}
+    assert request.method == :post
+    assert request.url.path == "/token"
+    assert FileHelper.get_google_access_token(12_345) == "access-token"
+    assert FileHelper.get_google_device_code(12_345) == ""
+    assert sent_message_body().text =~ "Google Drive connected"
+  end
+
+  test "google drive folder stores the configured folder id", _context do
+    message = %{
+      chat: %{id: 12_345, type: "private"},
+      text: "  drive-folder-id  "
+    }
+
+    assert {:ok, %{message_id: 10}} = Bot.handle({:command, :google_drive_folder, message}, nil)
+
+    assert FileHelper.get_google_drive_folder_id(12_345) == "drive-folder-id"
+    assert sent_message_body().text == "Google Drive folder ID set successfully."
+  end
+
+  test "search command with text searches saved photos", _context do
+    ExGramTestAdapter.backdoor_request(:send_media_group, [
+      %{message_id: 31},
+      %{message_id: 32}
+    ])
+
+    message = %{
+      chat: %{id: 12_345},
+      text: "summer"
+    }
+
+    assert :ok = Bot.handle({:command, :search, message}, nil)
+
+    assert_receive {:test_http_request, :post, "/multi_search", body}
+
+    %{"searches" => [%{"q" => "summer", "filter_by" => "belongs_to_id:=12345"} | _]} =
+      Jason.decode!(body)
+
+    assert Enum.any?(exgram_calls(), fn
+             {:post, :send_media_group, %{chat_id: 12_345, media: media}} ->
+               Enum.map(media, & &1.media) == ["similar-file-1", "similar-file-2"]
+
+             _ ->
+               false
+           end)
+  end
+
   test "about reports private chat status and bot privacy mode", _context do
     ExGramTestAdapter.backdoor_request(:get_me, %{
       id: 9_001,
@@ -1040,7 +1132,7 @@ defmodule SaveIt.BotTest do
            ]
   end
 
-  test "handles /similar command attached to a photo", _context do
+  test "handles /search command attached to a photo as similar image search", _context do
     Application.put_env(:save_it, :telegram_req_options,
       adapter: &__MODULE__.TelegramDownloadAdapter.request/1
     )
@@ -1063,7 +1155,7 @@ defmodule SaveIt.BotTest do
       photo: [%{file_id: "uploaded-photo-file-id"}]
     }
 
-    assert :ok = Bot.handle({:command, :similar, message}, nil)
+    assert :ok = Bot.handle({:command, :search, message}, nil)
 
     calls = exgram_calls()
 
@@ -1094,7 +1186,7 @@ defmodule SaveIt.BotTest do
 
     message = %{
       chat: %{id: 12_345},
-      caption: "/similar",
+      caption: "/search",
       photo: [%{file_id: "uploaded-photo-file-id"}]
     }
 
@@ -1138,7 +1230,7 @@ defmodule SaveIt.BotTest do
 
     message = %{
       chat: %{id: 12_346},
-      caption: "/similar",
+      caption: "/search",
       photo: [%{file_id: "uploaded-photo-file-id"}]
     }
 
@@ -1191,7 +1283,7 @@ defmodule SaveIt.BotTest do
 
     message = %{
       chat: %{id: 12_353},
-      caption: "/similar",
+      caption: "/search",
       photo: [%{file_id: "uploaded-photo-file-id"}]
     }
 
@@ -1227,7 +1319,7 @@ defmodule SaveIt.BotTest do
 
     message = %{
       chat: %{id: 12_351},
-      caption: "/similar",
+      caption: "/search",
       photo: [%{file_id: "uploaded-photo-file-id"}]
     }
 
@@ -1257,7 +1349,7 @@ defmodule SaveIt.BotTest do
 
     message = %{
       chat: %{id: 12_352},
-      caption: "/similar",
+      caption: "/search",
       photo: [%{file_id: "uploaded-photo-file-id"}]
     }
 
@@ -1470,7 +1562,7 @@ defmodule SaveIt.BotTest do
     message = %{
       chat: %{id: chat_id, username: "save_it_directs"},
       message_id: 322,
-      caption: "/similar",
+      caption: "/search",
       video: %{
         file_id: "uploaded-video-file-id",
         file_name: "direct-video.mp4",
@@ -1750,6 +1842,15 @@ defmodule SaveIt.BotTest do
     end)
   end
 
+  defp sent_message_texts do
+    ExGramTestAdapter.get_calls()
+    |> Enum.filter(fn
+      {:post, :send_message, _body} -> true
+      _ -> false
+    end)
+    |> Enum.map(fn {:post, :send_message, body} -> body.text end)
+  end
+
   defp cleanup_cached_folder(cache_key_url) do
     hashed_url = :crypto.hash(:sha256, cache_key_url) |> Base.url_encode64(padding: false)
     url_cache_path = storage_url_path(hashed_url)
@@ -1783,6 +1884,15 @@ defmodule SaveIt.BotTest do
     on_exit(fn ->
       File.rm_rf(settings_dir)
     end)
+  end
+
+  defp configure_google_oauth do
+    Application.put_env(:save_it, :google_oauth_client_id, "client-id")
+    Application.put_env(:save_it, :google_oauth_client_secret, "client-secret")
+
+    Application.put_env(:save_it, :google_oauth_req_options,
+      adapter: &__MODULE__.GoogleOAuthAdapter.request/1
+    )
   end
 
   defp chat_settings_dir(chat_id) do
@@ -2145,6 +2255,27 @@ defmodule SaveIt.BotTest do
     end
   end
 
+  defmodule GoogleOAuthAdapter do
+    def request(%Req.Request{} = request) do
+      send(self(), {:google_oauth_request, request})
+
+      response_body =
+        case request.url.path do
+          "/device/code" ->
+            %{
+              "device_code" => "device-code",
+              "user_code" => "USER-CODE",
+              "verification_url" => "https://www.google.com/device"
+            }
+
+          "/token" ->
+            %{"access_token" => "access-token"}
+        end
+
+      {request, %Req.Response{status: 200, body: response_body}}
+    end
+  end
+
   defmodule TelegramMediaGroupAdapter do
     def request(%Req.Request{} = request) do
       send(self(), {:telegram_media_group_request, request})
@@ -2288,7 +2419,7 @@ defmodule SaveIt.BotTest do
     end
 
     defp response_for("/multi_search", _port, body) do
-      %{"searches" => [%{"filter_by" => filter_by}]} = Jason.decode!(body)
+      %{"searches" => [%{"filter_by" => filter_by} | _]} = Jason.decode!(body)
 
       json_response(%{
         "results" => [

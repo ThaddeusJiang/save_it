@@ -66,8 +66,8 @@ and future provider-specific extraction can rely on stable field semantics.
   - For Telegram photos and videos, read `message.caption`. If the caption also
     contains the source URL, remove the URL and store the remaining user text.
   - Store an empty string or omit the field when the user did not provide text.
-  - Bot command captions such as `/similar` and `/search` are command input, not
-    saved user captions.
+  - Bot command captions such as `/search` are command input, not saved user
+    captions.
 - `title`:
   - Default to URL metadata `og:title`.
   - Leave unset when no URL metadata exists or the source page has no title.
