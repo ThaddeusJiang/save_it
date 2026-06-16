@@ -6,7 +6,10 @@ defmodule SaveIt.VideoUpload do
   alias SaveIt.FilenameGenerator
   alias SaveIt.VideoMetadata
 
-  @telegram_cover_max_dimension 320
+  @telegram_cover_max_dimension 1920
+  @telegram_thumbnail_max_dimension 320
+  @cover_jpeg_quality 2
+  @thumbnail_jpeg_quality 5
 
   def prepare({:file_content, file_content, file_name})
       when is_binary(file_content) and is_binary(file_name) do
@@ -38,11 +41,13 @@ defmodule SaveIt.VideoUpload do
     with {:ok, dimensions} <- cover_dimensions(metadata),
          {:ok, cover_content} <-
            cover_generator().cover_file_content(file_content, file_name, dimensions) do
-      {:ok,
-       %{
-         file_content: cover_content,
-         file_name: cover_file_name(file_name)
-       }}
+      cover =
+        %{
+          file_content: cover_content,
+          file_name: cover_file_name(file_name)
+        }
+
+      {:ok, put_video_thumbnail(cover, file_content, file_name, metadata)}
     else
       {:error, reason} ->
         Logger.debug("Skipping video cover upload: #{inspect(reason)}")
@@ -86,18 +91,45 @@ defmodule SaveIt.VideoUpload do
 
   defp cover_dimensions(%{width: width, height: height})
        when is_integer(width) and width > 0 and is_integer(height) and height > 0 do
-    scale = @telegram_cover_max_dimension / max(width, height)
-
-    {:ok,
-     %{
-       width: max(1, round(width * scale)),
-       height: max(1, round(height * scale))
-     }}
+    preview_dimensions(width, height, @telegram_cover_max_dimension, @cover_jpeg_quality)
   end
 
   defp cover_dimensions(_metadata), do: {:error, :missing_video_display_dimensions}
 
+  defp thumbnail_dimensions(%{width: width, height: height})
+       when is_integer(width) and width > 0 and is_integer(height) and height > 0 do
+    preview_dimensions(width, height, @telegram_thumbnail_max_dimension, @thumbnail_jpeg_quality)
+  end
+
+  defp thumbnail_dimensions(_metadata), do: {:error, :missing_video_display_dimensions}
+
+  defp preview_dimensions(width, height, max_dimension, jpeg_quality) do
+    scale = min(1.0, max_dimension / max(width, height))
+
+    {:ok,
+     %{
+       width: max(1, round(width * scale)),
+       height: max(1, round(height * scale)),
+       jpeg_quality: jpeg_quality
+     }}
+  end
+
   defp cover_file_name(_file_name), do: FilenameGenerator.random("cover.jpg")
+  defp thumbnail_file_name(_file_name), do: FilenameGenerator.random("thumbnail.jpg")
+
+  defp put_video_thumbnail(cover, file_content, file_name, metadata) do
+    with {:ok, dimensions} <- thumbnail_dimensions(metadata),
+         {:ok, thumbnail_content} <-
+           cover_generator().cover_file_content(file_content, file_name, dimensions) do
+      cover
+      |> Map.put(:thumbnail_file_content, thumbnail_content)
+      |> Map.put(:thumbnail_file_name, thumbnail_file_name(file_name))
+    else
+      {:error, reason} ->
+        Logger.debug("Skipping video thumbnail upload: #{inspect(reason)}")
+        cover
+    end
+  end
 
   defmodule FFmpegFaststart do
     @moduledoc false
@@ -167,10 +199,12 @@ defmodule SaveIt.VideoUpload do
   defmodule FFmpegCover do
     @moduledoc false
 
-    def cover_file_content(file_content, file_name, %{width: width, height: height})
+    def cover_file_content(file_content, file_name, %{width: width, height: height} = dimensions)
         when is_binary(file_content) and is_binary(file_name) and is_integer(width) and
                is_integer(height) do
       with_temp_files(file_name, file_content, fn input_path, output_path ->
+        jpeg_quality = Map.get(dimensions, :jpeg_quality, 2)
+
         args = [
           "-y",
           "-i",
@@ -181,7 +215,7 @@ defmodule SaveIt.VideoUpload do
           "-vf",
           "thumbnail,scale=#{width}:#{height},setsar=1",
           "-q:v",
-          "5",
+          "#{jpeg_quality}",
           "-loglevel",
           "warning",
           output_path

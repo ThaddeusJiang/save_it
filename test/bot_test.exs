@@ -644,7 +644,7 @@ defmodule SaveIt.BotTest do
     assert multipart_part(parts, "height") == "1920"
     assert multipart_part(parts, "duration") == "12"
     assert multipart_part(parts, "thumbnail") == :file_content
-    assert multipart_file_content(parts, "thumbnail") == test_video_cover()
+    assert multipart_file_content(parts, "thumbnail") == test_video_thumbnail()
     assert multipart_part(parts, "cover") == :file_content
     assert multipart_file_content(parts, "cover") == test_video_cover()
 
@@ -1754,6 +1754,10 @@ defmodule SaveIt.BotTest do
     <<255, 216, 255, 224, 0, 16, 67, 79, 86, 69, 82>>
   end
 
+  def test_video_thumbnail do
+    <<255, 216, 255, 224, 0, 16, 84, 72, 85, 77, 66>>
+  end
+
   def test_mp4 do
     <<0, 0, 0, 24, 102, 116, 121, 112, 109, 112, 52, 50>>
   end
@@ -2001,14 +2005,19 @@ defmodule SaveIt.BotTest do
   end
 
   defmodule VideoCoverGenerator do
-    def cover_file_content(_file_content, file_name, %{width: 180, height: 320})
+    def cover_file_content(_file_content, file_name, %{width: 1080, height: 1920, jpeg_quality: 2})
         when is_binary(file_name) do
       {:ok, SaveIt.BotTest.test_video_cover()}
+    end
+
+    def cover_file_content(_file_content, file_name, %{width: 180, height: 320, jpeg_quality: 5})
+        when is_binary(file_name) do
+      {:ok, SaveIt.BotTest.test_video_thumbnail()}
     end
   end
 
   defmodule FailingVideoCoverGenerator do
-    def cover_file_content(_file_content, file_name, %{width: 180, height: 320})
+    def cover_file_content(_file_content, file_name, _dimensions)
         when is_binary(file_name) do
       {:error, :cover_unavailable}
     end

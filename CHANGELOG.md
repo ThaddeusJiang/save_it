@@ -20,6 +20,7 @@ before the CalVer migration retain their original version labels.
 - Send and index a generated preview image when a downloaded URL video is too large for Telegram video upload, while still saving the downloaded video locally.
 - Use random UUIDv7 filenames for downloaded resources while preserving the original file extension.
 - Preserve URL video preview aspect ratios by sending accurate display dimensions and square-pixel Telegram covers/thumbnails.
+- Improve generated video preview clarity by sending higher-resolution Telegram covers while keeping thumbnails within Telegram limits.
 
 ## [2026.6.15] - 2026-06-15
 
