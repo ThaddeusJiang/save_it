@@ -690,7 +690,14 @@ defmodule SaveIt.Bot do
   defp handle_non_media_download(%DownloadContext{} = context) do
     case download_fallback_thumbnail(context) do
       {:ok, %DownloadedFile{} = file, source} ->
-        log_non_media_fallback_success(source)
+        case source do
+          :telegram_thumbnail ->
+            Logger.warning("Saved Telegram thumbnail fallback after non-media URL download")
+
+          :webpage_preview ->
+            Logger.warning("Saved webpage preview fallback after non-media URL download")
+        end
+
         save_thumbnail_fallback(context, file, source)
 
       {:error, _fallback_reasons} ->
@@ -737,14 +744,6 @@ defmodule SaveIt.Bot do
 
   defp log_thumbnail_fallback_success(:webpage_preview) do
     Logger.warning("Saved webpage preview fallback after link download failed")
-  end
-
-  defp log_non_media_fallback_success(:telegram_thumbnail) do
-    Logger.warning("Saved Telegram thumbnail fallback after non-media URL download")
-  end
-
-  defp log_non_media_fallback_success(:webpage_preview) do
-    Logger.warning("Saved webpage preview fallback after non-media URL download")
   end
 
   defp save_thumbnail_fallback(%DownloadContext{} = context, %DownloadedFile{} = file, source) do
