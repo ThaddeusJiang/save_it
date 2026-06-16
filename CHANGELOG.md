@@ -8,23 +8,31 @@ before the CalVer migration retain their original version labels.
 
 ## [Unreleased]
 
+## [2026.6.17] - 2026-06-17
+
+### Changed
+
+- Replace the Google Drive bot commands with `/google_drive_login` and `/google_drive_folder`, removing the old `/code`, `/login`, and `/folder` command entries.
+- Merge image-based similar search into `/search`, so text input searches saved photos and photo input finds visually similar media.
+
+### Fixed
+
+- Save searchable MissAV `missav.ai` Open Graph metadata by falling back to readable mirror metadata when the main page blocks preview fetches.
+- Show saved video details when `/detail` replies to a video message.
+
 ## [2026.6.16] - 2026-06-16
 
 ### Changed
 
 - Make the save data directory configurable with `SAVE_IT_DATA_DIR`, defaulting to `./data` locally and `/data` in the Docker image, with Docker Compose persisting `/data` on a named volume.
-- Replace the Google Drive bot commands with `/google_drive_login` and `/google_drive_folder`, removing the old `/code`, `/login`, and `/folder` command entries.
-- Merge image-based similar search into `/search`, so text input searches saved photos and photo input finds visually similar media.
 - Store URL Open Graph metadata in dedicated Typesense fields instead of using it as the saved caption, keeping captions limited to user-provided Telegram text.
 - Use local Twitter cookies from `cobalt-cookies.json` to fetch authenticated X metadata for login-restricted posts before falling back to public Open Graph metadata.
 
 ### Fixed
 
-- Save searchable MissAV `missav.ai` Open Graph metadata by falling back to readable mirror metadata when the main page blocks preview fetches.
 - Render successful resource creation info logs in green in runtime logger output.
 - Save a webpage `og:image` preview when a URL resolves to a non-media resource instead of storing the resolved HTML or document file.
 - Send and index a generated preview image when a downloaded URL video is too large for Telegram video upload, while still saving the downloaded video locally.
-- Show saved video details when `/detail` replies to a video message.
 - Use random UUIDv7 filenames for downloaded resources while preserving the original file extension.
 - Preserve URL video preview aspect ratios by sending accurate display dimensions and square-pixel Telegram covers/thumbnails.
 - Improve generated video preview clarity by sending higher-resolution Telegram covers while keeping thumbnails within Telegram limits.
