@@ -4,6 +4,7 @@ defmodule SmallSdk.LinkPreview do
   require Logger
 
   alias SmallSdk.WebDownloader
+  alias SmallSdk.LinkPreview.ProviderFallback
   alias SmallSdk.XMetadata
 
   @preview_patterns [
@@ -72,18 +73,20 @@ defmodule SmallSdk.LinkPreview do
 
   def get_title(_page_url), do: {:error, :missing_preview_url}
 
-  def get_metadata(page_url) when is_binary(page_url) do
+  def get_metadata(page_url, opts \\ [])
+
+  def get_metadata(page_url, opts) when is_binary(page_url) do
     case get_authenticated_metadata(page_url) do
       {:ok, metadata} ->
         log_metadata(page_url, metadata)
         {:ok, metadata}
 
       {:error, _reason} ->
-        get_html_metadata(page_url)
+        get_html_metadata(page_url, opts)
     end
   end
 
-  def get_metadata(_page_url), do: {:error, :missing_preview_url}
+  def get_metadata(_page_url, _opts), do: {:error, :missing_preview_url}
 
   defp get_authenticated_metadata(page_url) do
     if XMetadata.x_url?(page_url) do
@@ -93,8 +96,18 @@ defmodule SmallSdk.LinkPreview do
     end
   end
 
-  defp get_html_metadata(page_url) do
-    case Req.get(page_url, headers: [{"User-Agent", "Mozilla/5.0"}]) do
+  defp get_html_metadata(page_url, opts) do
+    case fetch_html_metadata(page_url, opts) do
+      {:ok, metadata} ->
+        {:ok, metadata}
+
+      {:error, reason} ->
+        ProviderFallback.fetch_metadata(page_url, reason, opts, &fetch_html_metadata/2)
+    end
+  end
+
+  defp fetch_html_metadata(page_url, opts) do
+    case Req.get(page_url, request_options(opts)) do
       {:ok, %{status: status, body: body}} when status in 200..209 and is_binary(body) ->
         metadata = get_metadata_from_html(page_url, body)
         log_metadata(page_url, metadata)
@@ -109,6 +122,19 @@ defmodule SmallSdk.LinkPreview do
         log_metadata_error(page_url, reason)
         {:error, reason}
     end
+  end
+
+  defp request_options(opts) do
+    opts
+    |> Keyword.get(:req_options, Application.get_env(:save_it, :link_preview_req_options, []))
+    |> Keyword.put_new(:retry, false)
+    |> put_request_headers([{"User-Agent", "Mozilla/5.0"}])
+  end
+
+  defp put_request_headers(req_options, headers) do
+    Keyword.update(req_options, :headers, headers, fn existing_headers ->
+      headers ++ existing_headers
+    end)
   end
 
   def get_metadata_from_html(page_url, html) when is_binary(page_url) and is_binary(html) do
