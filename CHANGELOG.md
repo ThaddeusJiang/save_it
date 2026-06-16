@@ -16,6 +16,7 @@ before the CalVer migration retain their original version labels.
 
 ### Fixed
 
+- Save searchable MissAV `missav.ai` Open Graph metadata by falling back to readable mirror metadata when the main page blocks preview fetches.
 - Render successful resource creation info logs in green in runtime logger output.
 - Save a webpage `og:image` preview when a URL resolves to a non-media resource instead of storing the resolved HTML or document file.
 - Send and index a generated preview image when a downloaded URL video is too large for Telegram video upload, while still saving the downloaded video locally.

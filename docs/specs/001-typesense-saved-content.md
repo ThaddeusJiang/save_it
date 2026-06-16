@@ -157,7 +157,7 @@ Supported provider strategies:
 | Instagram | `instagram.com` and subdomains | Use the default URL metadata strategy. Provider-specific handling may be added when public metadata is blocked or incomplete. |
 | YouTube Shorts | `youtube.com/shorts/*`, `youtu.be/*` when resolved as Shorts | Use the default URL metadata strategy. The Shorts provider may normalize canonical YouTube URLs before metadata fetches. |
 | `bad.news` | `bad.news` and subdomains | Use `bad.news` download resolution for media and the default URL metadata strategy for page metadata. |
-| `missav.ai` | `missav.ai` and subdomains | Use the default URL metadata strategy. Provider-specific media and metadata handling may be added without changing document field semantics. |
+| `missav.ai` | `missav.ai` and subdomains | Use the default URL metadata strategy first. If the `missav.ai` preview HTML fetch fails, fetch the same path from the configured MissAV metadata fallback host, defaulting to `https://missav.ws`, and store any readable Open Graph metadata while preserving the original `missav.ai` URL as `url`. |
 | Other URL | Any supported URL not matched above | Use the default URL metadata strategy. |
 
 ### Default URL Metadata Strategy

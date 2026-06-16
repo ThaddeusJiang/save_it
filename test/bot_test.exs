@@ -335,6 +335,48 @@ defmodule SaveIt.BotTest do
            end)
   end
 
+  test "stores missav.ai mirror OG metadata when direct preview fetch is blocked",
+       %{base_url: base_url} do
+    original_url = "https://missav.ai/ja/sdam-101-uncensored-leak"
+    download_url = base_url <> "/downloaded/photo.jpg"
+
+    Application.put_env(:save_it, :test_pid, self())
+
+    Application.put_env(:save_it, :link_preview_req_options,
+      adapter: &__MODULE__.MissavLinkPreviewAdapter.request/1
+    )
+
+    Application.put_env(:save_it, :missav_metadata_fallback_base_url, "https://missav.ws")
+
+    message = %{
+      chat: %{id: 12_345, username: "save_it_test_chat"},
+      date: 1_717_170_000,
+      message_id: 103,
+      text: original_url
+    }
+
+    assert {:ok, true} = Bot.handle({:text, original_url, message}, nil)
+
+    assert_receive {:test_http_request, :post, "/", cobalt_body}
+    assert Jason.decode!(cobalt_body) == %{"url" => original_url}
+    assert_receive {:test_http_request, :get, "/downloaded/photo.jpg", ""}
+    assert_receive {:link_preview_request, "https://missav.ai/ja/sdam-101-uncensored-leak"}
+    assert_receive {:link_preview_request, "https://missav.ws/ja/sdam-101-uncensored-leak"}
+    assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
+
+    document = Jason.decode!(typesense_body)
+
+    assert document["url"] == original_url
+    assert document["download_url"] == download_url
+    assert document["thumbnail_url"] == "https://fourhoi.com/sdam-101-uncensored-leak/cover-n.jpg"
+    assert document["caption"] == ""
+    assert document["title"] == "MissAV Mirror OG Title"
+    assert document["description"] == "MissAV Mirror OG Description"
+    assert document["keywords"] == ["missav", "metadata", "fallback"]
+    assert document["file_id"] == "telegram-photo-file-id"
+    assert document["belongs_to_id"] == "12345"
+  end
+
   test "sends downloaded URL media to the source topic and stores a topic message URL",
        %{base_url: base_url} do
     Application.put_env(:ex_gram, :adapter, __MODULE__.TopicSendPhotoAdapter)
@@ -1882,6 +1924,41 @@ defmodule SaveIt.BotTest do
     end
   end
 
+  defmodule MissavLinkPreviewAdapter do
+    def request(%Req.Request{url: url} = request) do
+      send(
+        Application.fetch_env!(:save_it, :test_pid),
+        {:link_preview_request, URI.to_string(url)}
+      )
+
+      response =
+        case {url.host, url.path} do
+          {"missav.ai", "/ja/sdam-101-uncensored-leak"} ->
+            %Req.Response{status: 403, body: "Just a moment..."}
+
+          {"missav.ws", "/ja/sdam-101-uncensored-leak"} ->
+            %Req.Response{
+              status: 200,
+              body: """
+              <html>
+                <head>
+                  <meta property="og:title" content="MissAV Mirror OG Title" />
+                  <meta property="og:description" content="MissAV Mirror OG Description" />
+                  <meta name="keywords" content="missav, metadata, fallback" />
+                  <meta property="og:image" content="https://fourhoi.com/sdam-101-uncensored-leak/cover-n.jpg" />
+                </head>
+              </html>
+              """
+            }
+
+          unexpected ->
+            raise "Unexpected MissAV preview request: #{inspect(unexpected)}"
+        end
+
+      {request, response}
+    end
+  end
+
   defmodule TopicSendPhotoAdapter do
     @behaviour ExGram.Adapter
 
@@ -2585,6 +2662,10 @@ defmodule SaveIt.BotTest do
 
     defp cobalt_response(%{"url" => "https://www.youtube.com/shorts/clip123"}, port) do
       json_response(%{"url" => "http://127.0.0.1:#{port}/downloaded/video.mp4"})
+    end
+
+    defp cobalt_response(%{"url" => "https://missav.ai/ja/sdam-101-uncensored-leak"}, port) do
+      json_response(%{"url" => "http://127.0.0.1:#{port}/downloaded/photo.jpg"})
     end
 
     defp cobalt_response(%{"url" => "https://example.com/unavailable"}, _port) do

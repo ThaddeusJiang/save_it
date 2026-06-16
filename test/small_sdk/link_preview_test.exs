@@ -132,6 +132,24 @@ defmodule SmallSdk.LinkPreviewTest do
     refute log =~ "token=secret"
   end
 
+  test "uses missav mirror metadata when missav.ai blocks preview HTML" do
+    Application.put_env(:save_it, :test_pid, self())
+
+    assert {:ok, metadata} =
+             LinkPreview.get_metadata("https://missav.ai/ja/sdam-101-uncensored-leak",
+               req_options: [adapter: &__MODULE__.MissavMetadataAdapter.request/1],
+               missav_metadata_fallback_base_url: "https://missav.ws"
+             )
+
+    assert metadata.title == "MissAV Mirror OG Title"
+    assert metadata.description == "MissAV Mirror OG Description"
+    assert metadata.keywords == ["missav", "metadata", "fallback"]
+    assert metadata.image_url == "https://fourhoi.com/sdam-101-uncensored-leak/cover-n.jpg"
+
+    assert_receive {:link_preview_request, "https://missav.ai/ja/sdam-101-uncensored-leak"}
+    assert_receive {:link_preview_request, "https://missav.ws/ja/sdam-101-uncensored-leak"}
+  end
+
   test "uses authenticated X metadata when cobalt cookies are available", %{tmp_dir: tmp_dir} do
     cookie_path = Path.join(tmp_dir, "cobalt-cookies.json")
 
@@ -170,6 +188,38 @@ defmodule SmallSdk.LinkPreviewTest do
     Enum.each(env, fn {key, value} ->
       Application.put_env(app, key, value)
     end)
+  end
+
+  defmodule MissavMetadataAdapter do
+    def request(%Req.Request{url: url} = request) do
+      send(
+        Application.fetch_env!(:save_it, :test_pid),
+        {:link_preview_request, URI.to_string(url)}
+      )
+
+      response =
+        case {url.host, url.path} do
+          {"missav.ai", "/ja/sdam-101-uncensored-leak"} ->
+            %Req.Response{status: 403, body: "Just a moment..."}
+
+          {"missav.ws", "/ja/sdam-101-uncensored-leak"} ->
+            %Req.Response{
+              status: 200,
+              body: """
+              <html>
+                <head>
+                  <meta property="og:title" content="MissAV Mirror OG Title" />
+                  <meta property="og:description" content="MissAV Mirror OG Description" />
+                  <meta name="keywords" content="missav, metadata, fallback" />
+                  <meta property="og:image" content="https://fourhoi.com/sdam-101-uncensored-leak/cover-n.jpg" />
+                </head>
+              </html>
+              """
+            }
+        end
+
+      {request, response}
+    end
   end
 
   defmodule TestHttpServer do
