@@ -36,7 +36,7 @@ defmodule SaveIt.PhotoServiceTest do
                %{
                  "collection" => "photos",
                  "q" => "summer beach",
-                 "query_by" => "caption",
+                 "query_by" => "caption,title,description,keywords",
                  "filter_by" => "belongs_to_id:=12345",
                  "prefix" => true,
                  "drop_tokens_threshold" => 0,

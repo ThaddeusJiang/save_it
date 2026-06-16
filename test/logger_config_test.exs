@@ -16,6 +16,18 @@ defmodule SaveIt.LoggerConfigTest do
     assert logger_config[:colors][:error] == :red
   end
 
+  test "dev config enables debug logging" do
+    compile_config = Config.Reader.read!(@compile_config, env: :dev)
+
+    assert get_in(compile_config, [:logger, :level]) == :debug
+  end
+
+  test "prod config keeps debug logging disabled" do
+    compile_config = Config.Reader.read!(@compile_config, env: :prod)
+
+    assert get_in(compile_config, [:logger, :level]) == :info
+  end
+
   test "resource creation info logs can opt into green output" do
     formatter =
       Application.fetch_env!(:logger, :default_formatter)

@@ -68,7 +68,7 @@ defmodule SaveIt.PhotoService do
     req_body = %{
       "searches" => [
         %{
-          "query_by" => "caption",
+          "query_by" => "caption,title,description,keywords",
           "q" => q,
           "collection" => "photos",
           "prefix" => true,
