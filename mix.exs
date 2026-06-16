@@ -50,6 +50,9 @@ defmodule SaveIt.MixProject do
 
   defp aliases do
     [
+      setup: ["deps.get", "ts.migrate"],
+      dev: "run --no-halt",
+      reset: "cmd rm -rf data",
       coverage: "test --cover",
       "ts.migrate": &ts_migrate/1,
       "ts.rollback": &ts_rollback/1,
