@@ -13,7 +13,7 @@ defmodule SaveIt.VideoUploadTest do
     :ok
   end
 
-  test "generates square-pixel cover using the video display ratio" do
+  test "generates full-size cover and Telegram-compliant thumbnail using the video display ratio" do
     Application.put_env(:save_it, :video_cover_generator, __MODULE__.CoverGenerator)
 
     assert {:ok, cover} =
@@ -23,8 +23,24 @@ defmodule SaveIt.VideoUploadTest do
              })
 
     assert cover.file_content == "cover-bytes"
+    assert cover.thumbnail_file_content == "thumbnail-bytes"
     assert_uuidv7_filename(cover.file_name, ".jpg")
-    assert_received {:cover_dimensions, %{width: 90, height: 320}}
+    assert_uuidv7_filename(cover.thumbnail_file_name, ".jpg")
+    assert_received {:cover_dimensions, %{width: 180, height: 640, jpeg_quality: 2}}
+    assert_received {:cover_dimensions, %{width: 90, height: 320, jpeg_quality: 5}}
+  end
+
+  test "caps generated covers without upscaling smaller videos" do
+    Application.put_env(:save_it, :video_cover_generator, __MODULE__.CoverGenerator)
+
+    assert {:ok, _cover} =
+             VideoUpload.cover({:file_content, "video-bytes", "clip.mp4"}, %{
+               width: 2160,
+               height: 3840
+             })
+
+    assert_received {:cover_dimensions, %{width: 1080, height: 1920, jpeg_quality: 2}}
+    assert_received {:cover_dimensions, %{width: 180, height: 320, jpeg_quality: 5}}
   end
 
   defp assert_uuidv7_filename(file_name, extension) do
@@ -37,7 +53,11 @@ defmodule SaveIt.VideoUploadTest do
   defmodule CoverGenerator do
     def cover_file_content(_file_content, _file_name, dimensions) do
       send(self(), {:cover_dimensions, dimensions})
-      {:ok, "cover-bytes"}
+
+      case dimensions.jpeg_quality do
+        2 -> {:ok, "cover-bytes"}
+        5 -> {:ok, "thumbnail-bytes"}
+      end
     end
   end
 

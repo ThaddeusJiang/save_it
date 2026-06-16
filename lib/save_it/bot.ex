@@ -1426,15 +1426,29 @@ defmodule SaveIt.Bot do
 
   defp maybe_put_video_preview_files(
          opts,
-         {:ok, %{file_content: file_content, file_name: file_name}}
+         {:ok, %{file_content: file_content, file_name: file_name}} = video_cover
        )
        when is_binary(file_content) and is_binary(file_name) do
     opts
     |> Keyword.put(:cover, {:file_content, file_content, file_name})
-    |> Keyword.put(:thumbnail, {:file_content, file_content, file_name})
+    |> maybe_put_video_thumbnail_file(video_cover)
   end
 
   defp maybe_put_video_preview_files(opts, _video_cover), do: opts
+
+  defp maybe_put_video_thumbnail_file(
+         opts,
+         {:ok,
+          %{
+            thumbnail_file_content: file_content,
+            thumbnail_file_name: file_name
+          }}
+       )
+       when is_binary(file_content) and is_binary(file_name) do
+    Keyword.put(opts, :thumbnail, {:file_content, file_content, file_name})
+  end
+
+  defp maybe_put_video_thumbnail_file(opts, _video_cover), do: opts
 
   defp index_sent_video_preview(chat_id, msg, opts) do
     caption = Keyword.fetch!(opts, :caption)
