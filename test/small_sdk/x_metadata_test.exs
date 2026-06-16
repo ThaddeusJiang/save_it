@@ -113,7 +113,7 @@ defmodule SmallSdk.XMetadataTest do
     defp accept_loop(listen_socket, test_pid) do
       case :gen_tcp.accept(listen_socket) do
         {:ok, socket} ->
-          {:ok, request} = :gen_tcp.recv(socket, 0, 5_000)
+          {:ok, request} = recv_request(socket)
           send(test_pid, {:x_request, request})
           :gen_tcp.send(socket, json_response())
           :gen_tcp.close(socket)
@@ -121,6 +121,22 @@ defmodule SmallSdk.XMetadataTest do
 
         {:error, :closed} ->
           :ok
+      end
+    end
+
+    defp recv_request(socket, acc \\ "") do
+      case :gen_tcp.recv(socket, 0, 5_000) do
+        {:ok, chunk} ->
+          request = acc <> chunk
+
+          if String.contains?(request, "\r\n\r\n") do
+            {:ok, request}
+          else
+            recv_request(socket, request)
+          end
+
+        {:error, reason} ->
+          {:error, reason}
       end
     end
 
