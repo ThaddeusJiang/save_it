@@ -346,8 +346,6 @@ defmodule SaveIt.BotTest do
       adapter: &__MODULE__.MissavLinkPreviewAdapter.request/1
     )
 
-    Application.put_env(:save_it, :missav_metadata_fallback_base_url, "https://missav.ws")
-
     message = %{
       chat: %{id: 12_345, username: "save_it_test_chat"},
       date: 1_717_170_000,

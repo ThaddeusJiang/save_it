@@ -4,9 +4,8 @@ defmodule SmallSdk.LinkPreview do
   require Logger
 
   alias SmallSdk.WebDownloader
+  alias SmallSdk.LinkPreview.ProviderFallback
   alias SmallSdk.XMetadata
-
-  @missav_metadata_fallback_base_url "https://missav.ws"
 
   @preview_patterns [
     ~r/<meta[^>]+property=["']og:image["'][^>]+(?:content|value)=["']([^"']+)["']/i,
@@ -99,8 +98,11 @@ defmodule SmallSdk.LinkPreview do
 
   defp get_html_metadata(page_url, opts) do
     case fetch_html_metadata(page_url, opts) do
-      {:ok, metadata} -> {:ok, metadata}
-      {:error, reason} -> maybe_get_provider_fallback_metadata(page_url, reason, opts)
+      {:ok, metadata} ->
+        {:ok, metadata}
+
+      {:error, reason} ->
+        ProviderFallback.fetch_metadata(page_url, reason, opts, &fetch_html_metadata/2)
     end
   end
 
@@ -122,21 +124,6 @@ defmodule SmallSdk.LinkPreview do
     end
   end
 
-  defp maybe_get_provider_fallback_metadata(page_url, reason, opts) do
-    if Keyword.get(opts, :provider_fallback?, true) do
-      case missav_metadata_fallback_url(page_url, opts) do
-        fallback_url when is_binary(fallback_url) ->
-          log_metadata_fallback(page_url, fallback_url, reason)
-          fetch_html_metadata(fallback_url, Keyword.put(opts, :provider_fallback?, false))
-
-        nil ->
-          {:error, reason}
-      end
-    else
-      {:error, reason}
-    end
-  end
-
   defp request_options(opts) do
     opts
     |> Keyword.get(:req_options, Application.get_env(:save_it, :link_preview_req_options, []))
@@ -149,43 +136,6 @@ defmodule SmallSdk.LinkPreview do
       headers ++ existing_headers
     end)
   end
-
-  defp missav_metadata_fallback_url(page_url, opts) do
-    with %URI{host: host} = page_uri when is_binary(host) <- URI.parse(page_url),
-         true <- missav_ai_host?(String.downcase(host)),
-         fallback_base_url when is_binary(fallback_base_url) <-
-           missav_metadata_fallback_base_url(opts),
-         %URI{host: fallback_host} = fallback_uri when is_binary(fallback_host) <-
-           URI.parse(fallback_base_url) do
-      %URI{
-        page_uri
-        | scheme: fallback_uri.scheme || "https",
-          userinfo: fallback_uri.userinfo,
-          host: fallback_host,
-          port: fallback_uri.port
-      }
-      |> URI.to_string()
-    else
-      _ -> nil
-    end
-  rescue
-    _ -> nil
-  end
-
-  defp missav_metadata_fallback_base_url(opts) do
-    opts
-    |> Keyword.get(
-      :missav_metadata_fallback_base_url,
-      Application.get_env(
-        :save_it,
-        :missav_metadata_fallback_base_url,
-        @missav_metadata_fallback_base_url
-      )
-    )
-    |> blank_to_nil()
-  end
-
-  defp missav_ai_host?(host), do: host == "missav.ai" or String.ends_with?(host, ".missav.ai")
 
   def get_metadata_from_html(page_url, html) when is_binary(page_url) and is_binary(html) do
     %{
@@ -297,16 +247,6 @@ defmodule SmallSdk.LinkPreview do
     Logger.warning(
       "Link preview metadata fetch failed: " <>
         "page_url=#{format_log_url(page_url)} " <>
-        "reason=#{format_log_reason(reason)}",
-      kind: :link_preview
-    )
-  end
-
-  defp log_metadata_fallback(page_url, fallback_url, reason) do
-    Logger.warning(
-      "Link preview metadata fallback selected: " <>
-        "page_url=#{format_log_url(page_url)} " <>
-        "fallback_url=#{format_log_url(fallback_url)} " <>
         "reason=#{format_log_reason(reason)}",
       kind: :link_preview
     )

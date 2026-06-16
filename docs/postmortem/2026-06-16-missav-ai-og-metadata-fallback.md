@@ -12,9 +12,9 @@ The MissAV provider strategy recognized `missav.ai`, but it did not have a metad
 
 ## Fix applied
 
-`SmallSdk.LinkPreview` now tries the normal preview URL first. When a `missav.ai` metadata fetch fails, it retries the same path on a configurable MissAV metadata fallback host, defaulting to `https://missav.ws`. Metadata parsed from the fallback page still flows through the existing `title`, `description`, `keywords`, and `thumbnail_url` fields, while the saved document keeps the original `missav.ai` URL.
+`SmallSdk.LinkPreview` now tries the normal preview URL first, then delegates provider-specific fallback handling to isolated provider modules. `SmallSdk.MissavMetadata` owns the `missav.ai` fallback behavior: when a MissAV metadata fetch fails, it retries the same path on `https://missav.ws`. Metadata parsed from the fallback page still flows through the existing `title`, `description`, `keywords`, and `thumbnail_url` fields, while the saved document keeps the original `missav.ai` URL.
 
-Regression coverage now verifies both the `LinkPreview` fallback behavior and the full bot save path that writes MissAV Open Graph metadata into the Typesense document.
+Regression coverage now verifies the isolated MissAV metadata provider and the full bot save path that writes MissAV Open Graph metadata into the Typesense document.
 
 ## What we learned
 
