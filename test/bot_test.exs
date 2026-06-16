@@ -606,6 +606,53 @@ defmodule SaveIt.BotTest do
            end)
   end
 
+  test "stores og image when the resolved URL resource is not image or video", %{
+    base_url: base_url
+  } do
+    original_url = base_url <> "/article-page"
+    message_text = "read later #{original_url}"
+
+    message = %{
+      chat: %{id: 12_345, username: "save_it_test_chat"},
+      date: 1_717_170_000,
+      message_id: 108,
+      text: message_text,
+      entities: [%{offset: 11, type: "url", length: String.length(original_url)}]
+    }
+
+    log =
+      capture_log(fn ->
+        assert {:ok, true} = Bot.handle({:text, message_text, message}, nil)
+      end)
+
+    assert log =~ "Saved webpage preview fallback after non-media URL download"
+
+    assert_receive {:test_http_request, :post, "/", cobalt_body}
+    assert Jason.decode!(cobalt_body) == %{"url" => original_url}
+
+    assert_receive {:test_http_request, :get, "/downloaded/article.html", ""}
+    assert_receive {:test_http_request, :get, "/article-page", ""}
+    assert_receive {:test_http_request, :get, "/preview.jpg", ""}
+    assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
+
+    document = Jason.decode!(typesense_body)
+
+    assert document["url"] == original_url
+    refute Map.has_key?(document, "download_url")
+    assert document["thumbnail_url"] == base_url <> "/preview.jpg"
+    assert document["caption"] == "read later"
+    assert document["title"] == "Article Page OG Title"
+    assert document["description"] == "Article Page OG Description"
+    assert document["keywords"] == ["article", "preview", "save-it"]
+    assert document["file_id"] == "telegram-photo-file-id"
+    assert document["image"] == Base.encode64(test_jpeg())
+
+    refute Enum.any?(exgram_calls(), fn
+             {:post, :send_document, _body} -> true
+             _ -> false
+           end)
+  end
+
   test "indexes a downloaded URL video using a generated cover before Telegram and webpage previews",
        %{base_url: base_url} do
     original_url = base_url <> "/video-page-with-telegram-thumbnail"
@@ -2409,6 +2456,30 @@ defmodule SaveIt.BotTest do
       """
     end
 
+    defp response_for("/article-page", port, _body) do
+      html = """
+      <!doctype html>
+      <html>
+        <head>
+          <meta property="og:title" content="Article Page OG Title">
+          <meta property="og:description" content="Article Page OG Description">
+          <meta name="keywords" content="article, preview, save-it">
+          <meta property="og:image" content="http://127.0.0.1:#{port}/preview.jpg">
+        </head>
+        <body>article preview</body>
+      </html>
+      """
+
+      """
+      HTTP/1.1 200 OK\r
+      content-type: text/html\r
+      content-length: #{byte_size(html)}\r
+      connection: close\r
+      \r
+      #{html}
+      """
+    end
+
     defp response_for(path, port, _body)
          when path in ["/video-page", "/video-page-with-telegram-thumbnail", "/large-video-page"] do
       html = """
@@ -2524,6 +2595,9 @@ defmodule SaveIt.BotTest do
       cond do
         String.contains?(url, "/photo-page") ->
           json_response(%{"url" => "http://127.0.0.1:#{port}/downloaded/photo.jpg"})
+
+        String.contains?(url, "/article-page") ->
+          json_response(%{"url" => "http://127.0.0.1:#{port}/downloaded/article.html"})
 
         String.contains?(url, "/video-page") ->
           json_response(%{"url" => "http://127.0.0.1:#{port}/downloaded/video.mp4"})
