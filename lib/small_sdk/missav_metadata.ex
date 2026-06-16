@@ -40,7 +40,7 @@ defmodule SmallSdk.MissavMetadata do
          %URI{} = page_uri <- URI.parse(page_url) do
       %URI{
         page_uri
-        | scheme: fallback_uri.scheme || "https",
+        | scheme: fallback_uri.scheme,
           userinfo: fallback_uri.userinfo,
           host: fallback_host,
           port: fallback_uri.port
@@ -65,15 +65,11 @@ defmodule SmallSdk.MissavMetadata do
     )
   end
 
-  defp format_log_url(nil), do: "nil"
-
   defp format_log_url(url) when is_binary(url) do
     url
     |> remove_query_and_fragment()
     |> format_log_value()
   end
-
-  defp format_log_value(nil), do: "nil"
 
   defp format_log_value(value) when is_binary(value) do
     value

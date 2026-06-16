@@ -3,8 +3,8 @@ defmodule SmallSdk.LinkPreview do
 
   require Logger
 
-  alias SmallSdk.WebDownloader
   alias SmallSdk.LinkPreview.ProviderFallback
+  alias SmallSdk.WebDownloader
   alias SmallSdk.XMetadata
 
   @preview_patterns [
