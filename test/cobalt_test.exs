@@ -1,6 +1,8 @@
 defmodule SmallSdk.CobaltTest do
   use ExUnit.Case, async: false
 
+  import ExUnit.CaptureLog
+
   alias SmallSdk.Cobalt
 
   setup do
@@ -51,6 +53,33 @@ defmodule SmallSdk.CobaltTest do
     assert Jason.decode!(body) == %{
              "url" => "https://x.com/lalisa4K/status/2057481649609453909"
            }
+  end
+
+  test "get_download_url/1 logs sanitized debug context" do
+    server = start_supervised!({__MODULE__.TestHttpServer, test_pid: self()})
+    base_url = "http://127.0.0.1:#{__MODULE__.TestHttpServer.port(server)}"
+
+    Application.put_env(:save_it, :cobalt_api_url, base_url)
+
+    previous_level = Logger.level()
+    Logger.configure(level: :debug)
+
+    log =
+      try do
+        capture_log([level: :debug], fn ->
+          assert {:ok, _download_url} =
+                   Cobalt.get_download_url(
+                     "https://x.com/lalisa4K/status/2057481649609453909?s=20"
+                   )
+        end)
+      after
+        Logger.configure(level: previous_level)
+      end
+
+    assert log =~ "Cobalt request started"
+    assert log =~ ~s(api_url="#{base_url}")
+    assert log =~ ~s(source_url="https://x.com/lalisa4K/status/2057481649609453909")
+    refute log =~ "s=20"
   end
 
   defp restore_env(app, env) do

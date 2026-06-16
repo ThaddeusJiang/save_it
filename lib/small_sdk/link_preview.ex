@@ -4,6 +4,7 @@ defmodule SmallSdk.LinkPreview do
   require Logger
 
   alias SmallSdk.WebDownloader
+  alias SmallSdk.XMetadata
 
   @preview_patterns [
     ~r/<meta[^>]+property=["']og:image["'][^>]+(?:content|value)=["']([^"']+)["']/i,
@@ -25,6 +26,11 @@ defmodule SmallSdk.LinkPreview do
   @title_patterns [
     ~r/<meta[^>]+property=["']og:title["'][^>]+(?:content|value)=["']([^"']+)["']/i,
     ~r/<meta[^>]+(?:content|value)=["']([^"']+)["'][^>]+property=["']og:title["']/i
+  ]
+
+  @keywords_patterns [
+    ~r/<meta[^>]+name=["']keywords["'][^>]+(?:content|value)=["']([^"']+)["']/i,
+    ~r/<meta[^>]+(?:content|value)=["']([^"']+)["'][^>]+name=["']keywords["']/i
   ]
 
   def download_image(page_url) when is_binary(page_url) do
@@ -67,6 +73,27 @@ defmodule SmallSdk.LinkPreview do
   def get_title(_page_url), do: {:error, :missing_preview_url}
 
   def get_metadata(page_url) when is_binary(page_url) do
+    case get_authenticated_metadata(page_url) do
+      {:ok, metadata} ->
+        log_metadata(page_url, metadata)
+        {:ok, metadata}
+
+      {:error, _reason} ->
+        get_html_metadata(page_url)
+    end
+  end
+
+  def get_metadata(_page_url), do: {:error, :missing_preview_url}
+
+  defp get_authenticated_metadata(page_url) do
+    if XMetadata.x_url?(page_url) do
+      XMetadata.get_metadata(page_url)
+    else
+      {:error, :unsupported_authenticated_metadata}
+    end
+  end
+
+  defp get_html_metadata(page_url) do
     case Req.get(page_url, headers: [{"User-Agent", "Mozilla/5.0"}]) do
       {:ok, %{status: status, body: body}} when status in 200..209 and is_binary(body) ->
         metadata = get_metadata_from_html(page_url, body)
@@ -84,12 +111,11 @@ defmodule SmallSdk.LinkPreview do
     end
   end
 
-  def get_metadata(_page_url), do: {:error, :missing_preview_url}
-
   def get_metadata_from_html(page_url, html) when is_binary(page_url) and is_binary(html) do
     %{
       title: html |> extract_title() |> blank_to_nil(),
       description: html |> extract_description() |> blank_to_nil(),
+      keywords: html |> extract_keywords() |> empty_list_to_nil(),
       image_url:
         html |> extract_image_url() |> resolve_image_url_value(page_url) |> blank_to_nil()
     }
@@ -142,6 +168,28 @@ defmodule SmallSdk.LinkPreview do
     end)
   end
 
+  defp extract_keywords(html) do
+    @keywords_patterns
+    |> Enum.find_value(fn pattern ->
+      case Regex.run(pattern, html) do
+        [_, keywords] -> split_keywords(keywords)
+        _ -> nil
+      end
+    end)
+    |> Kernel.||([])
+  end
+
+  defp split_keywords(keywords) do
+    keywords
+    |> normalize_html_value()
+    |> String.split(",")
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
+  end
+
+  defp empty_list_to_nil([]), do: nil
+  defp empty_list_to_nil(values), do: values
+
   defp resolve_image_url_value(nil, _page_url), do: nil
 
   defp resolve_image_url_value(image_url, page_url) do
@@ -163,6 +211,7 @@ defmodule SmallSdk.LinkPreview do
         "page_url=#{format_log_url(page_url)} " <>
         "og_title=#{format_log_value(metadata.title)} " <>
         "og_description=#{format_log_value(metadata.description)} " <>
+        "keywords=#{format_log_keywords(metadata.keywords)} " <>
         "og_image=#{format_log_url(metadata.image_url)}",
       kind: :link_preview
     )
@@ -192,6 +241,14 @@ defmodule SmallSdk.LinkPreview do
     |> truncate_log_value()
     |> inspect()
   end
+
+  defp format_log_keywords([_ | _] = keywords) do
+    keywords
+    |> Enum.join(", ")
+    |> format_log_value()
+  end
+
+  defp format_log_keywords(_keywords), do: "nil"
 
   defp format_log_reason(reason) do
     reason

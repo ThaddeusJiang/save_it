@@ -10,6 +10,7 @@ defmodule SaveIt.Bot do
   alias SaveIt.FileHelper
   alias SaveIt.GoogleDrive
   alias SaveIt.GoogleOAuth2DeviceFlow
+  alias SaveIt.UrlMetadata
   alias SaveIt.VideoUpload
 
   alias SaveIt.PhotoService
@@ -33,6 +34,7 @@ defmodule SaveIt.Bot do
   @similar_photos_found_message "Similar photos found."
   @telegram_upload_max_file_size 50 * 1024 * 1024
   @telegram_file_too_large_message "💔 File is too large for Telegram Bot API upload."
+  @telegram_video_too_large_thumbnail_message "Video downloaded; Telegram upload was too large."
 
   use ExGram.Bot,
     name: @bot,
@@ -445,7 +447,7 @@ defmodule SaveIt.Bot do
   defp same_present_value?(_left, _right), do: false
 
   defp searchable_caption(caption) do
-    if search_command_caption?(caption), do: "", else: caption || ""
+    if search_command_caption?(caption), do: "", else: strip_urls_from_text(caption)
   end
 
   defp search_command_caption?(caption) when is_binary(caption) do
@@ -515,6 +517,9 @@ defmodule SaveIt.Bot do
 
   defp process_url(chat, url, message) do
     chat_id = chat.id
+
+    Logger.debug("URL processing started chat_id=#{chat_id} source_url=#{format_log_url(url)}")
+
     {:ok, progress_message} = send_message(chat_id, Enum.at(@progress, 0))
 
     context = %DownloadContext{
@@ -527,12 +532,27 @@ defmodule SaveIt.Bot do
 
     case resolve_download_url(url) do
       {:ok, m3u8_url, :hls} ->
+        Logger.debug(
+          "URL download resolved result=hls " <>
+            "source_url=#{format_log_url(url)} download_url=#{format_log_url(m3u8_url)}"
+        )
+
         handle_hls_download(%{context | cache_url: url, download_url: m3u8_url}, m3u8_url)
 
       {:ok, purge_url, download_urls} ->
+        Logger.debug(
+          "URL download resolved result=multi " <>
+            "source_url=#{format_log_url(url)} file_count=#{length(download_urls)}"
+        )
+
         handle_multi_file_download(%{context | purge_url: purge_url}, download_urls)
 
       {:ok, download_url} ->
+        Logger.debug(
+          "URL download resolved result=single " <>
+            "source_url=#{format_log_url(url)} download_url=#{format_log_url(download_url)}"
+        )
+
         handle_single_file_download(%{
           context
           | download_url: download_url,
@@ -540,6 +560,7 @@ defmodule SaveIt.Bot do
         })
 
       {:error, reason} ->
+        Logger.debug("URL download resolve failed source_url=#{format_log_url(url)}")
         handle_download_failure(context, "💔 Failed to get download URL.", reason)
     end
   end
@@ -556,6 +577,11 @@ defmodule SaveIt.Bot do
 
     case hls_downloader().download(m3u8_url) do
       {:ok, %DownloadedFile{} = file} ->
+        Logger.debug(
+          "URL HLS downloaded file_name=#{format_log_value(file.file_name)} " <>
+            "download_url=#{format_log_url(context.download_url)}"
+        )
+
         update_message(context.chat_id, context.progress_message_id, Enum.slice(@progress, 0..2))
 
         bot_send_downloaded_file(context.chat_id, file, download_send_opts(context))
@@ -591,6 +617,8 @@ defmodule SaveIt.Bot do
 
     case WebDownloader.download_files(download_urls) do
       {:ok, files} ->
+        Logger.debug("URL files downloaded file_count=#{length(files)}")
+
         update_message(context.chat_id, context.progress_message_id, Enum.slice(@progress, 0..2))
 
         bot_send_files(context.chat_id, files, download_send_opts(context))
@@ -635,6 +663,11 @@ defmodule SaveIt.Bot do
 
     case WebDownloader.download_file(context.download_url) do
       {:ok, %DownloadedFile{} = file} ->
+        Logger.debug(
+          "URL file downloaded file_name=#{format_log_value(file.file_name)} " <>
+            "download_url=#{format_log_url(context.download_url)}"
+        )
+
         update_message(context.chat_id, context.progress_message_id, Enum.slice(@progress, 0..2))
 
         bot_send_downloaded_file(context.chat_id, file, download_send_opts(context))
@@ -703,10 +736,13 @@ defmodule SaveIt.Bot do
     [
       source_url: context.original_url,
       source_chat: context.chat,
-      caption: download_caption(context, metadata)
+      caption: download_caption(context)
     ]
     |> put_optional_keyword(:download_url, context.download_url)
     |> put_optional_keyword(:thumbnail_url, thumbnail_url_from_metadata(metadata, opts))
+    |> put_optional_keyword(:title, metadata_title(metadata))
+    |> put_optional_keyword(:description, metadata_description(metadata))
+    |> put_optional_keyword(:keywords, metadata_keywords(metadata))
     |> put_optional_keyword(:message_thread_id, message_thread_id(context.message))
   end
 
@@ -721,21 +757,14 @@ defmodule SaveIt.Bot do
          opts
        ) do
     preview_url = link_preview_url(message)
-    caption_needs_metadata? = user_text_caption(message) == ""
+    fetch_original? = user_text_caption(message) == ""
 
     thumbnail_needs_metadata? =
       Keyword.get(opts, :store_thumbnail_url?, true) and is_binary(preview_url)
 
-    cond do
-      is_binary(preview_url) and (caption_needs_metadata? or thumbnail_needs_metadata?) ->
-        preview_url
-
-      caption_needs_metadata? ->
-        original_url
-
-      true ->
-        nil
-    end
+    UrlMetadata.metadata_page_url(original_url, preview_url,
+      fetch_original?: fetch_original? or thumbnail_needs_metadata?
+    )
   end
 
   defp fetch_link_preview_metadata(preview_url) when is_binary(preview_url) do
@@ -757,6 +786,18 @@ defmodule SaveIt.Bot do
     do: image_url
 
   defp metadata_image_url(_metadata), do: nil
+
+  defp metadata_title(%{title: title}) when is_binary(title) and title != "", do: title
+  defp metadata_title(_metadata), do: nil
+
+  defp metadata_description(%{description: description})
+       when is_binary(description) and description != "",
+       do: description
+
+  defp metadata_description(_metadata), do: nil
+
+  defp metadata_keywords(%{keywords: [_ | _] = keywords}), do: keywords
+  defp metadata_keywords(_metadata), do: nil
 
   defp download_message_thumbnail(message) do
     with thumbnail when not is_nil(thumbnail) <- message_thumbnail(message),
@@ -851,19 +892,10 @@ defmodule SaveIt.Bot do
     :ok
   end
 
-  defp download_caption(%DownloadContext{message: message, original_url: original_url}, metadata) do
-    case user_text_caption(message) do
-      caption when is_binary(caption) and caption != "" ->
-        caption
-
-      _ ->
-        link_preview_caption(message, original_url, metadata)
-    end
-  end
+  defp download_caption(%DownloadContext{message: message}), do: user_text_caption(message)
 
   defp user_text_caption(message) do
-    message
-    |> map_get(:text)
+    (map_get(message, :text) || map_get(message, :caption))
     |> strip_urls_from_text()
   end
 
@@ -875,105 +907,6 @@ defmodule SaveIt.Bot do
   end
 
   defp strip_urls_from_text(_text), do: ""
-
-  defp link_preview_caption(_message, original_url, metadata) when is_map(metadata) do
-    case caption_from_link_preview_metadata(metadata, original_url) do
-      {:ok, caption, source} ->
-        Logger.debug("Link preview caption selected: source=#{source}", kind: :link_preview)
-        caption
-
-      {:error, _reason} ->
-        ""
-    end
-  end
-
-  defp link_preview_caption(message, original_url, _metadata) do
-    preview_url = link_preview_url(message) || original_url
-
-    preview_url
-    |> fetch_link_preview_caption(original_url)
-    |> case do
-      {:ok, caption} -> caption
-      {:error, _reason} -> ""
-    end
-  end
-
-  defp fetch_link_preview_caption(preview_url, original_url) when is_binary(preview_url) do
-    with {:ok, metadata} <- LinkPreview.get_metadata(preview_url),
-         {:ok, caption, source} <- caption_from_link_preview_metadata(metadata, original_url) do
-      Logger.debug("Link preview caption selected: source=#{source}", kind: :link_preview)
-      {:ok, caption}
-    end
-  end
-
-  defp fetch_link_preview_caption(_preview_url, _original_url), do: {:error, :missing_preview_url}
-
-  defp caption_from_link_preview_metadata(metadata, original_url) do
-    cond do
-      youtube_url?(original_url) ->
-        metadata
-        |> Map.get(:title)
-        |> caption_result(:og_title)
-
-      x_url?(original_url) ->
-        metadata
-        |> Map.get(:description)
-        |> caption_result(:og_description)
-        |> fallback_caption_result(Map.get(metadata, :title), :og_title)
-
-      true ->
-        metadata
-        |> Map.get(:description)
-        |> caption_result(:og_description)
-    end
-  end
-
-  defp caption_result(caption, source) when is_binary(caption) and caption != "" do
-    {:ok, caption, source}
-  end
-
-  defp caption_result(_caption, _source), do: {:error, :no_preview_caption}
-
-  defp fallback_caption_result({:ok, _caption, _source} = result, _fallback, _fallback_source),
-    do: result
-
-  defp fallback_caption_result({:error, :no_preview_caption}, fallback, source) do
-    caption_result(fallback, source)
-  end
-
-  defp youtube_url?(url) when is_binary(url) do
-    case URI.parse(url) do
-      %URI{host: host} when is_binary(host) ->
-        host = String.downcase(host)
-
-        host == "youtube.com" or String.ends_with?(host, ".youtube.com")
-
-      _ ->
-        false
-    end
-  rescue
-    _ -> false
-  end
-
-  defp youtube_url?(_url), do: false
-
-  defp x_url?(url) when is_binary(url) do
-    case URI.parse(url) do
-      %URI{host: host} when is_binary(host) ->
-        host = String.downcase(host)
-
-        host in ["x.com", "twitter.com"] or
-          String.ends_with?(host, ".x.com") or
-          String.ends_with?(host, ".twitter.com")
-
-      _ ->
-        false
-    end
-  rescue
-    _ -> false
-  end
-
-  defp x_url?(_url), do: false
 
   defp send_message(chat_id, text) do
     ExGram.send_message(chat_id, text)
@@ -1043,6 +976,7 @@ defmodule SaveIt.Bot do
     caption = Keyword.get(opts, :caption, "")
     message_thread_id = Keyword.get(opts, :message_thread_id)
     thumbnail_url = Keyword.get(opts, :thumbnail_url)
+    url_metadata_opts = url_metadata_opts(opts)
 
     if all_images?(files) and length(files) > 1 do
       bot_send_media_group(
@@ -1051,18 +985,24 @@ defmodule SaveIt.Bot do
           {file.file_name, {:file_content, file.file_content, file.file_name}, source_url,
            file.download_url, thumbnail_url}
         end),
-        source_chat: source_chat,
-        caption: caption,
-        message_thread_id: message_thread_id
+        [
+          source_chat: source_chat,
+          caption: caption,
+          message_thread_id: message_thread_id
+        ] ++ url_metadata_opts
       )
     else
       Enum.each(files, fn %DownloadedFile{} = file ->
-        bot_send_downloaded_file(chat_id, file,
-          source_url: source_url,
-          source_chat: source_chat,
-          caption: caption,
-          thumbnail_url: thumbnail_url,
-          message_thread_id: message_thread_id
+        bot_send_downloaded_file(
+          chat_id,
+          file,
+          [
+            source_url: source_url,
+            source_chat: source_chat,
+            caption: caption,
+            thumbnail_url: thumbnail_url,
+            message_thread_id: message_thread_id
+          ] ++ url_metadata_opts
         )
       end)
     end
@@ -1099,6 +1039,7 @@ defmodule SaveIt.Bot do
     caption = Keyword.get(opts, :caption, "")
     message_thread_id = Keyword.get(opts, :message_thread_id)
     thumbnail_url = Keyword.get(opts, :thumbnail_url)
+    url_metadata_opts = url_metadata_opts(opts)
 
     if all_images?(filenames) and length(filenames) > 1 do
       bot_send_media_group(
@@ -1106,18 +1047,25 @@ defmodule SaveIt.Bot do
         Enum.map(filenames, fn filename ->
           {filename, {:file, filename}, source_url, nil, thumbnail_url}
         end),
-        source_chat: source_chat,
-        caption: caption,
-        message_thread_id: message_thread_id
+        [
+          source_chat: source_chat,
+          caption: caption,
+          message_thread_id: message_thread_id
+        ] ++ url_metadata_opts
       )
     else
       Enum.each(filenames, fn filename ->
-        bot_send_file(chat_id, filename, {:file, filename},
-          source_url: source_url,
-          source_chat: source_chat,
-          caption: caption,
-          thumbnail_url: thumbnail_url,
-          message_thread_id: message_thread_id
+        bot_send_file(
+          chat_id,
+          filename,
+          {:file, filename},
+          [
+            source_url: source_url,
+            source_chat: source_chat,
+            caption: caption,
+            thumbnail_url: thumbnail_url,
+            message_thread_id: message_thread_id
+          ] ++ url_metadata_opts
         )
       end)
     end
@@ -1127,6 +1075,7 @@ defmodule SaveIt.Bot do
     source_chat = Keyword.get(opts, :source_chat) || %{id: chat_id}
     caption = Keyword.get(opts, :caption, "")
     message_thread_id = Keyword.get(opts, :message_thread_id)
+    url_metadata_opts = url_metadata_opts(opts)
 
     case Telegram.send_media_group(chat_id, files,
            caption: caption,
@@ -1148,8 +1097,9 @@ defmodule SaveIt.Bot do
             }
             |> put_optional(:download_url, download_url)
             |> put_optional(:thumbnail_url, thumbnail_url)
+            |> put_url_metadata_fields(url_metadata_opts)
             |> Map.merge(source_message_fields(source_chat, msg))
-            |> PhotoService.create_photo!()
+            |> safe_typesense_create_photo()
 
           {{_file_name, content, source_url, download_url}, msg} ->
             file_id = get_file_id(msg)
@@ -1163,8 +1113,9 @@ defmodule SaveIt.Bot do
               belongs_to_id: chat_id
             }
             |> put_optional(:download_url, download_url)
+            |> put_url_metadata_fields(url_metadata_opts)
             |> Map.merge(source_message_fields(source_chat, msg))
-            |> PhotoService.create_photo!()
+            |> safe_typesense_create_photo()
 
           {{_file_name, content, source_url}, msg} ->
             file_id = get_file_id(msg)
@@ -1177,8 +1128,9 @@ defmodule SaveIt.Bot do
               url: source_url,
               belongs_to_id: chat_id
             }
+            |> put_url_metadata_fields(url_metadata_opts)
             |> Map.merge(source_message_fields(source_chat, msg))
-            |> PhotoService.create_photo!()
+            |> safe_typesense_create_photo()
 
           {{_file_name, content}, msg} ->
             file_id = get_file_id(msg)
@@ -1190,8 +1142,9 @@ defmodule SaveIt.Bot do
               file_id: file_id,
               belongs_to_id: chat_id
             }
+            |> put_url_metadata_fields(url_metadata_opts)
             |> Map.merge(source_message_fields(source_chat, msg))
-            |> PhotoService.create_photo!()
+            |> safe_typesense_create_photo()
         end)
 
       {:error, _reason} ->
@@ -1199,37 +1152,57 @@ defmodule SaveIt.Bot do
 
         Enum.each(files, fn
           {file_name, content, source_url, download_url, thumbnail_url} ->
-            bot_send_file(chat_id, file_name, content,
-              source_url: source_url,
-              download_url: download_url,
-              thumbnail_url: thumbnail_url,
-              source_chat: source_chat,
-              caption: caption,
-              message_thread_id: message_thread_id
+            bot_send_file(
+              chat_id,
+              file_name,
+              content,
+              [
+                source_url: source_url,
+                download_url: download_url,
+                thumbnail_url: thumbnail_url,
+                source_chat: source_chat,
+                caption: caption,
+                message_thread_id: message_thread_id
+              ] ++ url_metadata_opts
             )
 
           {file_name, content, source_url, download_url} ->
-            bot_send_file(chat_id, file_name, content,
-              source_url: source_url,
-              download_url: download_url,
-              source_chat: source_chat,
-              caption: caption,
-              message_thread_id: message_thread_id
+            bot_send_file(
+              chat_id,
+              file_name,
+              content,
+              [
+                source_url: source_url,
+                download_url: download_url,
+                source_chat: source_chat,
+                caption: caption,
+                message_thread_id: message_thread_id
+              ] ++ url_metadata_opts
             )
 
           {file_name, content, source_url} ->
-            bot_send_file(chat_id, file_name, content,
-              source_url: source_url,
-              source_chat: source_chat,
-              caption: caption,
-              message_thread_id: message_thread_id
+            bot_send_file(
+              chat_id,
+              file_name,
+              content,
+              [
+                source_url: source_url,
+                source_chat: source_chat,
+                caption: caption,
+                message_thread_id: message_thread_id
+              ] ++ url_metadata_opts
             )
 
           {file_name, content} ->
-            bot_send_file(chat_id, file_name, content,
-              source_chat: source_chat,
-              caption: caption,
-              message_thread_id: message_thread_id
+            bot_send_file(
+              chat_id,
+              file_name,
+              content,
+              [
+                source_chat: source_chat,
+                caption: caption,
+                message_thread_id: message_thread_id
+              ] ++ url_metadata_opts
             )
         end)
     end
@@ -1248,20 +1221,117 @@ defmodule SaveIt.Bot do
     thumbnail_url = Keyword.get(opts, :thumbnail_url)
     source_chat = Keyword.get(opts, :source_chat) || %{id: chat_id}
     message_thread_id = Keyword.get(opts, :message_thread_id)
+    url_metadata_opts = url_metadata_opts(opts)
 
-    if telegram_upload_too_large?(content) do
-      send_message(chat_id, @telegram_file_too_large_message)
-      {:error, :telegram_file_too_large}
-    else
-      do_bot_send_file(chat_id, file_name, content,
+    opts =
+      [
         caption: caption,
         source_url: source_url,
         download_url: download_url,
         thumbnail_url: thumbnail_url,
         source_chat: source_chat,
         message_thread_id: message_thread_id
+      ] ++ url_metadata_opts
+
+    upload_too_large? = telegram_upload_too_large?(content)
+
+    Logger.debug(
+      "Telegram media send started " <>
+        "media_type=#{media_type_for_file(file_name)} " <>
+        "file_name=#{format_log_value(file_name)} " <>
+        "source_url=#{format_log_url(source_url)} " <>
+        "download_url=#{format_log_url(download_url)} " <>
+        "upload_too_large=#{upload_too_large?}"
+    )
+
+    if upload_too_large? do
+      handle_telegram_upload_too_large(chat_id, file_name, content, opts)
+    else
+      do_bot_send_file(
+        chat_id,
+        file_name,
+        content,
+        opts
       )
     end
+  end
+
+  defp handle_telegram_upload_too_large(chat_id, file_name, content, opts) do
+    case file_extension(file_name) do
+      ".mp4" ->
+        send_oversized_video_preview(chat_id, content, opts)
+
+      _extension ->
+        send_message(chat_id, @telegram_file_too_large_message)
+        {:error, :telegram_file_too_large}
+    end
+  end
+
+  defp send_oversized_video_preview(chat_id, content, opts) do
+    caption = Keyword.fetch!(opts, :caption)
+    source_url = Keyword.get(opts, :source_url)
+    download_url = Keyword.get(opts, :download_url)
+    thumbnail_url = Keyword.get(opts, :thumbnail_url)
+    source_chat = Keyword.fetch!(opts, :source_chat)
+    message_thread_id = Keyword.get(opts, :message_thread_id)
+    url_metadata_opts = url_metadata_opts(opts)
+
+    {prepared_content, video_metadata} = VideoUpload.prepare(content)
+
+    with {:ok, %DownloadedFile{} = preview_file, indexed_thumbnail_url} <-
+           oversized_video_preview(prepared_content, video_metadata, source_url, thumbnail_url),
+         {:ok, msg} <-
+           ExGram.send_photo(
+             chat_id,
+             {:file_content, preview_file.file_content, preview_file.file_name},
+             telegram_send_opts(oversized_video_caption(caption), message_thread_id)
+           ),
+         file_id when is_binary(file_id) <- get_file_id(msg) do
+      %{
+        image: Base.encode64(preview_file.file_content),
+        caption: caption,
+        file_id: file_id,
+        media_type: "video",
+        url: source_url,
+        belongs_to_id: chat_id
+      }
+      |> put_optional(:download_url, download_url)
+      |> put_optional(:thumbnail_url, indexed_thumbnail_url)
+      |> put_url_metadata_fields(url_metadata_opts)
+      |> Map.merge(source_message_fields(source_chat, msg))
+      |> safe_index_photo()
+
+      store_sent_video_preview(preview_file, source_url)
+      :ok
+    else
+      _reason ->
+        send_message(chat_id, @telegram_file_too_large_message)
+        {:error, :telegram_file_too_large}
+    end
+  end
+
+  defp oversized_video_preview(prepared_content, video_metadata, source_url, thumbnail_url) do
+    case VideoUpload.cover(prepared_content, video_metadata) do
+      {:ok, video_cover} ->
+        {:ok,
+         %DownloadedFile{
+           file_name: video_cover.file_name,
+           file_content: video_cover.file_content
+         }, nil}
+
+      :error ->
+        case download_preview_image(thumbnail_url, source_url) do
+          {:ok, %DownloadedFile{} = file} -> {:ok, file, thumbnail_url}
+          {:error, reason} -> {:error, reason}
+        end
+    end
+  end
+
+  defp oversized_video_caption(""), do: @telegram_video_too_large_thumbnail_message
+  defp oversized_video_caption(nil), do: @telegram_video_too_large_thumbnail_message
+
+  defp oversized_video_caption(caption) when is_binary(caption) do
+    caption <> "\n\n" <> @telegram_video_too_large_thumbnail_message
   end
 
   defp do_bot_send_file(chat_id, file_name, content, opts) do
@@ -1271,6 +1341,7 @@ defmodule SaveIt.Bot do
     thumbnail_url = Keyword.get(opts, :thumbnail_url)
     source_chat = Keyword.fetch!(opts, :source_chat)
     message_thread_id = Keyword.get(opts, :message_thread_id)
+    url_metadata_opts = url_metadata_opts(opts)
 
     case file_extension(file_name) do
       ext when ext in [".png", ".jpg", ".jpeg"] ->
@@ -1291,6 +1362,7 @@ defmodule SaveIt.Bot do
         }
         |> put_optional(:download_url, download_url)
         |> put_optional(:thumbnail_url, thumbnail_url)
+        |> put_url_metadata_fields(url_metadata_opts)
         |> Map.merge(source_message_fields(source_chat, msg))
         |> safe_index_photo()
 
@@ -1304,13 +1376,17 @@ defmodule SaveIt.Bot do
                video_send_opts(caption, video_metadata, video_cover, message_thread_id)
              ) do
           {:ok, msg} = response ->
-            index_sent_video_preview(chat_id, msg,
-              caption: caption,
-              source_url: source_url,
-              download_url: download_url,
-              thumbnail_url: thumbnail_url,
-              source_chat: source_chat,
-              video_cover: video_cover
+            index_sent_video_preview(
+              chat_id,
+              msg,
+              [
+                caption: caption,
+                source_url: source_url,
+                download_url: download_url,
+                thumbnail_url: thumbnail_url,
+                source_chat: source_chat,
+                video_cover: video_cover
+              ] ++ url_metadata_opts
             )
 
             response
@@ -1367,6 +1443,7 @@ defmodule SaveIt.Bot do
     thumbnail_url = Keyword.get(opts, :thumbnail_url)
     source_chat = Keyword.fetch!(opts, :source_chat)
     video_cover = Keyword.get(opts, :video_cover)
+    url_metadata_opts = url_metadata_opts(opts)
 
     indexed_thumbnail_url =
       if match?({:ok, _cover}, video_cover), do: nil, else: thumbnail_url
@@ -1384,6 +1461,7 @@ defmodule SaveIt.Bot do
       }
       |> put_optional(:download_url, download_url)
       |> put_optional(:thumbnail_url, indexed_thumbnail_url)
+      |> put_url_metadata_fields(url_metadata_opts)
       |> Map.merge(source_message_fields(source_chat, msg))
       |> safe_index_photo()
 
@@ -1563,8 +1641,53 @@ defmodule SaveIt.Bot do
   defp put_optional(map, _key, nil), do: map
   defp put_optional(map, key, value), do: Map.put(map, key, value)
 
+  defp url_metadata_opts(opts) do
+    Keyword.take(opts, [:title, :description, :keywords])
+  end
+
+  defp put_url_metadata_fields(map, opts) do
+    map
+    |> put_optional(:title, Keyword.get(opts, :title))
+    |> put_optional(:description, Keyword.get(opts, :description))
+    |> put_optional(:keywords, Keyword.get(opts, :keywords))
+  end
+
   defp put_optional_keyword(keyword, _key, nil), do: keyword
   defp put_optional_keyword(keyword, key, value), do: Keyword.put(keyword, key, value)
+
+  defp media_type_for_file(file_name) do
+    case file_extension(file_name) do
+      ".mp4" -> "video"
+      ".png" -> "photo"
+      ".jpg" -> "photo"
+      ".jpeg" -> "photo"
+      _extension -> "file"
+    end
+  end
+
+  defp format_log_url(nil), do: "nil"
+
+  defp format_log_url(url) when is_binary(url) do
+    url
+    |> remove_query_and_fragment()
+    |> format_log_value()
+  end
+
+  defp format_log_url(url), do: format_log_value(inspect(url))
+
+  defp remove_query_and_fragment(url) do
+    uri = URI.parse(url)
+
+    %URI{uri | query: nil, fragment: nil}
+    |> URI.to_string()
+  rescue
+    _error -> url
+  end
+
+  defp format_log_value(nil), do: "nil"
+
+  defp format_log_value(value) when is_binary(value), do: inspect(value)
+  defp format_log_value(value), do: inspect(value)
 
   defp safe_index_photo(photo_params) do
     case safe_typesense_create_photo(photo_params) do
@@ -1574,6 +1697,13 @@ defmodule SaveIt.Bot do
   end
 
   defp safe_typesense_create_photo(photo_params) do
+    Logger.debug(
+      "Typesense photo indexing started " <>
+        "media_type=#{Map.get(photo_params, :media_type, "photo")} " <>
+        "source_url=#{format_log_url(Map.get(photo_params, :url))} " <>
+        "download_url=#{format_log_url(Map.get(photo_params, :download_url))}"
+    )
+
     photo_params
     |> PhotoService.create_photo!()
     |> include_created_photo_metadata(photo_params)
@@ -1676,6 +1806,10 @@ defmodule SaveIt.Bot do
     [
       detail_line("Message URL", Map.get(photo, "source_message_url")),
       detail_line("Original URL", Map.get(photo, "url")),
+      detail_line("Caption", Map.get(photo, "caption")),
+      detail_line("Title", Map.get(photo, "title")),
+      detail_line("Description", Map.get(photo, "description")),
+      detail_line("Keywords", detail_keywords(Map.get(photo, "keywords"))),
       detail_line("Saved at", saved_at(photo, reply_to_message))
     ]
     |> Enum.reject(&is_nil/1)
@@ -1685,6 +1819,9 @@ defmodule SaveIt.Bot do
   defp detail_line(_label, nil), do: nil
   defp detail_line(_label, ""), do: nil
   defp detail_line(label, value), do: "#{label}: #{value}"
+
+  defp detail_keywords([_ | _] = keywords), do: Enum.join(keywords, ", ")
+  defp detail_keywords(_keywords), do: nil
 
   defp saved_at(photo, reply_to_message) do
     format_unix_time(Map.get(photo, "inserted_at") || Map.get(reply_to_message, :date))

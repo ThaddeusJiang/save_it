@@ -7,8 +7,13 @@ defmodule SmallSdk.Cobalt do
 
   def get_download_url(text) do
     url = String.split(text, "?") |> hd()
+    {api_url} = get_env()
 
-    req = build_request("/")
+    Logger.debug(
+      "Cobalt request started api_url=#{format_log_url(api_url)} source_url=#{format_log_url(url)}"
+    )
+
+    req = build_request("/", api_url)
     res = Req.post(req, json: %{url: url})
 
     case handle_response(res) do
@@ -37,9 +42,7 @@ defmodule SmallSdk.Cobalt do
     {api_url}
   end
 
-  defp build_request(path) do
-    {api_url} = get_env()
-
+  defp build_request(path, api_url) do
     Req.new(
       base_url: api_url,
       url: path,
@@ -48,6 +51,21 @@ defmodule SmallSdk.Cobalt do
         {"Content-Type", "application/json"}
       ]
     )
+  end
+
+  defp format_log_url(url) when is_binary(url) do
+    url
+    |> remove_query_and_fragment()
+    |> inspect()
+  end
+
+  defp remove_query_and_fragment(url) do
+    uri = URI.parse(url)
+
+    %URI{uri | query: nil, fragment: nil}
+    |> URI.to_string()
+  rescue
+    _ -> url
   end
 
   defp normalize_tunnel_url(download_url) do

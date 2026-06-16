@@ -11,10 +11,13 @@ before the CalVer migration retain their original version labels.
 ### Changed
 
 - Make the save data directory configurable with `SAVE_IT_DATA_DIR`, defaulting to `./data` locally and `/data` in the Docker image, with Docker Compose persisting `/data` on a named volume.
+- Store URL Open Graph metadata in dedicated Typesense fields instead of using it as the saved caption, keeping captions limited to user-provided Telegram text.
+- Use local Twitter cookies from `cobalt-cookies.json` to fetch authenticated X metadata for login-restricted posts before falling back to public Open Graph metadata.
 
 ### Fixed
 
 - Render successful resource creation info logs in green in runtime logger output.
+- Send and index a generated preview image when a downloaded URL video is too large for Telegram video upload, while still saving the downloaded video locally.
 - Use random UUIDv7 filenames for downloaded resources while preserving the original file extension.
 - Preserve URL video preview aspect ratios by sending accurate display dimensions and square-pixel Telegram covers/thumbnails.
 
