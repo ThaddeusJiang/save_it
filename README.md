@@ -72,6 +72,16 @@ Save the file as `cobalt-cookies.json` at the repository root before starting Do
 docker-compose --profile prod up -d
 ```
 
+## Development
+
+Local development commands are available as Mix aliases:
+
+```sh
+mix setup   # deps.get + ts.migrate
+mix dev     # run the bot with iex --no-halt
+mix reset   # remove local runtime data directory (`data`)
+```
+
 ## Build with
 
 - [Elixir](https://elixir-lang.org/)
