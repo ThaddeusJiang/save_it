@@ -668,14 +668,36 @@ defmodule SaveIt.Bot do
             "download_url=#{format_log_url(context.download_url)}"
         )
 
-        update_message(context.chat_id, context.progress_message_id, Enum.slice(@progress, 0..2))
+        if url_download_media_file?(file.file_name) do
+          update_message(
+            context.chat_id,
+            context.progress_message_id,
+            Enum.slice(@progress, 0..2)
+          )
 
-        bot_send_downloaded_file(context.chat_id, file, download_send_opts(context))
+          bot_send_downloaded_file(context.chat_id, file, download_send_opts(context))
 
-        finalize_single_download(context, file)
+          finalize_single_download(context, file)
+        else
+          handle_non_media_download(context)
+        end
 
       {:error, reason} ->
         handle_download_failure(context, "💔 Failed downloading file.", reason)
+    end
+  end
+
+  defp handle_non_media_download(%DownloadContext{} = context) do
+    case download_fallback_thumbnail(context) do
+      {:ok, %DownloadedFile{} = file, source} ->
+        log_non_media_fallback_success(source)
+        save_thumbnail_fallback(context, file, source)
+
+      {:error, _fallback_reasons} ->
+        Logger.warning("No thumbnail fallback available after non-media URL download")
+
+        update_message(context.chat_id, context.progress_message_id, "💔 No image preview found.")
+        :error
     end
   end
 
@@ -715,6 +737,14 @@ defmodule SaveIt.Bot do
 
   defp log_thumbnail_fallback_success(:webpage_preview) do
     Logger.warning("Saved webpage preview fallback after link download failed")
+  end
+
+  defp log_non_media_fallback_success(:telegram_thumbnail) do
+    Logger.warning("Saved Telegram thumbnail fallback after non-media URL download")
+  end
+
+  defp log_non_media_fallback_success(:webpage_preview) do
+    Logger.warning("Saved webpage preview fallback after non-media URL download")
   end
 
   defp save_thumbnail_fallback(%DownloadContext{} = context, %DownloadedFile{} = file, source) do
@@ -759,8 +789,7 @@ defmodule SaveIt.Bot do
     preview_url = link_preview_url(message)
     fetch_original? = user_text_caption(message) == ""
 
-    thumbnail_needs_metadata? =
-      Keyword.get(opts, :store_thumbnail_url?, true) and is_binary(preview_url)
+    thumbnail_needs_metadata? = Keyword.get(opts, :store_thumbnail_url?, true)
 
     UrlMetadata.metadata_page_url(original_url, preview_url,
       fetch_original?: fetch_original? or thumbnail_needs_metadata?
@@ -1010,14 +1039,13 @@ defmodule SaveIt.Bot do
 
   defp bot_send_downloaded_file(chat_id, %DownloadedFile{} = file, opts) do
     store_download_url? = Keyword.get(opts, :store_download_url?, true)
+    download_url = download_url_for_file(file, opts, store_download_url?)
 
     opts =
       opts
       |> Keyword.delete(:store_download_url?)
-      |> put_optional_keyword(
-        :download_url,
-        download_url_for_file(file, opts, store_download_url?)
-      )
+      |> Keyword.delete(:download_url)
+      |> put_optional_keyword(:download_url, download_url)
 
     bot_send_file(
       chat_id,
@@ -1546,6 +1574,10 @@ defmodule SaveIt.Bot do
 
   defp image_file?(file_name) do
     file_extension(file_name) in [".png", ".jpg", ".jpeg"]
+  end
+
+  defp url_download_media_file?(file_name) do
+    file_extension(file_name) in [".png", ".jpg", ".jpeg", ".mp4", ".gif"]
   end
 
   defp encode_file_content({:file, file}) do

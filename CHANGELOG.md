@@ -17,6 +17,7 @@ before the CalVer migration retain their original version labels.
 ### Fixed
 
 - Render successful resource creation info logs in green in runtime logger output.
+- Save a webpage `og:image` preview when a URL resolves to a non-media resource instead of storing the resolved HTML or document file.
 - Send and index a generated preview image when a downloaded URL video is too large for Telegram video upload, while still saving the downloaded video locally.
 - Use random UUIDv7 filenames for downloaded resources while preserving the original file extension.
 - Preserve URL video preview aspect ratios by sending accurate display dimensions and square-pixel Telegram covers/thumbnails.
