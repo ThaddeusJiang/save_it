@@ -45,7 +45,7 @@ defmodule SaveIt.Bot do
   command("search", description: "Search photos")
   command("similar", description: "Find similar photos")
   command("delete", description: "Delete message")
-  command("detail", description: "Show photo details")
+  command("detail", description: "Show media details")
 
   command("login", description: "Login")
   command("code", description: "Get code for login")
@@ -170,16 +170,16 @@ defmodule SaveIt.Bot do
   end
 
   def handle({:command, :detail, %{chat: chat, reply_to_message: nil}}, _context) do
-    send_message(chat.id, "reply a photo with /detail command.")
+    send_message(chat.id, "reply a photo or video with /detail command.")
   end
 
   def handle({:command, :detail, %{chat: chat, reply_to_message: reply_to_message}}, _context) do
-    case Map.get(reply_to_message, :photo) do
-      [_ | _] = photos ->
-        handle_detail_command(chat.id, reply_to_message, photos)
+    case detail_media_file_id(reply_to_message) do
+      file_id when is_binary(file_id) ->
+        handle_detail_command(chat.id, reply_to_message, file_id)
 
       _ ->
-        send_message(chat.id, "reply a photo with /detail command.")
+        send_message(chat.id, "reply a photo or video with /detail command.")
     end
   end
 
@@ -1835,17 +1835,22 @@ defmodule SaveIt.Bot do
     delete_message(chat_id, message_id)
   end
 
-  defp handle_detail_command(chat_id, reply_to_message, photos) do
-    file_id = photos |> List.last() |> Map.get(:file_id)
-
+  defp handle_detail_command(chat_id, reply_to_message, file_id) do
     case safe_typesense_get_photo(file_id, chat_id) do
       nil ->
-        send_message(chat_id, "Photo details not found.")
+        send_message(chat_id, "Media details not found.")
 
       photo ->
         send_message(chat_id, detail_message(reply_to_message, photo))
     end
   end
+
+  defp detail_media_file_id(%{photo: [_ | _] = photos}) do
+    photos |> List.last() |> Map.get(:file_id)
+  end
+
+  defp detail_media_file_id(%{video: %{file_id: file_id}}), do: file_id
+  defp detail_media_file_id(_reply_to_message), do: nil
 
   defp detail_message(reply_to_message, photo) do
     [
