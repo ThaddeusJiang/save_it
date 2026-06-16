@@ -15,6 +15,14 @@ defmodule SaveIt.MixProjectTest do
     assert SaveIt.MixProject.cli()[:preferred_envs][:coverage] == :test
   end
 
+  test "configures local development lifecycle aliases" do
+    aliases = SaveIt.MixProject.project() |> Keyword.fetch!(:aliases)
+
+    assert Keyword.fetch!(aliases, :setup) == ["deps.get", "ts.migrate"]
+    assert Keyword.fetch!(aliases, :dev) == "run --no-halt"
+    assert Keyword.fetch!(aliases, :reset) == "cmd rm -rf data"
+  end
+
   test "runs Typesense maintenance commands without compiling the application" do
     aliases = SaveIt.MixProject.project() |> Keyword.fetch!(:aliases)
 

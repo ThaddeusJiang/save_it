@@ -18,7 +18,7 @@ Run from the repository root:
 ```bash
 mise trust
 mise install
-mix deps.get
+mix setup
 ```
 
 If `mise.toml` is missing in the current directory, move to the parent directory and retry the `mise` commands.
@@ -41,7 +41,7 @@ Run the bot:
 
 ```bash
 export TELEGRAM_BOT_TOKEN=<YOUR_TELEGRAM_BOT_TOKEN>
-iex -S mix run --no-halt
+mix dev
 ```
 
 ## Reset Local Data
@@ -50,7 +50,7 @@ Reset local Docker services and runtime data from the repository root:
 
 ```bash
 docker compose down --volumes
-rm -rf data
+mix reset
 ```
 
 ## Local Checks
