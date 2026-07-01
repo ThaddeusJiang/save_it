@@ -1452,15 +1452,7 @@ defmodule SaveIt.BotTest do
     refute Map.has_key?(document, "url")
     refute Map.has_key?(document, "download_url")
 
-    assert_receive {:google_drive_upload_request, drive_env}
-
-    assert URI.to_string(drive_env.url) ==
-             "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart"
-
-    assert drive_env.headers["authorization"] == ["Bearer test-drive-token"]
-    drive_body = IO.iodata_to_binary(drive_env.body)
-    assert binary_contains?(drive_body, ~s("name":"direct-photo.jpg"))
-    assert binary_contains?(drive_body, "test-drive-folder")
+    assert_google_drive_resumable_upload("direct-photo.jpg", test_jpeg())
     assert File.read(stored_file_path) == {:ok, test_jpeg()}
   end
 
@@ -1624,12 +1616,7 @@ defmodule SaveIt.BotTest do
     refute Map.has_key?(document, "source_message_id")
     assert document["source_message_url"] == "https://t.me/save_it_directs/322"
 
-    assert_receive {:google_drive_upload_request, drive_env}
-    assert drive_env.headers["authorization"] == ["Bearer test-drive-token"]
-    drive_body = IO.iodata_to_binary(drive_env.body)
-    assert binary_contains?(drive_body, ~s("name":"direct-video.mp4"))
-    assert binary_contains?(drive_body, "test-drive-folder")
-    assert binary_contains?(drive_body, test_mp4())
+    assert_google_drive_resumable_upload("direct-video.mp4", test_mp4())
     assert File.read(stored_file_path) == {:ok, test_mp4()}
 
     assert_receive {:exgram_request, :post, "/bottest-token/sendMessage",
@@ -1978,6 +1965,40 @@ defmodule SaveIt.BotTest do
     Path.join([FileHelper.data_dir(), "settings", to_string(chat_id)])
   end
 
+  defp assert_google_drive_resumable_upload(file_name, file_content) do
+    assert_receive {:google_drive_upload_request, create_session_request}
+
+    assert URI.to_string(create_session_request.url) ==
+             "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable"
+
+    assert create_session_request.headers["authorization"] == ["Bearer test-drive-token"]
+    assert create_session_request.headers["x-upload-content-type"] == ["application/octet-stream"]
+
+    assert create_session_request.headers["x-upload-content-length"] == [
+             Integer.to_string(byte_size(file_content))
+           ]
+
+    assert Jason.decode!(IO.iodata_to_binary(create_session_request.body)) == %{
+             "name" => file_name,
+             "parents" => ["test-drive-folder"]
+           }
+
+    assert_receive {:google_drive_upload_request, upload_request}
+    assert URI.to_string(upload_request.url) == "https://uploads.example/session"
+    assert upload_request.headers["authorization"] == ["Bearer test-drive-token"]
+    assert upload_request.headers["content-type"] == ["application/octet-stream"]
+
+    assert upload_request.headers["content-length"] == [
+             Integer.to_string(byte_size(file_content))
+           ]
+
+    assert upload_request.headers["content-range"] == [
+             "bytes 0-#{byte_size(file_content) - 1}/#{byte_size(file_content)}"
+           ]
+
+    assert IO.iodata_to_binary(upload_request.body) == file_content
+  end
+
   def test_jpeg do
     <<255, 216, 255, 224, 0, 16, 74, 70, 73, 70>>
   end
@@ -1996,10 +2017,6 @@ defmodule SaveIt.BotTest do
 
   def test_mp4 do
     <<0, 0, 0, 24, 102, 116, 121, 112, 109, 112, 52, 50>>
-  end
-
-  defp binary_contains?(binary, pattern) do
-    :binary.match(binary, pattern) != :nomatch
   end
 
   defp multipart_field(multipart, name) do
@@ -2365,7 +2382,20 @@ defmodule SaveIt.BotTest do
     def request(%Req.Request{} = request) do
       send(self(), {:google_drive_upload_request, request})
 
-      {request, %Req.Response{status: 200, body: %{"id" => "drive-file-id"}}}
+      response =
+        case {request.method, request.url.path, request.url.query} do
+          {:post, "/upload/drive/v3/files", "uploadType=resumable"} ->
+            Req.Response.new(
+              status: 200,
+              headers: [{"location", "https://uploads.example/session"}],
+              body: ""
+            )
+
+          {:put, "/session", nil} ->
+            %Req.Response{status: 201, body: %{"id" => "drive-file-id"}}
+        end
+
+      {request, response}
     end
   end
 
