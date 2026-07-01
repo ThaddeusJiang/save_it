@@ -8,6 +8,8 @@ before the CalVer migration retain their original version labels.
 
 ## [Unreleased]
 
+## [2026.7.2-rc.1] - 2026-07-02
+
 ### Fixed
 
 - Upload Google Drive backups with resumable sessions so large media uploads can recover from timeout responses after Drive has received the file.
