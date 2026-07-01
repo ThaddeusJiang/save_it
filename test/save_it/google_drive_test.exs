@@ -1,6 +1,8 @@
 defmodule SaveIt.GoogleDriveTest do
   use ExUnit.Case, async: false
 
+  import ExUnit.CaptureLog
+
   @moduletag :tmp_dir
 
   alias SaveIt.FileHelper
@@ -32,8 +34,13 @@ defmodule SaveIt.GoogleDriveTest do
 
     configure_google_drive(chat_id)
 
-    assert {:ok, %{"id" => "drive-file-id"}} =
-             GoogleDrive.upload_file_content(chat_id, file_content, "large-video.mp4")
+    log =
+      capture_log(fn ->
+        assert {:ok, %{"id" => "drive-file-id"}} =
+                 GoogleDrive.upload_file_content(chat_id, file_content, "large-video.mp4")
+      end)
+
+    assert log =~ "google_drive_upload_completed file_name=large-video.mp4"
 
     total_size = byte_size(file_content)
 
@@ -75,6 +82,17 @@ defmodule SaveIt.GoogleDriveTest do
     assert final_chunk_request.headers["content-length"] == ["3"]
     assert final_chunk_request.headers["content-range"] == ["bytes 8388608-8388610/#{total_size}"]
     assert IO.iodata_to_binary(final_chunk_request.body) == "end"
+  end
+
+  test "logs when file content upload is skipped because Google Drive is not configured" do
+    log =
+      capture_log(fn ->
+        assert {:ok, :skipped} =
+                 GoogleDrive.upload_file_content(12_345, "file content", "missing-config.mp4")
+      end)
+
+    assert log =~ "google_drive_upload_skipped reason=not_configured file_name=missing-config.mp4"
+    refute_receive {:google_drive_request, _request}
   end
 
   test "checks resumable upload status after a timed-out chunk" do

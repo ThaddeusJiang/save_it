@@ -44,6 +44,8 @@ defmodule SaveIt.GoogleDrive do
         upload_file(file_name, file_content, folder_id, access_token)
 
       :not_configured ->
+        Logger.info("google_drive_upload_skipped reason=not_configured file_name=#{file_name}")
+
         {:ok, :skipped}
     end
   end
@@ -57,6 +59,10 @@ defmodule SaveIt.GoogleDrive do
         end)
 
       :not_configured ->
+        Logger.info(
+          "google_drive_upload_skipped reason=not_configured file_count=#{length(files)}"
+        )
+
         {:ok, :skipped}
     end
   end
@@ -67,11 +73,32 @@ defmodule SaveIt.GoogleDrive do
       parents: [folder_id]
     }
 
-    with {:ok, session_url} <-
-           create_resumable_upload_session(metadata, byte_size(file_content), access_token) do
-      upload_resumable_content(session_url, file_content, access_token)
+    result =
+      with {:ok, session_url} <-
+             create_resumable_upload_session(metadata, byte_size(file_content), access_token) do
+        upload_resumable_content(session_url, file_content, access_token)
+      end
+
+    case result do
+      {:ok, _body} ->
+        Logger.info("google_drive_upload_completed file_name=#{file_name}")
+
+      {:error, reason} ->
+        Logger.warning(
+          "google_drive_upload_failed file_name=#{file_name} #{upload_failure_details(reason)}"
+        )
     end
+
+    result
   end
+
+  defp upload_failure_details(%{status: status}), do: "status=#{status}"
+
+  defp upload_failure_details(%Req.TransportError{reason: reason}),
+    do: "reason=#{inspect(reason)}"
+
+  defp upload_failure_details(reason) when is_atom(reason), do: "reason=#{reason}"
+  defp upload_failure_details(_reason), do: "reason=unknown"
 
   def upload_file(chat_id, file_path) do
     # settings = SettingsStore.get(chat_id)
@@ -81,6 +108,10 @@ defmodule SaveIt.GoogleDrive do
         upload_file_path(file_path, folder_id, access_token)
 
       :not_configured ->
+        Logger.info(
+          "google_drive_upload_skipped reason=not_configured file_name=#{Path.basename(file_path)}"
+        )
+
         {:ok, :skipped}
     end
   end
