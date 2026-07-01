@@ -11,7 +11,8 @@ defmodule SaveIt.GoogleDrive do
   require Logger
 
   @google_api_url "https://www.googleapis.com"
-  @upload_type "multipart"
+  @upload_content_type "application/octet-stream"
+  @resumable_upload_chunk_size 8 * 1024 * 1024
 
   def configured?(chat_id) do
     match?({:ok, _folder_id, _access_token}, upload_config(chat_id))
@@ -66,22 +67,10 @@ defmodule SaveIt.GoogleDrive do
       parents: [folder_id]
     }
 
-    boundary = "foo_bar_baz"
-    multipart_body = build_multipart_body(metadata, file_content, boundary)
-
-    headers = [
-      {"Authorization", "Bearer #{access_token}"},
-      {"Content-Type", "multipart/related; boundary=#{boundary}"}
-    ]
-
-    "/upload/drive/v3/files"
-    |> build_request()
-    |> Req.post(
-      body: multipart_body,
-      params: [uploadType: @upload_type],
-      headers: headers
-    )
-    |> handle_response()
+    with {:ok, session_url} <-
+           create_resumable_upload_session(metadata, byte_size(file_content), access_token) do
+      upload_resumable_content(session_url, file_content, access_token)
+    end
   end
 
   def upload_file(chat_id, file_path) do
@@ -97,30 +86,8 @@ defmodule SaveIt.GoogleDrive do
   end
 
   defp upload_file_path(file_path, folder_id, access_token) do
-    metadata = %{
-      name: Path.basename(file_path),
-      parents: [folder_id]
-    }
-
     file_content = File.read!(file_path)
-    boundary = "foo_bar_baz"
-    multipart_body = build_multipart_body(metadata, file_content, boundary)
-
-    headers = [
-      {"Authorization", "Bearer #{access_token}"},
-      {"Content-Type", "multipart/related; boundary=#{boundary}"},
-      {"Content-Length", "*/*"}
-      # {"Content-Length", byte_size(multipart_body) |> Integer.to_string()}
-    ]
-
-    "/upload/drive/v3/files"
-    |> build_request()
-    |> Req.post(
-      body: multipart_body,
-      params: [uploadType: @upload_type],
-      headers: headers
-    )
-    |> handle_response()
+    upload_file(Path.basename(file_path), file_content, folder_id, access_token)
   end
 
   defp upload_config(chat_id) do
@@ -137,40 +104,218 @@ defmodule SaveIt.GoogleDrive do
   defp configured_value?(value) when is_binary(value), do: String.trim(value) != ""
   defp configured_value?(_value), do: false
 
-  defp build_request(path) do
+  defp create_resumable_upload_session(metadata, file_size, access_token) do
+    headers = [
+      {"Authorization", "Bearer #{access_token}"},
+      {"Content-Type", "application/json; charset=UTF-8"},
+      {"X-Upload-Content-Type", @upload_content_type},
+      {"X-Upload-Content-Length", Integer.to_string(file_size)}
+    ]
+
+    "/upload/drive/v3/files"
+    |> build_request()
+    |> Req.post(
+      body: Jason.encode!(metadata),
+      params: [uploadType: "resumable"],
+      headers: headers
+    )
+    |> handle_resumable_session_response()
+  end
+
+  defp upload_resumable_content(session_url, file_content, access_token) do
+    upload_resumable_chunk(session_url, file_content, byte_size(file_content), 0, access_token)
+  end
+
+  defp upload_resumable_chunk(_session_url, _file_content, 0, 0, _access_token) do
+    {:ok, %{}}
+  end
+
+  defp upload_resumable_chunk(session_url, file_content, total_size, offset, access_token)
+       when offset < total_size do
+    chunk_size = min(@resumable_upload_chunk_size, total_size - offset)
+    chunk = :binary.part(file_content, offset, chunk_size)
+    end_offset = offset + chunk_size - 1
+
+    headers = [
+      {"Authorization", "Bearer #{access_token}"},
+      {"Content-Type", @upload_content_type},
+      {"Content-Length", Integer.to_string(chunk_size)},
+      {"Content-Range", "bytes #{offset}-#{end_offset}/#{total_size}"}
+    ]
+
+    session_url
+    |> build_request()
+    |> Req.put(body: chunk, headers: headers)
+    |> handle_resumable_upload_response(
+      session_url,
+      file_content,
+      total_size,
+      offset,
+      access_token
+    )
+  end
+
+  defp build_request(url) do
     req_options =
       :save_it
       |> Application.get_env(:google_drive_req_options, [])
-      |> Keyword.put_new(
-        :base_url,
-        Application.get_env(:save_it, :google_api_url, @google_api_url)
-      )
       |> Keyword.put_new(:retry, false)
-      |> Keyword.put(:url, path)
+      |> maybe_put_base_url(url)
+      |> Keyword.put(:url, url)
       |> Keyword.put_new(:headers, [{"Content-Type", "application/json"}])
 
     Req.new(req_options)
   end
 
-  defp build_multipart_body(metadata, file_content, boundary) do
-    """
-    --#{boundary}
-    Content-Type: application/json; charset=UTF-8
+  defp maybe_put_base_url(req_options, url) do
+    if absolute_url?(url) do
+      Keyword.delete(req_options, :base_url)
+    else
+      Keyword.put_new(
+        req_options,
+        :base_url,
+        Application.get_env(:save_it, :google_api_url, @google_api_url)
+      )
+    end
+  end
 
-    #{Jason.encode!(metadata)}
-    --#{boundary}
-    Content-Type: application/octet-stream
+  defp absolute_url?(url) do
+    url
+    |> URI.parse()
+    |> Map.get(:scheme)
+    |> is_binary()
+  end
 
-    #{file_content}
-    --#{boundary}--
-    """
+  defp handle_resumable_session_response({:ok, %{status: status} = response})
+       when status in [200, 201] do
+    case Req.Response.get_header(response, "location") do
+      [session_url | _] ->
+        {:ok, session_url}
+
+      [] ->
+        Logger.error("Google Drive resumable upload session missing location")
+        {:error, :missing_resumable_upload_location}
+    end
+  end
+
+  defp handle_resumable_session_response(response) do
+    handle_response(response)
+  end
+
+  defp handle_resumable_upload_response(
+         {:ok, %{status: status, body: body}},
+         _session_url,
+         _file_content,
+         _total_size,
+         _next_offset,
+         _access_token
+       )
+       when status in [200, 201] do
+    {:ok, body}
+  end
+
+  defp handle_resumable_upload_response(
+         {:ok, %{status: 308} = response},
+         session_url,
+         file_content,
+         total_size,
+         fallback_offset,
+         access_token
+       ) do
+    offset = next_resumable_offset(response, fallback_offset)
+    upload_resumable_chunk(session_url, file_content, total_size, offset, access_token)
+  end
+
+  defp handle_resumable_upload_response(
+         {:error, %Req.TransportError{}},
+         session_url,
+         file_content,
+         total_size,
+         _next_offset,
+         access_token
+       ) do
+    session_url
+    |> request_resumable_upload_status(total_size, access_token)
+    |> handle_resumable_status_response(session_url, file_content, total_size, access_token)
+  end
+
+  defp handle_resumable_upload_response(
+         response,
+         _session_url,
+         _file_content,
+         _total_size,
+         _next_offset,
+         _access_token
+       ) do
+    handle_response(response)
+  end
+
+  defp request_resumable_upload_status(session_url, total_size, access_token) do
+    headers = [
+      {"Authorization", "Bearer #{access_token}"},
+      {"Content-Length", "0"},
+      {"Content-Range", "*/#{total_size}"}
+    ]
+
+    session_url
+    |> build_request()
+    |> Req.put(body: "", headers: headers)
+  end
+
+  defp handle_resumable_status_response(
+         {:ok, %{status: status, body: body}},
+         _session_url,
+         _file_content,
+         _total_size,
+         _access_token
+       )
+       when status in [200, 201] do
+    {:ok, body}
+  end
+
+  defp handle_resumable_status_response(
+         {:ok, %{status: 308} = response},
+         session_url,
+         file_content,
+         total_size,
+         access_token
+       ) do
+    offset = next_resumable_offset(response, 0)
+    upload_resumable_chunk(session_url, file_content, total_size, offset, access_token)
+  end
+
+  defp handle_resumable_status_response(
+         response,
+         _session_url,
+         _file_content,
+         _total_size,
+         _access_token
+       ) do
+    handle_response(response)
+  end
+
+  defp next_resumable_offset(response, fallback_offset) do
+    case Req.Response.get_header(response, "range") do
+      [range | _] ->
+        range
+        |> String.split("-")
+        |> List.last()
+        |> Integer.parse()
+        |> case do
+          {last_byte, ""} -> last_byte + 1
+          _ -> fallback_offset
+        end
+
+      [] ->
+        fallback_offset
+    end
   end
 
   defp handle_response({:ok, %{status: 200, body: %{"files" => files}}}) do
     {:ok, files}
   end
 
-  defp handle_response({:ok, %{status: 200, body: body}}) do
+  defp handle_response({:ok, %{status: status, body: body}}) when status in [200, 201] do
     {:ok, body}
   end
 
