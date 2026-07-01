@@ -114,6 +114,29 @@ defmodule SaveIt.BotTest do
     assert sent_message_body().text =~ "Google Drive connected"
   end
 
+  test "google drive login clears the pending device code when OAuth client is invalid",
+       _context do
+    configure_invalid_google_oauth_client()
+    FileHelper.set_google_device_code(12_345, "device-code")
+
+    message = %{
+      chat: %{id: 12_345, type: "private"},
+      from: %{id: 1, is_bot: false}
+    }
+
+    assert {:ok, %{message_id: 10}} = Bot.handle({:command, :google_drive_login, message}, nil)
+
+    assert_receive {:google_oauth_request, request}
+    assert request.method == :post
+    assert request.url.path == "/token"
+    assert FileHelper.get_google_device_code(12_345) == ""
+
+    sent_text = sent_message_body().text
+    assert sent_text =~ "Google Drive login configuration is invalid"
+    assert sent_text =~ "TVs and Limited Input devices"
+    assert sent_text =~ "/google_drive_login"
+  end
+
   test "google drive folder stores the configured folder id", _context do
     message = %{
       chat: %{id: 12_345, type: "private"},
@@ -1961,6 +1984,15 @@ defmodule SaveIt.BotTest do
     )
   end
 
+  defp configure_invalid_google_oauth_client do
+    Application.put_env(:save_it, :google_oauth_client_id, "client-id")
+    Application.put_env(:save_it, :google_oauth_client_secret, "client-secret")
+
+    Application.put_env(:save_it, :google_oauth_req_options,
+      adapter: &__MODULE__.InvalidGoogleOAuthClientAdapter.request/1
+    )
+  end
+
   defp chat_settings_dir(chat_id) do
     Path.join([FileHelper.data_dir(), "settings", to_string(chat_id)])
   end
@@ -2417,6 +2449,21 @@ defmodule SaveIt.BotTest do
         end
 
       {request, %Req.Response{status: 200, body: response_body}}
+    end
+  end
+
+  defmodule InvalidGoogleOAuthClientAdapter do
+    def request(%Req.Request{} = request) do
+      send(self(), {:google_oauth_request, request})
+
+      {request,
+       %Req.Response{
+         status: 401,
+         body: %{
+           "error" => "invalid_client",
+           "error_description" => "The OAuth client was not found."
+         }
+       }}
     end
   end
 

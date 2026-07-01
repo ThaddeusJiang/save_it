@@ -35,6 +35,15 @@ defmodule SaveIt.GoogleOAuth2DeviceFlowTest do
     assert body =~ "scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fdrive.file"
   end
 
+  test "does not request a device code when OAuth config is incomplete" do
+    Application.put_env(:save_it, :google_oauth_client_secret, "")
+
+    assert {:error, {:missing_config, :google_oauth_client_secret}} =
+             GoogleOAuth2DeviceFlow.get_device_code()
+
+    refute_receive {:google_oauth_request, _request}
+  end
+
   test "exchanges a device code with a Req form request" do
     assert {:ok, %{"access_token" => "access-token"}} =
              GoogleOAuth2DeviceFlow.exchange_device_code_for_token("device-code")
