@@ -8,6 +8,11 @@ before the CalVer migration retain their original version labels.
 
 ## [Unreleased]
 
+### Fixed
+
+- Make Google Drive backup outcomes visible in runtime logs when uploads complete, fail, or are skipped because Drive is not configured.
+- Keep Google Drive login recoverable when Google rejects OAuth client configuration by clearing stuck pending device codes and showing actionable setup guidance.
+
 ## [2026.7.2-rc.1] - 2026-07-02
 
 ### Fixed

@@ -1782,6 +1782,14 @@ defmodule SaveIt.Bot do
         After approving access, run `/google_drive_login` again.
         """)
 
+      {:error, {:missing_config, key}} ->
+        Logger.error("Google Drive login config missing", key: key)
+        send_message(chat.id, missing_google_oauth_config_message(key))
+
+      {:error, %{body: %{"error" => "invalid_client"}}} ->
+        Logger.error("Google Drive login config invalid")
+        send_message(chat.id, invalid_google_oauth_client_message())
+
       {:error, _error} ->
         Logger.error("Failed to get Google Drive login code")
         send_message(chat.id, "Failed to get Google Drive login code.")
@@ -1802,6 +1810,15 @@ defmodule SaveIt.Bot do
         Approve access in your browser, then run `/google_drive_login` again.
         """)
 
+      {:error, {:missing_config, key}} ->
+        Logger.error("Google Drive login config missing", key: key)
+        send_message(chat.id, missing_google_oauth_config_message(key))
+
+      {:error, %{body: %{"error" => "invalid_client"}}} ->
+        FileHelper.set_google_device_code(chat.id, "")
+        Logger.error("Google Drive login config invalid")
+        send_message(chat.id, invalid_google_oauth_client_message())
+
       {:error, %{body: %{"error" => error}}} when error in ["access_denied", "expired_token"] ->
         FileHelper.set_google_device_code(chat.id, "")
 
@@ -1820,6 +1837,32 @@ defmodule SaveIt.Bot do
         Please run `/google_drive_login` again.
         """)
     end
+  end
+
+  defp missing_google_oauth_config_message(:google_oauth_client_id) do
+    """
+    Google Drive login is not configured.
+
+    Ask the bot operator to set GOOGLE_OAUTH_CLIENT_ID, then run `/google_drive_login` again.
+    """
+  end
+
+  defp missing_google_oauth_config_message(:google_oauth_client_secret) do
+    """
+    Google Drive login is not configured.
+
+    Ask the bot operator to set GOOGLE_OAUTH_CLIENT_SECRET, then run `/google_drive_login` again.
+    """
+  end
+
+  defp invalid_google_oauth_client_message do
+    """
+    Google Drive login configuration is invalid.
+
+    Ask the bot operator to verify GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET match a Google OAuth client whose application type is TVs and Limited Input devices.
+
+    After fixing the configuration, run `/google_drive_login` again.
+    """
   end
 
   defp google_drive_login_permission(%{type: "private"}, _from), do: :ok
