@@ -8,6 +8,8 @@ before the CalVer migration retain their original version labels.
 
 ## [Unreleased]
 
+## [2026.7.2] - 2026-07-02
+
 ### Fixed
 
 - Make Google Drive backup outcomes visible in runtime logs when uploads complete, fail, or are skipped because Drive is not configured.
