@@ -8,7 +8,7 @@ if config_env() != :test do
 
   config :save_it,
     telegram_bot_token: telegram_bot_token,
-    start_bot?: true
+    telegram_bot_enabled?: true
 
   config :ex_gram,
     token: telegram_bot_token,
