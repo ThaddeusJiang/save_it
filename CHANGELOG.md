@@ -8,6 +8,8 @@ before the CalVer migration retain their original version labels.
 
 ## [Unreleased]
 
+## [2026.7.6-rc.1] - 2026-07-06
+
 ### Fixed
 
 - Automatically retry URL saves once when Telegram rate limits the initial bot response, and tell users when the retry is scheduled.
