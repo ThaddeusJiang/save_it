@@ -33,6 +33,7 @@ defmodule SaveIt.Bot do
 
   @similar_photos_found_message "Similar photos found."
   @telegram_upload_max_file_size 50 * 1024 * 1024
+  @telegram_rate_limit_max_retries 1
   @telegram_file_too_large_message "💔 File is too large for Telegram Bot API upload."
   @telegram_video_too_large_thumbnail_message "Video downloaded; Telegram upload was too large."
 
@@ -471,15 +472,47 @@ defmodule SaveIt.Bot do
     end
   end
 
-  defp process_url(chat, url, message) do
+  defp process_url(chat, url, message), do: process_url(chat, url, message, 0)
+
+  defp process_url(chat, url, message, retry_attempt) do
     chat_id = chat.id
 
     Logger.debug("URL processing started chat_id=#{chat_id} source_url=#{format_log_url(url)}")
 
-    {:ok, progress_message} = send_message(chat_id, Enum.at(@progress, 0))
+    case send_message(chat_id, Enum.at(@progress, 0), on_rate_limit: :return) do
+      {:ok, progress_message} ->
+        continue_process_url(chat, url, message, progress_message)
 
+      {:error, {:telegram_rate_limited, retry_after}} ->
+        handle_rate_limited_url_progress(chat, url, message, retry_after, retry_attempt)
+
+      {:error, reason} ->
+        Logger.warning(
+          "URL processing stopped before progress message source_url=#{format_log_url(url)} " <>
+            "reason=#{format_log_value(reason)}"
+        )
+
+        {:error, reason}
+    end
+  end
+
+  defp handle_rate_limited_url_progress(chat, url, message, retry_after, retry_attempt) do
+    if retry_attempt < @telegram_rate_limit_max_retries do
+      schedule_telegram_rate_limit_retry(chat, url, message, retry_after, retry_attempt + 1)
+    else
+      schedule_telegram_rate_limit_notice(
+        chat.id,
+        retry_after,
+        telegram_rate_limit_final_message()
+      )
+    end
+
+    :error
+  end
+
+  defp continue_process_url(chat, url, message, progress_message) do
     context = %DownloadContext{
-      chat_id: chat_id,
+      chat_id: chat.id,
       chat: chat,
       progress_message_id: progress_message.message_id,
       original_url: url,
@@ -892,8 +925,10 @@ defmodule SaveIt.Bot do
 
   defp strip_urls_from_text(_text), do: ""
 
-  defp send_message(chat_id, text) do
-    ExGram.send_message(chat_id, text)
+  defp send_message(chat_id, text, opts \\ []) do
+    chat_id
+    |> ExGram.send_message(text)
+    |> handle_telegram_feedback_result(chat_id, opts)
   end
 
   defp about_chat_type(%{type: "private"}), do: "dm"
@@ -943,12 +978,164 @@ defmodule SaveIt.Bot do
   defp about_privacy_mode_status(_bot_info), do: "unknown"
 
   defp update_message(chat_id, message_id, texts) when is_list(texts) do
-    ExGram.edit_message_text(Enum.join(texts, "\n"), chat_id: chat_id, message_id: message_id)
+    texts
+    |> Enum.join("\n")
+    |> ExGram.edit_message_text(chat_id: chat_id, message_id: message_id)
+    |> handle_telegram_feedback_result(chat_id, [])
   end
 
   defp update_message(chat_id, message_id, text) do
-    ExGram.edit_message_text(text, chat_id: chat_id, message_id: message_id)
+    text
+    |> ExGram.edit_message_text(chat_id: chat_id, message_id: message_id)
+    |> handle_telegram_feedback_result(chat_id, [])
   end
+
+  defp handle_telegram_feedback_result({:error, %ExGram.Error{code: 429} = error}, chat_id, opts) do
+    retry_after = telegram_retry_after(error)
+
+    Logger.warning(
+      "Telegram request rate limited chat_id=#{chat_id} " <>
+        "retry_after=#{format_log_value(retry_after)}"
+    )
+
+    case Keyword.get(opts, :on_rate_limit, :notify) do
+      :return ->
+        {:error, {:telegram_rate_limited, retry_after}}
+
+      _other ->
+        schedule_telegram_rate_limit_notice(chat_id, retry_after)
+        {:error, :telegram_rate_limited}
+    end
+  end
+
+  defp handle_telegram_feedback_result(result, _chat_id, _opts), do: result
+
+  defp schedule_telegram_rate_limit_notice(chat_id, retry_after) do
+    schedule_telegram_rate_limit_notice(
+      chat_id,
+      retry_after,
+      telegram_rate_limit_message(retry_after)
+    )
+  end
+
+  defp schedule_telegram_rate_limit_notice(chat_id, retry_after, message) do
+    delay_ms = telegram_rate_limit_delay_ms(retry_after)
+
+    Task.start(fn ->
+      if delay_ms > 0, do: Process.sleep(delay_ms)
+
+      send_telegram_rate_limit_notice(chat_id, message)
+    end)
+
+    :ok
+  end
+
+  defp schedule_telegram_rate_limit_retry(chat, url, message, retry_after, retry_attempt) do
+    delay_ms = telegram_rate_limit_delay_ms(retry_after)
+    retry_at = telegram_retry_at(retry_after)
+    notice = telegram_rate_limit_retry_message(retry_after, retry_at)
+
+    Task.start(fn ->
+      if delay_ms > 0, do: Process.sleep(delay_ms)
+
+      send_telegram_rate_limit_notice(chat.id, notice)
+
+      chat
+      |> process_url(url, message, retry_attempt)
+      |> maybe_delete_source_message_after_retry(chat, message)
+    end)
+
+    :ok
+  end
+
+  defp send_telegram_rate_limit_notice(chat_id, message) do
+    case ExGram.send_message(chat_id, message) do
+      {:ok, _response} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning(
+          "Telegram rate limit notice failed chat_id=#{chat_id} " <>
+            "reason=#{format_log_value(reason)}"
+        )
+    end
+  end
+
+  defp maybe_delete_source_message_after_retry(:ok, chat, message) do
+    case message_id(message) do
+      message_id when is_integer(message_id) -> delete_message(chat.id, message_id)
+      _ -> :ok
+    end
+  end
+
+  defp maybe_delete_source_message_after_retry(_result, _chat, _message), do: :ok
+
+  defp telegram_rate_limit_delay_ms(retry_after) do
+    case Application.fetch_env(:save_it, :telegram_rate_limit_delay_ms) do
+      {:ok, delay_ms} when is_integer(delay_ms) and delay_ms >= 0 -> delay_ms
+      _ -> telegram_retry_after_delay_ms(retry_after)
+    end
+  end
+
+  defp telegram_retry_after_delay_ms(retry_after) do
+    if is_integer(retry_after) and retry_after >= 0, do: retry_after * 1000, else: 0
+  end
+
+  defp telegram_rate_limit_message(nil) do
+    "Telegram is rate limiting me. Please retry later."
+  end
+
+  defp telegram_rate_limit_message(retry_after) do
+    "Telegram is rate limiting me. Please retry after #{retry_after} seconds."
+  end
+
+  defp telegram_rate_limit_retry_message(nil, retry_at) do
+    "Telegram is rate limiting me. Next automatic retry is scheduled for " <>
+      "#{format_telegram_retry_at(retry_at)}. I will only retry automatically once."
+  end
+
+  defp telegram_rate_limit_retry_message(retry_after, retry_at) do
+    "Telegram is rate limiting me. Next automatic retry is scheduled for " <>
+      "#{format_telegram_retry_at(retry_at)} (in #{retry_after} seconds). " <>
+      "I will only retry automatically once."
+  end
+
+  defp telegram_rate_limit_final_message do
+    "Telegram is still rate limiting me. I will not retry automatically again. Please try again later."
+  end
+
+  defp telegram_retry_at(retry_after) when is_integer(retry_after) and retry_after >= 0 do
+    DateTime.utc_now()
+    |> DateTime.add(retry_after, :second)
+  end
+
+  defp telegram_retry_at(_retry_after), do: DateTime.utc_now()
+
+  defp format_telegram_retry_at(%DateTime{} = retry_at) do
+    Calendar.strftime(retry_at, "%Y-%m-%d %H:%M:%S UTC")
+  end
+
+  defp telegram_retry_after(%ExGram.Error{metadata: metadata}) when is_map(metadata) do
+    retry_after =
+      metadata
+      |> map_get(:parameters)
+      |> map_get(:retry_after)
+
+    normalize_retry_after(retry_after)
+  end
+
+  defp telegram_retry_after(_error), do: nil
+
+  defp normalize_retry_after(value) when is_integer(value) and value >= 0, do: value
+
+  defp normalize_retry_after(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {seconds, ""} when seconds >= 0 -> seconds
+      _ -> nil
+    end
+  end
+
+  defp normalize_retry_after(_value), do: nil
 
   defp delete_message(chat_id, message_id) do
     ExGram.delete_message(chat_id, message_id)

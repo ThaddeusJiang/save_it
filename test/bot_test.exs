@@ -711,6 +711,92 @@ defmodule SaveIt.BotTest do
            end)
   end
 
+  test "automatically retries once when Telegram rate limits the initial URL progress message", %{
+    base_url: base_url
+  } do
+    Application.put_env(:ex_gram, :adapter, __MODULE__.RateLimitedProgressMessageAdapter)
+    Application.put_env(:save_it, :telegram_rate_limit_delay_ms, 0)
+    Application.put_env(:save_it, :rate_limited_progress_failures, 1)
+    Application.put_env(:save_it, :test_pid, self())
+
+    original_url = base_url <> "/photo-page"
+
+    message = %{
+      chat: %{id: 12_345},
+      message_id: 109,
+      text: original_url
+    }
+
+    assert is_nil(Bot.handle({:text, original_url, message}, nil))
+
+    assert_receive {:exgram_request, :post, "/bottest-token/sendMessage",
+                    %{chat_id: 12_345, text: "Searching 🔎"}}
+
+    assert_receive {:exgram_request, :post, "/bottest-token/sendMessage",
+                    %{chat_id: 12_345, text: retry_notice}}
+
+    assert retry_notice =~ "Telegram is rate limiting me."
+    assert retry_notice =~ "Next automatic retry"
+    assert retry_notice =~ "in 37 seconds"
+    assert retry_notice =~ "only retry automatically once"
+
+    assert_receive {:exgram_request, :post, "/bottest-token/sendMessage",
+                    %{chat_id: 12_345, text: "Searching 🔎"}}
+
+    assert_receive {:test_http_request, :post, "/", cobalt_body}
+    assert Jason.decode!(cobalt_body) == %{"url" => original_url}
+    assert_receive {:test_http_request, :get, "/photo-page", ""}
+    assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
+
+    document = Jason.decode!(typesense_body)
+
+    assert document["url"] == original_url
+    assert document["file_id"] == "telegram-photo-file-id"
+    assert_receive {:exgram_request, :post, "/bottest-token/deleteMessage", %{message_id: 109}}
+  end
+
+  test "does not retry more than once when Telegram keeps rate limiting progress messages", %{
+    base_url: base_url
+  } do
+    Application.put_env(:ex_gram, :adapter, __MODULE__.RateLimitedProgressMessageAdapter)
+    Application.put_env(:save_it, :telegram_rate_limit_delay_ms, 0)
+    Application.put_env(:save_it, :rate_limited_progress_failures, 2)
+    Application.put_env(:save_it, :test_pid, self())
+
+    original_url = base_url <> "/photo-page"
+
+    message = %{
+      chat: %{id: 12_345},
+      message_id: 110,
+      text: original_url
+    }
+
+    assert is_nil(Bot.handle({:text, original_url, message}, nil))
+
+    assert_receive {:exgram_request, :post, "/bottest-token/sendMessage",
+                    %{chat_id: 12_345, text: "Searching 🔎"}}
+
+    assert_receive {:exgram_request, :post, "/bottest-token/sendMessage",
+                    %{chat_id: 12_345, text: retry_notice}}
+
+    assert retry_notice =~ "Next automatic retry"
+
+    assert_receive {:exgram_request, :post, "/bottest-token/sendMessage",
+                    %{chat_id: 12_345, text: "Searching 🔎"}}
+
+    assert_receive {:exgram_request, :post, "/bottest-token/sendMessage",
+                    %{chat_id: 12_345, text: final_notice}}
+
+    assert final_notice =~ "Telegram is still rate limiting me."
+    assert final_notice =~ "I will not retry automatically again."
+
+    refute_receive {:exgram_request, :post, "/bottest-token/sendMessage",
+                    %{chat_id: 12_345, text: "Searching 🔎"}},
+                   50
+
+    refute_receive {:test_http_request, :post, "/", _body}, 50
+  end
+
   test "stores the webpage preview image when Telegram does not include thumbnail media", %{
     base_url: base_url
   } do
@@ -2280,6 +2366,60 @@ defmodule SaveIt.BotTest do
              message_id: 71,
              chat: %{id: chat_id},
              video: %{file_id: "sent-video-file-id"}
+           }}
+
+        _ ->
+          {:error, %ExGram.Error{code: 404}}
+      end
+    end
+
+    defp multipart_value(parts, name) do
+      Enum.find_value(parts, fn
+        {^name, value} -> value
+        _part -> nil
+      end)
+    end
+  end
+
+  defmodule RateLimitedProgressMessageAdapter do
+    @behaviour ExGram.Adapter
+
+    @impl ExGram.Adapter
+    def request(verb, path, body, _opts) do
+      send(Application.fetch_env!(:save_it, :test_pid), {:exgram_request, verb, path, body})
+
+      case {verb, path, body} do
+        {:post, "/bottest-token/sendMessage", %{text: "Searching 🔎"}} ->
+          progress_attempts = Application.get_env(:save_it, :rate_limited_progress_attempts, 0)
+          max_failures = Application.get_env(:save_it, :rate_limited_progress_failures, 1)
+          Application.put_env(:save_it, :rate_limited_progress_attempts, progress_attempts + 1)
+
+          if progress_attempts < max_failures do
+            {:error,
+             %ExGram.Error{
+               code: 429,
+               message: "Too Many Requests: retry after 37",
+               metadata: %{parameters: %{retry_after: 37}}
+             }}
+          else
+            {:ok, %{message_id: 73, chat: %{id: body.chat_id}}}
+          end
+
+        {:post, "/bottest-token/sendMessage", %{chat_id: chat_id}} ->
+          {:ok, %{message_id: 73, chat: %{id: chat_id}}}
+
+        {:post, "/bottest-token/editMessageText", _body} ->
+          {:ok, %{message_id: 73}}
+
+        {:post, "/bottest-token/deleteMessage", _body} ->
+          {:ok, true}
+
+        {:post, "/bottest-token/sendPhoto", {:multipart, parts}} ->
+          {:ok,
+           %{
+             message_id: 74,
+             chat: %{id: multipart_value(parts, "chat_id") |> String.to_integer()},
+             photo: [%{file_id: "telegram-photo-file-id"}]
            }}
 
         _ ->
