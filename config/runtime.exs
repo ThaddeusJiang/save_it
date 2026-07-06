@@ -7,8 +7,7 @@ if config_env() != :test do
   telegram_bot_token = System.fetch_env!("TELEGRAM_BOT_TOKEN")
 
   config :save_it,
-    telegram_bot_token: telegram_bot_token,
-    telegram_bot_enabled?: true
+    telegram_bot_token: telegram_bot_token
 
   config :ex_gram,
     token: telegram_bot_token,

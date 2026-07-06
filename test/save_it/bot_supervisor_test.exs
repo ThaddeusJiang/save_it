@@ -27,6 +27,15 @@ defmodule SaveIt.BotSupervisorTest do
     end
   end
 
+  test "defaults to enabled when the Telegram bot flag is not configured" do
+    Application.delete_env(:save_it, :telegram_bot_enabled?)
+    Application.delete_env(:save_it, :telegram_bot_token)
+
+    assert_raise RuntimeError, ~r/TELEGRAM_BOT_TOKEN must be set/, fn ->
+      SaveIt.BotSupervisor.start_link()
+    end
+  end
+
   test "fails fast when enabled and Telegram bot token is blank" do
     Application.put_env(:save_it, :telegram_bot_enabled?, true)
     Application.put_env(:save_it, :telegram_bot_token, "  ")

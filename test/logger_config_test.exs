@@ -82,7 +82,7 @@ defmodule SaveIt.LoggerConfigTest do
     runtime_config = Config.Reader.read!(@runtime_config, env: :dev)
 
     assert get_in(runtime_config, [:save_it, :telegram_bot_token]) == "required-token"
-    assert get_in(runtime_config, [:save_it, :telegram_bot_enabled?]) == true
+    assert get_in(runtime_config, [:save_it, :telegram_bot_enabled?]) == nil
     assert get_in(runtime_config, [:ex_gram, :token]) == "required-token"
     assert get_in(runtime_config, [:ex_gram, :adapter]) == ExGram.Adapter.Req
   end
