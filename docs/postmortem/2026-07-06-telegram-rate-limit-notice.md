@@ -12,6 +12,8 @@ The URL save path assumed the first `sendMessage` call always returned `{:ok, pr
 
 Telegram text feedback now detects `429` errors, extracts `retry_after`, and logs the limit. For URL saves, the initial progress-message boundary returns the structured rate-limit result to the URL workflow. The workflow schedules one background retry after the Telegram retry window, sends a user-facing notice with the next automatic retry time, and then re-enters the same URL save flow.
 
+Telegram feedback and `429` handling now live in `SaveIt.Telegram`, while delayed execution lives in `SaveIt.Job`; `SaveIt.Bot` only calls the Telegram manager from the URL workflow.
+
 The retry is capped at one automatic attempt. If Telegram still rate limits the retry, the bot sends a final notice after the retry window and does not schedule another retry.
 
 Regression tests cover both the successful one-time retry and the repeated-rate-limit case that must not create an infinite retry loop.
