@@ -8,6 +8,10 @@ before the CalVer migration retain their original version labels.
 
 ## [Unreleased]
 
+### Fixed
+
+- Process all pending Telegram URL messages after the bot restarts instead of keeping only the latest offline message.
+
 ## [2026.7.6-rc.1] - 2026-07-06
 
 ### Fixed

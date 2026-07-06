@@ -182,6 +182,5 @@ defmodule SaveIt.Telegram do
   end
 
   defp format_log_value(nil), do: "nil"
-  defp format_log_value(value) when is_binary(value), do: inspect(value)
   defp format_log_value(value), do: inspect(value)
 end
