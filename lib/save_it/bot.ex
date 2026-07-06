@@ -10,6 +10,7 @@ defmodule SaveIt.Bot do
   alias SaveIt.FileHelper
   alias SaveIt.GoogleDrive
   alias SaveIt.GoogleOAuth2DeviceFlow
+  alias SaveIt.Telegram
   alias SaveIt.UrlMetadata
   alias SaveIt.VideoUpload
 
@@ -19,7 +20,7 @@ defmodule SaveIt.Bot do
   alias SmallSdk.Cobalt
   alias SmallSdk.HlsDownloader
   alias SmallSdk.LinkPreview
-  alias SmallSdk.Telegram
+  alias SmallSdk.Telegram, as: TelegramClient
   alias SmallSdk.WebDownloader
 
   @bot :save_it_bot
@@ -62,7 +63,7 @@ defmodule SaveIt.Bot do
   def handle({:command, :about, %{chat: chat}}, _context) do
     bot_info = about_bot_info()
 
-    send_message(chat.id, """
+    Telegram.send_message(chat.id, """
     SaveIt can download images and videos, just give me a link.
 
     Chat: #{about_chat_type(chat)}
@@ -82,10 +83,13 @@ defmodule SaveIt.Bot do
         login_google(chat)
 
       {:error, :not_admin} ->
-        send_message(chat.id, "You are not an administrator, you can't connect Google Drive.")
+        Telegram.send_message(
+          chat.id,
+          "You are not an administrator, you can't connect Google Drive."
+        )
 
       {:error, :unsupported_chat} ->
-        send_message(chat.id, "You can't connect Google Drive in this chat.")
+        Telegram.send_message(chat.id, "You can't connect Google Drive in this chat.")
     end
   end
 
@@ -93,10 +97,10 @@ defmodule SaveIt.Bot do
     folder_id = normalize_command_text(text)
 
     if folder_id == "" do
-      send_message(chat.id, "Please provide a Google Drive folder ID.")
+      Telegram.send_message(chat.id, "Please provide a Google Drive folder ID.")
     else
       FileHelper.set_google_drive_folder_id(chat.id, folder_id)
-      send_message(chat.id, "Google Drive folder ID set successfully.")
+      Telegram.send_message(chat.id, "Google Drive folder ID set successfully.")
     end
   end
 
@@ -105,7 +109,7 @@ defmodule SaveIt.Bot do
   end
 
   def handle({:command, :search, %{chat: chat, text: nil}}, _context) do
-    send_message(
+    Telegram.send_message(
       chat.id,
       "What do you want to search? animal, food, etc. Or upload a photo with /search."
     )
@@ -117,7 +121,7 @@ defmodule SaveIt.Bot do
 
     case q do
       "" ->
-        send_message(chat.id, "What do you want to search? animal, food, etc.")
+        Telegram.send_message(chat.id, "What do you want to search? animal, food, etc.")
 
       _ ->
         photos = safe_typesense_search_photos(q, belongs_to_id: chat.id)
@@ -126,7 +130,7 @@ defmodule SaveIt.Bot do
   end
 
   def handle({:command, :detail, %{chat: chat, reply_to_message: nil}}, _context) do
-    send_message(chat.id, "reply a photo or video with /detail command.")
+    Telegram.send_message(chat.id, "reply a photo or video with /detail command.")
   end
 
   def handle({:command, :detail, %{chat: chat, reply_to_message: reply_to_message}}, _context) do
@@ -135,12 +139,12 @@ defmodule SaveIt.Bot do
         handle_detail_command(chat.id, reply_to_message, file_id)
 
       _ ->
-        send_message(chat.id, "reply a photo or video with /detail command.")
+        Telegram.send_message(chat.id, "reply a photo or video with /detail command.")
     end
   end
 
   def handle({:command, :delete, %{chat: chat, reply_to_message: nil}}, _ctx) do
-    send_message(chat.id, "reply a message with /delete command.")
+    Telegram.send_message(chat.id, "reply a message with /delete command.")
   end
 
   def handle(
@@ -153,7 +157,7 @@ defmodule SaveIt.Bot do
     if Enum.member?([bot_id, from.id], reply_to_message.from.id) do
       handle_delete_command(chat.id, message_id, reply_to_message)
     else
-      send_message(chat.id, "Only delete messages from @#{bot_username} and yourself.")
+      Telegram.send_message(chat.id, "Only delete messages from @#{bot_username} and yourself.")
     end
   end
 
@@ -204,7 +208,7 @@ defmodule SaveIt.Bot do
   end
 
   defp answer_photos(chat_id, []) do
-    send_message(chat_id, "No photos found.")
+    Telegram.send_message(chat_id, "No photos found.")
   end
 
   defp answer_photos(chat_id, [photo]) do
@@ -239,7 +243,7 @@ defmodule SaveIt.Bot do
       |> Enum.any?(&(&1 == :ok))
 
     if has_success? do
-      delete_message(chat.id, message_id)
+      Telegram.delete_message(chat.id, message_id)
     end
   end
 
@@ -263,7 +267,7 @@ defmodule SaveIt.Bot do
   end
 
   defp answer_similar_photos(chat_id, photos) when is_list(photos) do
-    send_message(chat_id, @similar_photos_found_message)
+    Telegram.send_message(chat_id, @similar_photos_found_message)
     answer_photos(chat_id, photos)
   end
 
@@ -275,7 +279,7 @@ defmodule SaveIt.Bot do
   defp handle_uploaded_photo(message, chat, caption, photos) do
     photo = List.last(photos)
     file = ExGram.get_file!(photo.file_id)
-    file_content = Telegram.download_file_content!(file.file_path)
+    file_content = TelegramClient.download_file_content!(file.file_path)
     file_name = telegram_file_name(file, photo.file_id, ".jpg")
 
     FileHelper.write_file(file_name, file_content, telegram_cache_key("photo", file.file_id))
@@ -307,7 +311,7 @@ defmodule SaveIt.Bot do
 
   defp create_video_thumbnail_index(thumbnail, chat, message, caption, file_id) do
     thumbnail_file = ExGram.get_file!(thumbnail.file_id)
-    thumbnail_content = Telegram.download_file_content!(thumbnail_file.file_path)
+    thumbnail_content = TelegramClient.download_file_content!(thumbnail_file.file_path)
 
     %{
       image: Base.encode64(thumbnail_content),
@@ -331,7 +335,7 @@ defmodule SaveIt.Bot do
   end
 
   defp store_uploaded_video_file_content(chat_id, video, file) do
-    case Telegram.download_file_content(file.file_path) do
+    case TelegramClient.download_file_content(file.file_path) do
       {:ok, file_content} ->
         file_name = Map.get(video, :file_name) || telegram_file_name(file, video.file_id, ".mp4")
         FileHelper.write_file(file_name, file_content, telegram_cache_key("video", video.file_id))
@@ -471,15 +475,45 @@ defmodule SaveIt.Bot do
     end
   end
 
-  defp process_url(chat, url, message) do
+  defp process_url(chat, url, message), do: process_url(chat, url, message, 0)
+
+  defp process_url(chat, url, message, retry_attempt) do
     chat_id = chat.id
 
     Logger.debug("URL processing started chat_id=#{chat_id} source_url=#{format_log_url(url)}")
 
-    {:ok, progress_message} = send_message(chat_id, Enum.at(@progress, 0))
+    case Telegram.send_message(chat_id, Enum.at(@progress, 0), on_rate_limit: :return) do
+      {:ok, progress_message} ->
+        continue_process_url(chat, url, message, progress_message)
 
+      {:error, {:telegram_rate_limited, retry_after}} ->
+        handle_rate_limited_url_progress(chat, url, message, retry_after, retry_attempt)
+
+      {:error, reason} ->
+        Logger.warning(
+          "URL processing stopped before progress message source_url=#{format_log_url(url)} " <>
+            "reason=#{format_log_value(reason)}"
+        )
+
+        {:error, reason}
+    end
+  end
+
+  defp handle_rate_limited_url_progress(chat, url, message, retry_after, retry_attempt) do
+    Telegram.handle_progress_rate_limit(
+      chat,
+      message,
+      retry_after,
+      retry_attempt,
+      fn next_attempt ->
+        process_url(chat, url, message, next_attempt)
+      end
+    )
+  end
+
+  defp continue_process_url(chat, url, message, progress_message) do
     context = %DownloadContext{
-      chat_id: chat_id,
+      chat_id: chat.id,
       chat: chat,
       progress_message_id: progress_message.message_id,
       original_url: url,
@@ -529,7 +563,11 @@ defmodule SaveIt.Bot do
   end
 
   defp handle_hls_download(%DownloadContext{} = context, m3u8_url) do
-    update_message(context.chat_id, context.progress_message_id, Enum.slice(@progress, 0..1))
+    Telegram.update_message(
+      context.chat_id,
+      context.progress_message_id,
+      Enum.slice(@progress, 0..1)
+    )
 
     case hls_downloader().download(m3u8_url) do
       {:ok, %DownloadedFile{} = file} ->
@@ -538,7 +576,11 @@ defmodule SaveIt.Bot do
             "download_url=#{format_log_url(context.download_url)}"
         )
 
-        update_message(context.chat_id, context.progress_message_id, Enum.slice(@progress, 0..2))
+        Telegram.update_message(
+          context.chat_id,
+          context.progress_message_id,
+          Enum.slice(@progress, 0..2)
+        )
 
         bot_send_downloaded_file(context.chat_id, file, download_send_opts(context))
 
@@ -559,27 +601,39 @@ defmodule SaveIt.Bot do
         download_and_store_files(context, download_urls)
 
       downloaded_files ->
-        update_message(context.chat_id, context.progress_message_id, Enum.slice(@progress, 0..2))
+        Telegram.update_message(
+          context.chat_id,
+          context.progress_message_id,
+          Enum.slice(@progress, 0..2)
+        )
 
         bot_send_filenames(context.chat_id, downloaded_files, download_send_opts(context))
 
-        delete_message(context.chat_id, context.progress_message_id)
+        Telegram.delete_message(context.chat_id, context.progress_message_id)
         :ok
     end
   end
 
   defp download_and_store_files(%DownloadContext{} = context, download_urls) do
-    update_message(context.chat_id, context.progress_message_id, Enum.slice(@progress, 0..1))
+    Telegram.update_message(
+      context.chat_id,
+      context.progress_message_id,
+      Enum.slice(@progress, 0..1)
+    )
 
     case WebDownloader.download_files(download_urls) do
       {:ok, files} ->
         Logger.debug("URL files downloaded file_count=#{length(files)}")
 
-        update_message(context.chat_id, context.progress_message_id, Enum.slice(@progress, 0..2))
+        Telegram.update_message(
+          context.chat_id,
+          context.progress_message_id,
+          Enum.slice(@progress, 0..2)
+        )
 
         bot_send_files(context.chat_id, files, download_send_opts(context))
 
-        delete_message(context.chat_id, context.progress_message_id)
+        Telegram.delete_message(context.chat_id, context.progress_message_id)
         FileHelper.write_folder(context.purge_url, files)
         GoogleDrive.upload_files(context.chat_id, files)
 
@@ -600,7 +654,11 @@ defmodule SaveIt.Bot do
         download_and_store_file(context)
 
       downloaded_file ->
-        update_message(context.chat_id, context.progress_message_id, Enum.slice(@progress, 0..2))
+        Telegram.update_message(
+          context.chat_id,
+          context.progress_message_id,
+          Enum.slice(@progress, 0..2)
+        )
 
         bot_send_file(
           context.chat_id,
@@ -609,13 +667,17 @@ defmodule SaveIt.Bot do
           download_send_opts(context)
         )
 
-        delete_message(context.chat_id, context.progress_message_id)
+        Telegram.delete_message(context.chat_id, context.progress_message_id)
         :ok
     end
   end
 
   defp download_and_store_file(%DownloadContext{} = context) do
-    update_message(context.chat_id, context.progress_message_id, Enum.slice(@progress, 0..1))
+    Telegram.update_message(
+      context.chat_id,
+      context.progress_message_id,
+      Enum.slice(@progress, 0..1)
+    )
 
     case WebDownloader.download_file(context.download_url) do
       {:ok, %DownloadedFile{} = file} ->
@@ -625,7 +687,7 @@ defmodule SaveIt.Bot do
         )
 
         if url_download_media_file?(file.file_name) do
-          update_message(
+          Telegram.update_message(
             context.chat_id,
             context.progress_message_id,
             Enum.slice(@progress, 0..2)
@@ -659,7 +721,12 @@ defmodule SaveIt.Bot do
       {:error, _fallback_reasons} ->
         Logger.warning("No thumbnail fallback available after non-media URL download")
 
-        update_message(context.chat_id, context.progress_message_id, "💔 No image preview found.")
+        Telegram.update_message(
+          context.chat_id,
+          context.progress_message_id,
+          "💔 No image preview found."
+        )
+
         :error
     end
   end
@@ -673,7 +740,7 @@ defmodule SaveIt.Bot do
       {:error, _fallback_reasons} ->
         Logger.warning("No thumbnail fallback available after link download failed")
 
-        update_message(context.chat_id, context.progress_message_id, failure_message)
+        Telegram.update_message(context.chat_id, context.progress_message_id, failure_message)
         :error
     end
   end
@@ -703,7 +770,11 @@ defmodule SaveIt.Bot do
   end
 
   defp save_thumbnail_fallback(%DownloadContext{} = context, %DownloadedFile{} = file, source) do
-    update_message(context.chat_id, context.progress_message_id, Enum.slice(@progress, 0..2))
+    Telegram.update_message(
+      context.chat_id,
+      context.progress_message_id,
+      Enum.slice(@progress, 0..2)
+    )
 
     bot_send_downloaded_file(
       context.chat_id,
@@ -787,7 +858,7 @@ defmodule SaveIt.Bot do
     with thumbnail when not is_nil(thumbnail) <- message_thumbnail(message),
          file_id when is_binary(file_id) <- map_get(thumbnail, :file_id),
          {:ok, file} <- ExGram.get_file(file_id),
-         {:ok, file_content} <- Telegram.download_file_content(file.file_path) do
+         {:ok, file_content} <- TelegramClient.download_file_content(file.file_path) do
       {:ok,
        %DownloadedFile{
          file_name: telegram_file_name(file, file_id, ".jpg"),
@@ -853,7 +924,7 @@ defmodule SaveIt.Bot do
   end
 
   defp finalize_thumbnail_download(%DownloadContext{} = context, %DownloadedFile{} = file) do
-    delete_message(context.chat_id, context.progress_message_id)
+    Telegram.delete_message(context.chat_id, context.progress_message_id)
     FileHelper.write_file(file.file_name, file.file_content, context.original_url)
     GoogleDrive.upload_file_content(context.chat_id, file.file_content, file.file_name)
 
@@ -865,7 +936,7 @@ defmodule SaveIt.Bot do
   end
 
   defp finalize_single_download(%DownloadContext{} = context, %DownloadedFile{} = file) do
-    delete_message(context.chat_id, context.progress_message_id)
+    Telegram.delete_message(context.chat_id, context.progress_message_id)
     FileHelper.write_file(file.file_name, file.file_content, context.cache_url)
     GoogleDrive.upload_file_content(context.chat_id, file.file_content, file.file_name)
 
@@ -891,10 +962,6 @@ defmodule SaveIt.Bot do
   end
 
   defp strip_urls_from_text(_text), do: ""
-
-  defp send_message(chat_id, text) do
-    ExGram.send_message(chat_id, text)
-  end
 
   defp about_chat_type(%{type: "private"}), do: "dm"
   defp about_chat_type(%{type: "group"}), do: "group"
@@ -941,18 +1008,6 @@ defmodule SaveIt.Bot do
   end
 
   defp about_privacy_mode_status(_bot_info), do: "unknown"
-
-  defp update_message(chat_id, message_id, texts) when is_list(texts) do
-    ExGram.edit_message_text(Enum.join(texts, "\n"), chat_id: chat_id, message_id: message_id)
-  end
-
-  defp update_message(chat_id, message_id, text) do
-    ExGram.edit_message_text(text, chat_id: chat_id, message_id: message_id)
-  end
-
-  defp delete_message(chat_id, message_id) do
-    ExGram.delete_message(chat_id, message_id)
-  end
 
   defp bot_send_files(chat_id, files, opts) do
     source_url = Keyword.get(opts, :source_url)
@@ -1060,7 +1115,7 @@ defmodule SaveIt.Bot do
     message_thread_id = Keyword.get(opts, :message_thread_id)
     url_metadata_opts = url_metadata_opts(opts)
 
-    case Telegram.send_media_group(chat_id, files,
+    case TelegramClient.send_media_group(chat_id, files,
            caption: caption,
            message_thread_id: message_thread_id
          ) do
@@ -1245,7 +1300,7 @@ defmodule SaveIt.Bot do
         send_oversized_video_preview(chat_id, content, opts)
 
       _extension ->
-        send_message(chat_id, @telegram_file_too_large_message)
+        Telegram.send_message(chat_id, @telegram_file_too_large_message)
         {:error, :telegram_file_too_large}
     end
   end
@@ -1288,7 +1343,7 @@ defmodule SaveIt.Bot do
       :ok
     else
       _reason ->
-        send_message(chat_id, @telegram_file_too_large_message)
+        Telegram.send_message(chat_id, @telegram_file_too_large_message)
         {:error, :telegram_file_too_large}
     end
   end
@@ -1768,31 +1823,31 @@ defmodule SaveIt.Bot do
       {:ok, response} ->
         FileHelper.set_google_device_code(chat.id, response["device_code"])
 
-        send_message(chat.id, """
+        Telegram.send_message(chat.id, """
         Open the following URL in your browser:
         #{response["verification_url"] || response["verification_uri"]}
         Enter code:
         """)
 
-        send_message(chat.id, """
+        Telegram.send_message(chat.id, """
         #{response["user_code"]}
         """)
 
-        send_message(chat.id, """
+        Telegram.send_message(chat.id, """
         After approving access, run `/google_drive_login` again.
         """)
 
       {:error, {:missing_config, key}} ->
         Logger.error("Google Drive login config missing", key: key)
-        send_message(chat.id, missing_google_oauth_config_message(key))
+        Telegram.send_message(chat.id, missing_google_oauth_config_message(key))
 
       {:error, %{body: %{"error" => "invalid_client"}}} ->
         Logger.error("Google Drive login config invalid")
-        send_message(chat.id, invalid_google_oauth_client_message())
+        Telegram.send_message(chat.id, invalid_google_oauth_client_message())
 
       {:error, _error} ->
         Logger.error("Failed to get Google Drive login code")
-        send_message(chat.id, "Failed to get Google Drive login code.")
+        Telegram.send_message(chat.id, "Failed to get Google Drive login code.")
     end
   end
 
@@ -1801,10 +1856,10 @@ defmodule SaveIt.Bot do
       {:ok, %{"access_token" => access_token}} when is_binary(access_token) ->
         FileHelper.set_google_access_token(chat.id, access_token)
         FileHelper.set_google_device_code(chat.id, "")
-        send_message(chat.id, "Google Drive connected.")
+        Telegram.send_message(chat.id, "Google Drive connected.")
 
       {:error, %{body: %{"error" => "authorization_pending"}}} ->
-        send_message(chat.id, """
+        Telegram.send_message(chat.id, """
         Google authorization is not complete yet.
 
         Approve access in your browser, then run `/google_drive_login` again.
@@ -1812,17 +1867,17 @@ defmodule SaveIt.Bot do
 
       {:error, {:missing_config, key}} ->
         Logger.error("Google Drive login config missing", key: key)
-        send_message(chat.id, missing_google_oauth_config_message(key))
+        Telegram.send_message(chat.id, missing_google_oauth_config_message(key))
 
       {:error, %{body: %{"error" => "invalid_client"}}} ->
         FileHelper.set_google_device_code(chat.id, "")
         Logger.error("Google Drive login config invalid")
-        send_message(chat.id, invalid_google_oauth_client_message())
+        Telegram.send_message(chat.id, invalid_google_oauth_client_message())
 
       {:error, %{body: %{"error" => error}}} when error in ["access_denied", "expired_token"] ->
         FileHelper.set_google_device_code(chat.id, "")
 
-        send_message(chat.id, """
+        Telegram.send_message(chat.id, """
         Google Drive login code expired or was denied.
 
         Run `/google_drive_login` to get a new code.
@@ -1831,7 +1886,7 @@ defmodule SaveIt.Bot do
       {:error, _error} ->
         Logger.error("Failed to connect Google Drive")
 
-        send_message(chat.id, """
+        Telegram.send_message(chat.id, """
         Failed to connect Google Drive.
 
         Please run `/google_drive_login` again.
@@ -1894,29 +1949,29 @@ defmodule SaveIt.Bot do
   defp handle_delete_command(chat_id, message_id, reply_to_message) do
     case reply_to_message do
       %{photo: nil} ->
-        delete_message(chat_id, reply_to_message.message_id)
+        Telegram.delete_message(chat_id, reply_to_message.message_id)
 
       %{photo: photo} ->
         photo
         |> Enum.map(& &1.file_id)
         |> PhotoService.delete_photos()
 
-        delete_message(chat_id, reply_to_message.message_id)
+        Telegram.delete_message(chat_id, reply_to_message.message_id)
 
       _ ->
-        send_message(chat_id, "reply a message with /delete command.")
+        Telegram.send_message(chat_id, "reply a message with /delete command.")
     end
 
-    delete_message(chat_id, message_id)
+    Telegram.delete_message(chat_id, message_id)
   end
 
   defp handle_detail_command(chat_id, reply_to_message, file_id) do
     case safe_typesense_get_photo(file_id, chat_id) do
       nil ->
-        send_message(chat_id, "Media details not found.")
+        Telegram.send_message(chat_id, "Media details not found.")
 
       photo ->
-        send_message(chat_id, detail_message(reply_to_message, photo))
+        Telegram.send_message(chat_id, detail_message(reply_to_message, photo))
     end
   end
 
