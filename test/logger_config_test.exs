@@ -52,7 +52,7 @@ defmodule SaveIt.LoggerConfigTest do
     compile_config = Config.Reader.read!(@compile_config, env: :test)
 
     assert get_in(compile_config, [:save_it, :telegram_bot_token]) == "test-token"
-    assert get_in(compile_config, [:save_it, :start_bot?]) == false
+    assert get_in(compile_config, [:save_it, :telegram_bot_enabled?]) == false
   end
 
   test "runtime config requires the Telegram bot token outside test" do
@@ -82,7 +82,7 @@ defmodule SaveIt.LoggerConfigTest do
     runtime_config = Config.Reader.read!(@runtime_config, env: :dev)
 
     assert get_in(runtime_config, [:save_it, :telegram_bot_token]) == "required-token"
-    assert get_in(runtime_config, [:save_it, :start_bot?]) == true
+    assert get_in(runtime_config, [:save_it, :telegram_bot_enabled?]) == nil
     assert get_in(runtime_config, [:ex_gram, :token]) == "required-token"
     assert get_in(runtime_config, [:ex_gram, :adapter]) == ExGram.Adapter.Req
   end
@@ -91,7 +91,7 @@ defmodule SaveIt.LoggerConfigTest do
     test_config = Config.Reader.read!(@test_config, env: :test)
 
     assert get_in(test_config, [:save_it, :telegram_bot_token]) == "test-token"
-    assert get_in(test_config, [:save_it, :start_bot?]) == false
+    assert get_in(test_config, [:save_it, :telegram_bot_enabled?]) == false
     assert get_in(test_config, [:ex_gram, :token]) == "test-token"
     assert get_in(test_config, [:ex_gram, :adapter]) == ExGram.Adapter.Req
   end
