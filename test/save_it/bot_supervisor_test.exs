@@ -36,6 +36,13 @@ defmodule SaveIt.BotSupervisorTest do
     end
   end
 
+  test "uses polling that keeps pending Telegram updates on startup" do
+    assert SaveIt.BotSupervisor.child_specs("test-token") == [
+             ExGram,
+             {SaveIt.Bot, [method: SaveIt.TelegramPolling, token: "test-token"]}
+           ]
+  end
+
   test "fails fast when enabled and Telegram bot token is blank" do
     Application.put_env(:save_it, :telegram_bot_enabled?, true)
     Application.put_env(:save_it, :telegram_bot_token, "  ")

@@ -18,12 +18,18 @@ defmodule SaveIt.BotSupervisor do
 
   @impl true
   def init(opts) do
-    children = [
-      ExGram,
-      {SaveIt.Bot, [method: :polling, token: Keyword.fetch!(opts, :token)]}
-    ]
+    opts
+    |> Keyword.fetch!(:token)
+    |> child_specs()
+    |> Supervisor.init(strategy: :one_for_one)
+  end
 
-    Supervisor.init(children, strategy: :one_for_one)
+  @doc false
+  def child_specs(token) do
+    [
+      ExGram,
+      {SaveIt.Bot, [method: SaveIt.TelegramPolling, token: token]}
+    ]
   end
 
   defp telegram_bot_enabled? do

@@ -12,7 +12,6 @@ defmodule SaveIt.Application do
     })
 
     children = [
-      SaveIt.TaskRunner,
       SaveIt.BotSupervisor
     ]
 
