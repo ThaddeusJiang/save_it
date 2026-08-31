@@ -18,6 +18,7 @@ This repository uses:
 
 ## Release Rules
 
+- Change `mix.exs` `version` only while checked out on `main`. A version bump commit that contains only version and release metadata is this repository's only direct-to-`main` exception.
 - The bump version commit message must be exactly the target release tag, for example `YYYY.M.D` or `YYYY.M.D-rc.N`.
 - The release tag must be created on the bump version commit.
 - Maintain `CHANGELOG.md` only for product-focused user-facing features, behavior changes, fixes, removals, security changes, or breaking changes.
@@ -46,7 +47,7 @@ git tag --sort=-version:refname | sed -n '1,20p'
 ```
 
 Rules:
-- Prefer cutting stable releases from `main`.
+- Inspect release state from any branch, but perform version edits and release publication from `main`.
 - If the tree is dirty, stop and surface the changed files before continuing.
 - Check whether the target stable tag or GitHub release already exists before creating anything.
 
@@ -56,11 +57,13 @@ Use the helper script for a quick snapshot:
 .agents/skills/save-it-release/scripts/check_release_state.sh YYYY.M.D
 ```
 
+The helper exits with an error if a non-`main` branch introduces, stages, or leaves an unstaged `mix.exs` version change.
+
 ## Release Preparation
 
 When the user asks to prepare a release but not publish it yet:
 
-1. Update `mix.exs`:
+1. Confirm the current branch is `main`, then update `mix.exs`:
 
 ```elixir
 version: "YYYY.M.D"
@@ -75,7 +78,7 @@ version: "YYYY.M.D"
 
 When the user asks to publish a stable release:
 
-1. Confirm the released version exists in `mix.exs`.
+1. Confirm the current branch is `main` and the released version exists in `mix.exs`.
 2. Confirm `CHANGELOG.md` has a heading for the released version and a fresh `## [Unreleased]` heading above it.
 3. Commit release metadata changes using the target release tag as the commit message:
 
@@ -113,7 +116,7 @@ If the user wants more confidence before release, run the acceptance flow from `
 
 When the user asks for a prerelease:
 
-1. Keep the version in the repository's CalVer prerelease form, for example `2026.5.25-rc.1`.
+1. Confirm the current branch is `main` and keep the version in the repository's CalVer prerelease form, for example `2026.5.25-rc.1`.
 2. Confirm `CHANGELOG.md` has a heading for the prerelease version and a fresh `## [Unreleased]` heading above it.
 3. Prefer the existing GitHub Actions workflow instead of manually crafting a prerelease:
 
