@@ -55,6 +55,8 @@ When solving a non-trivial bug or issue, create `others/postmortem/YYYY-MM-DD-ti
 ## Others
 
 - **Always** use fixed versions for dependencies.
+- `mix.exs` `version` changes must be made directly on the `main` branch. Do not modify the project version on feature, fix, chore, or release-preparation branches.
+- A bump version commit that contains only version and release metadata is the only allowed direct `main` branch exception for this repository; all other code fixes must use semantic branches and PR/user-confirmed merge flow.
 - Maintain a repository `CHANGELOG.md` using [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/) structure.
 - Use CalVer release headings in `CHANGELOG.md`, for example `## [2026.6.9] - 2026-06-09`.
 - At the end of repository work, check `CHANGELOG.md` and update `## [Unreleased]` only for product-focused user-facing features, behavior changes, fixes, removals, security changes, or breaking changes. Do not record docs-only, tests-only, chore-only, formatting-only, CI-only, internal refactor-only, release-process-only, or agent-workflow-only changes.
