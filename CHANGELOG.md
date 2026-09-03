@@ -8,6 +8,8 @@ before the CalVer migration retain their original version labels.
 
 ## [Unreleased]
 
+## [2026.9.3] - 2026-09-03
+
 ### Changed
 
 - Rename the `/detail` command to `/info`.
