@@ -1907,7 +1907,7 @@ defmodule SaveIt.BotTest do
     refute_receive {:google_drive_upload_request, _drive_env}
   end
 
-  test "returns details for a replied photo", _context do
+  test "returns info for a replied photo", _context do
     ExGramTestAdapter.backdoor_request(:send_message, %{message_id: 30})
 
     chat_id = 12_345
@@ -1924,7 +1924,7 @@ defmodule SaveIt.BotTest do
       }
     }
 
-    assert {:ok, %{message_id: 30}} = Bot.handle({:command, :detail, message}, nil)
+    assert {:ok, %{message_id: 30}} = Bot.handle({:command, :info, message}, nil)
 
     assert_receive {:test_http_request, :get, search_path, ""}
     assert String.starts_with?(search_path, "/collections/photos/documents/search?")
@@ -1950,7 +1950,7 @@ defmodule SaveIt.BotTest do
              )
   end
 
-  test "returns details for a replied video", _context do
+  test "returns info for a replied video", _context do
     ExGramTestAdapter.backdoor_request(:send_message, %{message_id: 30})
 
     chat_id = 12_345
@@ -1963,7 +1963,7 @@ defmodule SaveIt.BotTest do
       }
     }
 
-    assert {:ok, %{message_id: 30}} = Bot.handle({:command, :detail, message}, nil)
+    assert {:ok, %{message_id: 30}} = Bot.handle({:command, :info, message}, nil)
 
     assert_receive {:test_http_request, :get, search_path, ""}
     assert String.starts_with?(search_path, "/collections/photos/documents/search?")
@@ -1989,7 +1989,7 @@ defmodule SaveIt.BotTest do
              )
   end
 
-  test "omits missing values from photo details", _context do
+  test "omits missing values from photo info", _context do
     ExGramTestAdapter.backdoor_request(:send_message, %{message_id: 30})
 
     chat_id = 12_345
@@ -2004,7 +2004,7 @@ defmodule SaveIt.BotTest do
       }
     }
 
-    assert {:ok, %{message_id: 30}} = Bot.handle({:command, :detail, message}, nil)
+    assert {:ok, %{message_id: 30}} = Bot.handle({:command, :info, message}, nil)
 
     assert_receive {:test_http_request, :get, search_path, ""}
     assert search_path =~ "file_id%3A%3Dold-photo-file-id"

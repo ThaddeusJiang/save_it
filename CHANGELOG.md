@@ -8,6 +8,10 @@ before the CalVer migration retain their original version labels.
 
 ## [Unreleased]
 
+### Changed
+
+- Rename the `/detail` command to `/info`.
+
 ### Fixed
 
 - Process all pending Telegram URL messages after the bot restarts instead of keeping only the latest offline message.

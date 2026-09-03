@@ -46,7 +46,7 @@ defmodule SaveIt.Bot do
 
   command("search", description: "Search photos")
   command("delete", description: "Delete message")
-  command("detail", description: "Show media details")
+  command("info", description: "Show media info")
 
   command("google_drive_login", description: "Connect Google Drive")
   command("google_drive_folder", description: "Set Google Drive folder ID")
@@ -130,17 +130,17 @@ defmodule SaveIt.Bot do
     end
   end
 
-  def handle({:command, :detail, %{chat: chat, reply_to_message: nil}}, _context) do
-    Telegram.send_message(chat.id, "reply a photo or video with /detail command.")
+  def handle({:command, :info, %{chat: chat, reply_to_message: nil}}, _context) do
+    Telegram.send_message(chat.id, "reply a photo or video with /info command.")
   end
 
-  def handle({:command, :detail, %{chat: chat, reply_to_message: reply_to_message}}, _context) do
-    case detail_media_file_id(reply_to_message) do
+  def handle({:command, :info, %{chat: chat, reply_to_message: reply_to_message}}, _context) do
+    case info_media_file_id(reply_to_message) do
       file_id when is_binary(file_id) ->
-        handle_detail_command(chat.id, reply_to_message, file_id)
+        handle_info_command(chat.id, reply_to_message, file_id)
 
       _ ->
-        Telegram.send_message(chat.id, "reply a photo or video with /detail command.")
+        Telegram.send_message(chat.id, "reply a photo or video with /info command.")
     end
   end
 
@@ -1997,43 +1997,43 @@ defmodule SaveIt.Bot do
     Telegram.delete_message(chat_id, message_id)
   end
 
-  defp handle_detail_command(chat_id, reply_to_message, file_id) do
+  defp handle_info_command(chat_id, reply_to_message, file_id) do
     case safe_typesense_get_photo(file_id, chat_id) do
       nil ->
-        Telegram.send_message(chat_id, "Media details not found.")
+        Telegram.send_message(chat_id, "Media info not found.")
 
       photo ->
-        Telegram.send_message(chat_id, detail_message(reply_to_message, photo))
+        Telegram.send_message(chat_id, info_message(reply_to_message, photo))
     end
   end
 
-  defp detail_media_file_id(%{photo: [_ | _] = photos}) do
+  defp info_media_file_id(%{photo: [_ | _] = photos}) do
     photos |> List.last() |> Map.get(:file_id)
   end
 
-  defp detail_media_file_id(%{video: %{file_id: file_id}}), do: file_id
-  defp detail_media_file_id(_reply_to_message), do: nil
+  defp info_media_file_id(%{video: %{file_id: file_id}}), do: file_id
+  defp info_media_file_id(_reply_to_message), do: nil
 
-  defp detail_message(reply_to_message, photo) do
+  defp info_message(reply_to_message, photo) do
     [
-      detail_line("Message URL", Map.get(photo, "source_message_url")),
-      detail_line("Original URL", Map.get(photo, "url")),
-      detail_line("Caption", Map.get(photo, "caption")),
-      detail_line("Title", Map.get(photo, "title")),
-      detail_line("Description", Map.get(photo, "description")),
-      detail_line("Keywords", detail_keywords(Map.get(photo, "keywords"))),
-      detail_line("Saved at", saved_at(photo, reply_to_message))
+      info_line("Message URL", Map.get(photo, "source_message_url")),
+      info_line("Original URL", Map.get(photo, "url")),
+      info_line("Caption", Map.get(photo, "caption")),
+      info_line("Title", Map.get(photo, "title")),
+      info_line("Description", Map.get(photo, "description")),
+      info_line("Keywords", info_keywords(Map.get(photo, "keywords"))),
+      info_line("Saved at", saved_at(photo, reply_to_message))
     ]
     |> Enum.reject(&is_nil/1)
     |> Enum.join("\n")
   end
 
-  defp detail_line(_label, nil), do: nil
-  defp detail_line(_label, ""), do: nil
-  defp detail_line(label, value), do: "#{label}: #{value}"
+  defp info_line(_label, nil), do: nil
+  defp info_line(_label, ""), do: nil
+  defp info_line(label, value), do: "#{label}: #{value}"
 
-  defp detail_keywords([_ | _] = keywords), do: Enum.join(keywords, ", ")
-  defp detail_keywords(_keywords), do: nil
+  defp info_keywords([_ | _] = keywords), do: Enum.join(keywords, ", ")
+  defp info_keywords(_keywords), do: nil
 
   defp saved_at(photo, reply_to_message) do
     format_unix_time(Map.get(photo, "inserted_at") || Map.get(reply_to_message, :date))
