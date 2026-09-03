@@ -5,6 +5,7 @@ defmodule SaveIt.Bot do
 
   import SaveIt.SmallHelper.UrlHelper, only: [direct_media_url?: 1]
 
+  alias SaveIt.AnimationUpload
   alias SaveIt.DownloadContext
   alias SaveIt.DownloadedFile
   alias SaveIt.FileHelper
@@ -1299,6 +1300,14 @@ defmodule SaveIt.Bot do
       ".mp4" ->
         send_oversized_video_preview(chat_id, content, opts)
 
+      ".gif" ->
+        send_gif_animation(
+          chat_id,
+          content,
+          Keyword.fetch!(opts, :caption),
+          Keyword.get(opts, :message_thread_id)
+        )
+
       _extension ->
         Telegram.send_message(chat_id, @telegram_file_too_large_message)
         {:error, :telegram_file_too_large}
@@ -1434,11 +1443,34 @@ defmodule SaveIt.Bot do
         end
 
       ".gif" ->
-        ExGram.send_animation(chat_id, content, telegram_send_opts(caption, message_thread_id))
+        send_gif_animation(chat_id, content, caption, message_thread_id)
 
       _ ->
         ExGram.send_document(chat_id, content, telegram_send_opts(caption, message_thread_id))
     end
+  end
+
+  defp send_gif_animation(chat_id, content, caption, message_thread_id) do
+    {prepared_content, metadata} = AnimationUpload.prepare(content)
+
+    if telegram_upload_too_large?(prepared_content) do
+      Telegram.send_message(chat_id, @telegram_file_too_large_message)
+      {:error, :telegram_file_too_large}
+    else
+      ExGram.send_animation(
+        chat_id,
+        prepared_content,
+        animation_send_opts(caption, metadata, message_thread_id)
+      )
+    end
+  end
+
+  defp animation_send_opts(caption, metadata, message_thread_id) do
+    [caption: caption]
+    |> maybe_put_video_metadata(:width, metadata)
+    |> maybe_put_video_metadata(:height, metadata)
+    |> maybe_put_video_metadata(:duration, metadata)
+    |> put_optional_keyword(:message_thread_id, message_thread_id)
   end
 
   defp telegram_send_opts(caption, message_thread_id) do

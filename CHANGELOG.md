@@ -11,6 +11,7 @@ before the CalVer migration retain their original version labels.
 ### Fixed
 
 - Process all pending Telegram URL messages after the bot restarts instead of keeping only the latest offline message.
+- Show saved GIFs as playable animations in Telegram instead of downloadable files, and keep large GIFs sendable by converting them to mp4 first.
 
 ## [2026.7.6-rc.1] - 2026-07-06
 
