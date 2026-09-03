@@ -1018,6 +1018,72 @@ defmodule SaveIt.BotTest do
     assert_storage_file_content_with_uuidv7_extension(".jpg", test_video_cover())
   end
 
+  test "converts a downloaded URL GIF to mp4 and sends it as a Telegram animation",
+       %{base_url: base_url} do
+    original_url = base_url <> "/gif-page"
+
+    Application.put_env(:ex_gram, :adapter, __MODULE__.UrlAnimationAdapter)
+
+    Application.put_env(
+      :save_it,
+      :animation_upload_converter,
+      __MODULE__.AnimationUploadConverter
+    )
+
+    message = %{
+      chat: %{id: 12_345, username: "save_it_test_chat"},
+      date: 1_717_170_000,
+      message_id: 108,
+      text: "funny clip #{original_url}",
+      link_preview_options: %{url: original_url}
+    }
+
+    assert {:ok, true} = Bot.handle({:text, message.text, message}, nil)
+
+    assert_receive {:test_http_request, :get, "/downloaded/animation.gif", ""}
+
+    assert_receive {:exgram_request, :post, "/bottest-token/sendAnimation", {:multipart, parts}}
+    refute_receive {:exgram_request, :post, "/bottest-token/sendDocument", _body}
+
+    assert multipart_part(parts, "chat_id") == "12345"
+    assert multipart_part(parts, "caption") == "funny clip"
+    assert multipart_part(parts, "animation") == :file_content
+    assert multipart_file_content(parts, "animation") == test_mp4()
+    assert multipart_part(parts, "width") == "480"
+    assert multipart_part(parts, "height") == "270"
+    assert multipart_part(parts, "duration") == "3"
+
+    assert_storage_file_with_uuidv7_extension(".gif")
+  end
+
+  test "sends an animation when a downloaded URL GIF only fits Telegram after conversion",
+       %{base_url: base_url} do
+    original_url = base_url <> "/large-gif-page"
+
+    Application.put_env(:ex_gram, :adapter, __MODULE__.UrlAnimationAdapter)
+
+    Application.put_env(
+      :save_it,
+      :animation_upload_converter,
+      __MODULE__.AnimationUploadConverter
+    )
+
+    message = %{
+      chat: %{id: 12_345, username: "save_it_test_chat"},
+      date: 1_717_170_000,
+      message_id: 109,
+      text: "large clip #{original_url}",
+      link_preview_options: %{url: original_url}
+    }
+
+    assert {:ok, true} = Bot.handle({:text, message.text, message}, nil)
+
+    assert_receive {:test_http_request, :get, "/downloaded/large-animation.gif", ""}
+
+    assert_receive {:exgram_request, :post, "/bottest-token/sendAnimation", {:multipart, parts}}
+    assert multipart_file_content(parts, "animation") == test_mp4()
+  end
+
   test "logs the URL processing flow at debug level", %{base_url: base_url} do
     preview_url = base_url <> "/video-page"
     original_url = preview_url <> "?token=secret"
@@ -2133,6 +2199,10 @@ defmodule SaveIt.BotTest do
     <<255, 216, 255, 224, 0, 16, 84, 72, 85, 77, 66>>
   end
 
+  def test_gif do
+    <<71, 73, 70, 56, 57, 97, 1, 0, 1, 0>>
+  end
+
   def test_mp4 do
     <<0, 0, 0, 24, 102, 116, 121, 112, 109, 112, 52, 50>>
   end
@@ -2381,6 +2451,46 @@ defmodule SaveIt.BotTest do
     end
   end
 
+  defmodule UrlAnimationAdapter do
+    @behaviour ExGram.Adapter
+
+    @impl ExGram.Adapter
+    def request(verb, path, body, _opts) do
+      send(self(), {:exgram_request, verb, path, body})
+
+      case {verb, path, body} do
+        {:post, "/bottest-token/sendMessage", %{chat_id: chat_id}} ->
+          {:ok, %{message_id: 75, chat: %{id: chat_id}}}
+
+        {:post, "/bottest-token/editMessageText", _body} ->
+          {:ok, %{message_id: 75}}
+
+        {:post, "/bottest-token/deleteMessage", _body} ->
+          {:ok, true}
+
+        {:post, "/bottest-token/sendAnimation", {:multipart, parts}} ->
+          chat_id = multipart_value(parts, "chat_id") |> String.to_integer()
+
+          {:ok,
+           %{
+             message_id: 76,
+             chat: %{id: chat_id},
+             animation: %{file_id: "sent-animation-file-id"}
+           }}
+
+        _ ->
+          {:error, %ExGram.Error{code: 404}}
+      end
+    end
+
+    defp multipart_value(parts, name) do
+      Enum.find_value(parts, fn
+        {^name, value} -> value
+        _part -> nil
+      end)
+    end
+  end
+
   defmodule RateLimitedProgressMessageAdapter do
     @behaviour ExGram.Adapter
 
@@ -2461,6 +2571,12 @@ defmodule SaveIt.BotTest do
     def prepare_file_content(file_content, file_name)
         when is_binary(file_content) and is_binary(file_name) do
       {:ok, file_content, %{width: 1080, height: 1920, duration: 12}}
+    end
+  end
+
+  defmodule AnimationUploadConverter do
+    def convert_file_content(_file_content, file_name) when is_binary(file_name) do
+      {:ok, SaveIt.BotTest.test_mp4(), %{width: 480, height: 270, duration: 3}}
     end
   end
 
@@ -2792,6 +2908,32 @@ defmodule SaveIt.BotTest do
       """
     end
 
+    defp response_for("/downloaded/animation.gif", _port, _body) do
+      gif = SaveIt.BotTest.test_gif()
+
+      """
+      HTTP/1.1 200 OK\r
+      content-type: image/gif\r
+      content-length: #{byte_size(gif)}\r
+      connection: close\r
+      \r
+      #{gif}
+      """
+    end
+
+    defp response_for("/downloaded/large-animation.gif", _port, _body) do
+      gif = :binary.copy(<<0>>, 50 * 1024 * 1024 + 1)
+
+      """
+      HTTP/1.1 200 OK\r
+      content-type: image/gif\r
+      content-length: #{byte_size(gif)}\r
+      connection: close\r
+      \r
+      #{gif}
+      """
+    end
+
     defp response_for("/downloaded/large-video.mp4", _port, _body) do
       mp4 = :binary.copy(<<0>>, 50 * 1024 * 1024 + 1)
 
@@ -3088,6 +3230,12 @@ defmodule SaveIt.BotTest do
 
         String.contains?(url, "/large-video-page") ->
           json_response(%{"url" => "http://127.0.0.1:#{port}/downloaded/large-video.mp4"})
+
+        String.contains?(url, "/large-gif-page") ->
+          json_response(%{"url" => "http://127.0.0.1:#{port}/downloaded/large-animation.gif"})
+
+        String.contains?(url, "/gif-page") ->
+          json_response(%{"url" => "http://127.0.0.1:#{port}/downloaded/animation.gif"})
 
         true ->
           error_response(%{"error" => "unsupported url"})
