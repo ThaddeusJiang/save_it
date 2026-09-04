@@ -1,6 +1,6 @@
 ---
 name: save-it-release
-description: Prepare, verify, and publish `save_it` releases by updating `mix.exs`, creating the release commit and tag, and publishing a GitHub release. Use when the user asks to cut a stable release, prepare a prerelease, or verify release readiness for this repository. This repository uses CalVer `YYYY.M.D` for stable releases and prerelease tags such as `YYYY.M.D-rc.N`.
+description: Prepare, verify, and publish `save_it` releases by updating `mix.exs`, creating a dated changelog section, tagging a v-prefixed SemVer release, and publishing a dated GitHub Release. Use when the user asks to cut a stable release, prepare an rc prerelease, or verify release readiness for this repository.
 ---
 
 # Save It Release
@@ -8,21 +8,26 @@ description: Prepare, verify, and publish `save_it` releases by updating `mix.ex
 Use this skill when the task is specifically about the `save_it` release flow.
 
 This repository uses:
-- `mix.exs` `version` as the application version
-- Versioning: CalVer `YYYY.M.D` for stable releases, where the last segment is the calendar day of month (for example `2026.5.25`), with git tags using the same value without a `v` prefix, and hotfix such as `YYYY.M.D-hotfix.N`
-- git tags that match the version string directly, for example `2026.5.25`
+- `mix.exs` `version` as the application version, without a `v` prefix, for example `0.5.0`
+- `v`-prefixed SemVer Git tags for stable releases, for example `v0.5.0`
+- `-rc.N` prerelease tags, for example `v0.5.0-rc.1`
+- dated changelog headings, for example `## [v0.5.0] - 2026-09-04`
+- dated GitHub Release titles, for example `save_it v0.5.0 - 2026-09-04`
 - GitHub Release publication to trigger `.github/workflows/release.yml`
-- `CHANGELOG.md` as the in-repository curated changelog, maintained with Keep a Changelog and CalVer headings
-- GitHub release pages as the published release-note surface
-- `.github/workflows/release-manual.yml` for manual releases
+- `.github/workflows/release-manual.yml` for manual prereleases
+
+Historical CalVer tags and changelog headings remain unchanged.
 
 ## Release Rules
 
 - Change `mix.exs` `version` only while checked out on `main`. A version bump commit that contains only version and release metadata is this repository's only direct-to-`main` exception.
-- The bump version commit message must be exactly the target release tag, for example `YYYY.M.D` or `YYYY.M.D-rc.N`.
-- The release tag must be created on the bump version commit.
+- Require an explicit target version or bump level; do not derive a SemVer version from the date.
+- Keep the `v` prefix in Git tags and release-note headings, but omit it from `mix.exs`.
+- Keep release dates outside tags and use the same ISO `YYYY-MM-DD` date in the changelog and GitHub Release title.
+- The bump version commit message must be exactly the target release tag, for example `v0.5.0` or `v0.5.0-rc.1`.
+- Create the release tag on the bump version commit.
 - Maintain `CHANGELOG.md` only for product-focused user-facing features, behavior changes, fixes, removals, security changes, or breaking changes.
-- Before publishing a release or prerelease, roll current `Unreleased` entries into the target version heading and leave a fresh `## [Unreleased]` section above it.
+- Before publishing a release or prerelease, roll current `Unreleased` entries into the dated target version heading and leave a fresh `## [Unreleased]` section above it.
 - GitHub Releases may use generated notes.
 - Any release with breaking changes must include upgrade guides covering deployment and release steps for the new version.
 
@@ -30,11 +35,11 @@ This repository uses:
 
 1. Read the current release state.
 2. Decide whether this is release preparation, stable release publication, or manual prerelease publication.
-3. Align `mix.exs` and the target release tag.
-4. Align `CHANGELOG.md` with the target release tag.
-5. Verify release metadata and git state.
+3. Confirm the explicit target tag and derive the unprefixed application version.
+4. Align `mix.exs` and `CHANGELOG.md` with the target release.
+5. Verify release metadata and Git state.
 6. Execute the matching release path.
-7. Report the exact tag, commit, release URL, and workflow status.
+7. Report the exact tag, commit, release URL, release date, and workflow status.
 
 ## Preflight
 
@@ -49,58 +54,66 @@ git tag --sort=-version:refname | sed -n '1,20p'
 Rules:
 - Inspect release state from any branch, but perform version edits and release publication from `main`.
 - If the tree is dirty, stop and surface the changed files before continuing.
-- Check whether the target stable tag or GitHub release already exists before creating anything.
+- Check whether the target tag or GitHub Release already exists before creating anything.
 
-Use the helper script for a quick snapshot:
+Use the helper script with the complete Git tag:
 
 ```bash
-.agents/skills/save-it-release/scripts/check_release_state.sh YYYY.M.D
+.agents/skills/save-it-release/scripts/check_release_state.sh v0.5.0
 ```
 
-The helper exits with an error if a non-`main` branch introduces, stages, or leaves an unstaged `mix.exs` version change.
+The helper validates the tag format, derives the unprefixed `mix.exs` version, and exits with an error if a non-`main` branch introduces, stages, or leaves an unstaged `mix.exs` version change.
 
 ## Release Preparation
 
 When the user asks to prepare a release but not publish it yet:
 
-1. Confirm the current branch is `main`, then update `mix.exs`:
+1. Confirm the current branch is `main` and the target tag is explicit.
+2. Remove the leading `v` when updating `mix.exs`:
 
 ```elixir
-version: "YYYY.M.D"
+version: "0.5.0"
 ```
 
-2. If the release page needs curated notes, prepare a short English draft for the GitHub release body.
-3. Roll `CHANGELOG.md` `Unreleased` entries into the target release heading when preparing an actual release or prerelease.
-4. Show the diff for `mix.exs` and `CHANGELOG.md`.
-5. Do not tag or publish unless the user explicitly asks to release.
+3. Roll `CHANGELOG.md` `Unreleased` entries into the target heading, with the date outside the tag:
+
+```markdown
+## [v0.5.0] - 2026-09-04
+```
+
+4. If the release page needs curated notes, prepare a short English draft for the GitHub Release body.
+5. Show the diff for `mix.exs` and `CHANGELOG.md`.
+6. Do not tag or publish unless the user explicitly asks to release.
 
 ## Stable Release Publication
 
 When the user asks to publish a stable release:
 
-1. Confirm the current branch is `main` and the released version exists in `mix.exs`.
-2. Confirm `CHANGELOG.md` has a heading for the released version and a fresh `## [Unreleased]` heading above it.
-3. Commit release metadata changes using the target release tag as the commit message:
+1. Confirm the current branch is `main`, the unprefixed target version exists in `mix.exs`, and the target tag matches `vMAJOR.MINOR.PATCH`.
+2. Confirm `CHANGELOG.md` has a dated heading for the complete target tag and a fresh `## [Unreleased]` heading above it.
+3. Commit release metadata changes using the target tag as the message:
 
 ```bash
 git add mix.exs CHANGELOG.md
-git commit -m "YYYY.M.D"
+git commit -m "v0.5.0"
 ```
 
 4. Create and push the stable tag:
 
 ```bash
-git tag -a YYYY.M.D -m "YYYY.M.D"
+git tag -a v0.5.0 -m "v0.5.0"
 git push origin main
-git push origin refs/tags/YYYY.M.D
+git push origin refs/tags/v0.5.0
 ```
 
-5. Publish the GitHub release page entry. Prefer generated notes unless the user already prepared custom notes:
+5. Publish the GitHub Release with the changelog date after the tag. Prefer generated notes unless the user already prepared custom notes:
 
 ```bash
-gh release create YYYY.M.D \
+release_date="YYYY-MM-DD" # Use the date from the matching changelog heading.
+rg -n -F "## [v0.5.0] - $release_date" CHANGELOG.md
+gh release create v0.5.0 \
   --verify-tag \
-  --title "save_it YYYY.M.D" \
+  --title "save_it v0.5.0 - $release_date" \
   --generate-notes
 ```
 
@@ -116,26 +129,27 @@ If the user wants more confidence before release, run the acceptance flow from `
 
 When the user asks for a prerelease:
 
-1. Confirm the current branch is `main` and keep the version in the repository's CalVer prerelease form, for example `2026.5.25-rc.1`.
-2. Confirm `CHANGELOG.md` has a heading for the prerelease version and a fresh `## [Unreleased]` heading above it.
+1. Confirm the current branch is `main` and use a tag such as `v0.5.0-rc.1`; keep `mix.exs` at `0.5.0-rc.1`.
+2. Confirm `CHANGELOG.md` has a dated heading for the complete prerelease tag and a fresh `## [Unreleased]` heading above it.
 3. Prefer the existing GitHub Actions workflow instead of manually crafting a prerelease:
 
 ```bash
-gh workflow run "Release (manual)" -f tag=YYYY.M.D-rc.N
+gh workflow run "Release (manual)" -f tag=v0.5.0-rc.1
 ```
 
-4. This workflow publishes a GitHub prerelease and triggers Docker publish with prerelease semantics.
+4. This workflow validates the tag, reads the release date from its changelog heading, publishes a GitHub prerelease with the same date in its title, strips `v` from the Docker image version, and triggers Docker publication with prerelease semantics.
 
 ## Guardrails
 
 - Never publish a stable release from a dirty working tree.
-- Never create a stable release if `mix.exs` and the intended tag disagree on the version.
-- Never interpret the final stable version segment as an incrementing monthly patch number; it is the calendar day of month for the release date.
-- Never use a non-CalVer stable version format in this repository unless the project convention is explicitly changed again.
-- Never add a `v` prefix to new release tags in this repository.
+- Never create a release if `mix.exs`, `CHANGELOG.md`, and the intended tag disagree on the version.
+- Never include a date in a SemVer Git tag.
+- Never put the `v` prefix in `mix.exs`.
+- Never rename or recreate historical CalVer tags or GitHub Releases.
+- Never publish a new unprefixed release tag.
 - Never publish a release or prerelease without checking whether `CHANGELOG.md` needs a release rollover.
-- Never recreate an existing tag or GitHub release.
-- Never use the manual prerelease workflow for a normal stable release when direct GitHub release publication is intended.
+- Never recreate an existing tag or GitHub Release.
+- Never use the manual prerelease workflow for a normal stable release when direct GitHub Release publication is intended.
 
 ## Acceptance Checklist
 

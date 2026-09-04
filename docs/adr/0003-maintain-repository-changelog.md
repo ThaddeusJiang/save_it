@@ -1,5 +1,7 @@
 # Maintain Repository Changelog
 
+The CalVer-specific parts of this decision are superseded by [ADR 0007: Use Semantic Versioning for Releases](0007-use-semantic-versioning-for-releases.md). The decision to maintain a curated changelog remains in effect.
+
 ## Context and Problem Statement
 
 ADR 0002 stopped maintaining a repository `CHANGELOG.md` to reduce duplicate release-writing work. The project now needs an in-tree, human-readable change summary that is available outside the GitHub release page and can be updated continuously as work is completed.

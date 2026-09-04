@@ -1,13 +1,13 @@
 ---
 name: save-it-changelog
-description: Maintain the save_it repository CHANGELOG.md using Keep a Changelog 1.1.0 with CalVer version headings. Use at the end of repository work, before final response or commit/PR handoff, when user-facing product behavior, features, fixes, removals, security changes, or breaking changes changed.
+description: Maintain the save_it repository CHANGELOG.md using Keep a Changelog 1.1.0 with dated, v-prefixed SemVer headings. Use at the end of repository work, before final response or commit/PR handoff, when user-facing product behavior, features, fixes, removals, security changes, or breaking changes changed.
 ---
 
 # Save It Changelog
 
 ## Overview
 
-Keep `CHANGELOG.md` as the in-repository, human-written summary of notable changes. The project uses Keep a Changelog structure with CalVer release versions, not SemVer.
+Keep `CHANGELOG.md` as the in-repository, human-written summary of notable changes. The project uses Keep a Changelog structure with `v`-prefixed SemVer release tags and ISO release dates. Preserve historical CalVer headings unchanged.
 
 ## Workflow
 
@@ -21,9 +21,10 @@ Keep `CHANGELOG.md` as the in-repository, human-written summary of notable chang
 
 - File name: `CHANGELOG.md`.
 - Top section: `## [Unreleased]`.
-- Release heading: `## [YYYY.M.D] - YYYY-MM-DD`, for example `## [2026.6.9] - 2026-06-09`.
-- Use ISO dates in headings.
-- Do not prefix CalVer versions with `v`.
+- Stable release heading: `## [vMAJOR.MINOR.PATCH] - YYYY-MM-DD`, for example `## [v0.5.0] - 2026-09-04`.
+- Prerelease heading: `## [vMAJOR.MINOR.PATCH-rc.N] - YYYY-MM-DD`.
+- Use ISO dates in headings and keep the date outside the release tag.
+- Keep the corresponding `mix.exs` version unprefixed.
 - Keep newest releases first.
 - Use these section names when relevant: `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`.
 - Remove empty change-type subsections instead of leaving placeholders.
@@ -48,7 +49,7 @@ Keep `CHANGELOG.md` as the in-repository, human-written summary of notable chang
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project uses Calendar Versioning.
+and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
@@ -61,6 +62,6 @@ and this project uses Calendar Versioning.
 
 When preparing a release:
 
-1. Move current `Unreleased` entries into a new CalVer heading.
+1. Move current `Unreleased` entries into a new dated, `v`-prefixed SemVer heading.
 2. Add a fresh empty `## [Unreleased]` section above it.
 3. Add or update comparison links only for tags that exist or will be created in the release workflow.
