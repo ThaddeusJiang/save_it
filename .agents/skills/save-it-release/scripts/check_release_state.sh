@@ -3,12 +3,18 @@
 set -euo pipefail
 
 if [ "$#" -ne 1 ]; then
-  echo "usage: $0 <version>" >&2
+  echo "usage: $0 <tag>" >&2
   exit 1
 fi
 
-version="$1"
-tag="${version}"
+tag="$1"
+
+if [[ ! "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rc\.[1-9][0-9]*)?$ ]]; then
+  echo "error: tag must be v-prefixed SemVer, optionally followed by -rc.N" >&2
+  exit 1
+fi
+
+version="${tag#v}"
 branch="$(git branch --show-current)"
 
 version_changed() {
@@ -33,6 +39,7 @@ fi
 
 echo "branch=${branch}"
 echo "tag=${tag}"
+echo "version=${version}"
 echo "head=$(git rev-parse --short HEAD)"
 
 echo
@@ -41,7 +48,11 @@ git status --short --branch
 
 echo
 echo "[mix.exs version]"
-rg -n "version:\\s*\"${version}\"" mix.exs || true
+rg -n -F "version: \"${version}\"" mix.exs || true
+
+echo
+echo "[changelog section]"
+rg -n -F "## [${tag}] - " CHANGELOG.md || true
 
 echo
 echo "[local tag]"
@@ -53,4 +64,4 @@ git ls-remote --tags origin "refs/tags/${tag}" | sed '/^$/d' || true
 
 echo
 echo "[github release]"
-gh release view "${tag}" --json url,isDraft,isPrerelease,publishedAt --jq '{url, isDraft, isPrerelease, publishedAt}' 2>/dev/null || echo "missing"
+gh release view "${tag}" --json url,name,isDraft,isPrerelease,publishedAt --jq '{url, name, isDraft, isPrerelease, publishedAt}' 2>/dev/null || echo "missing"
