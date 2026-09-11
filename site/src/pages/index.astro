@@ -1,0 +1,32 @@
+---
+import { getCollection } from "astro:content";
+import Base from "../layouts/Base.astro";
+
+const posts = (await getCollection("zh")).sort(
+  (a, b) => b.data.date.valueOf() - a.data.date.valueOf(),
+);
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+---
+
+<Base title="save_it Weekly" description="save_it 的发布说明与工程笔记。" lang="zh">
+  <div class="page">
+    <h1>发布说明</h1>
+    <p class="lede">每个版本的重点功能、演示视频，以及顺手修掉的问题。</p>
+    <ul class="index-list">
+      {
+        posts.map((post) => (
+          <li>
+            <div class="meta">
+              <span>{post.data.date.toLocaleDateString("zh-Hans")}</span>
+              {post.data.version && <span>版本 {post.data.version}</span>}
+            </div>
+            <h3>
+              <a href={`${base}/release-notes/${post.id}`}>{post.data.title}</a>
+            </h3>
+            <p>{post.data.summary}</p>
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+</Base>

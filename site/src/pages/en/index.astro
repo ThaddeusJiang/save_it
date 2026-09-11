@@ -1,0 +1,32 @@
+---
+import { getCollection } from "astro:content";
+import Base from "../../layouts/Base.astro";
+
+const posts = (await getCollection("en")).sort(
+  (a, b) => b.data.date.valueOf() - a.data.date.valueOf(),
+);
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+---
+
+<Base title="save_it Weekly" description="Release notes and engineering notes for save_it." lang="en">
+  <div class="page">
+    <h1>Release notes</h1>
+    <p class="lede">What shipped in each version, with demos and the fixes that came along.</p>
+    <ul class="index-list">
+      {
+        posts.map((post) => (
+          <li>
+            <div class="meta">
+              <span>{post.data.date.toLocaleDateString("en-US")}</span>
+              {post.data.version && <span>Version {post.data.version}</span>}
+            </div>
+            <h3>
+              <a href={`${base}/en/release-notes/${post.id}`}>{post.data.title}</a>
+            </h3>
+            <p>{post.data.summary}</p>
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+</Base>

@@ -1,43 +1,55 @@
-# save_it Weekly：2026.9.3
+---
+title: "save_it 2026.9.3：GIF 能播了，链接不再丢"
+date: 2026-09-03
+kind: release
+version: 2026.9.3
+previousVersion: 2026.7.2
+summary: 这一版没有新增命令，做的都是把你已经在用的东西修对：GIF 直接在 Telegram 里播放，/detail 改名 /info，离线期间发的链接重启后会全部补齐保存。
+---
 
-发布日期：2026-09-03 ｜ 版本：2026.9.3 ｜ 上一个稳定版：2026.7.2
+import Demo from "@components/Demo.astro";
+import Highlight from "@components/Highlight.astro";
 
-## 来自 roadmap 的便签
+如果你在群里用 save_it 存图存视频，这一版的三件事你应该立刻能感觉到。
 
-这一版没有新增命令，做的都是「把你已经在用的东西修对」：GIF 现在在 Telegram 里直接能播，`/detail` 改叫 `/info`，bot 离线期间你发的链接重启后会全部补齐保存，而不只是最后一条。
-
-如果你在群里用 save_it 存图存视频，这三件事你应该立刻能感觉到。
-
-## 重点一：保存的 GIF 变成能播的动图
+<Highlight label="重点 01" title="保存的 GIF 变成能播的动图">
 
 以前保存一个 GIF（比如 X 上的 GIF 帖子），Telegram 里收到的是一个需要点开下载的文件附件，聊天窗口里看不到动画；超过上传上限的 GIF 甚至直接发不出来。
 
 现在 save_it 会在上传前把 GIF 本地转成 Telegram 友好的 mp4（libx264 / yuv420p / faststart，并读出宽高时长），再作为 animation 发送。副作用很实际：大 GIF 转码后体积通常小一个数量级，原本「文件过大」发不出去的 GIF 现在也能发出来。ffmpeg 不可用或转码失败时，会退回发送原始 GIF，不会因此丢消息。
 
-<!-- 演示视频：保存一个 X 的 GIF 链接 → bot 回复直接在聊天里循环播放 -->
-<!-- 录制后把 mp4 拖到 GitHub PR/Issue 评论框上传，然后把生成的 https://github.com/user-attachments/... 链接单独一行粘到下面 -->
+<Demo
+  caption="保存一个 X 的 GIF 链接，bot 回复直接在聊天里循环播放"
+  todo="待录制：保存 X 的 GIF 链接 → bot 回复直接在聊天里循环播放。录好后把视频链接填进 src。"
+/>
 
-`<在此粘贴演示视频链接>`
+</Highlight>
 
-## 重点二：`/detail` 更名为 `/info`
+<Highlight label="重点 02" title="/detail 更名为 /info">
 
 回复任意一张已保存的图片或视频，发送 `/info`，bot 会返回这条媒体的来源信息：原始消息链接、原始 URL、caption、标题、描述、关键词、保存时间（缺失的字段自动省略）。
 
 命令语义和输出没变，只是名字更短、更符合直觉。`/detail` 已不再受支持，请改用 `/info`。
 
-<!-- 演示视频：回复一张已保存的图片发送 /info → bot 返回来源信息 -->
+<Demo
+  caption="回复一张已保存的图片发送 /info，bot 返回来源信息"
+  todo="待录制：回复已保存的图片发送 /info → bot 返回来源信息。"
+/>
 
-`<在此粘贴演示视频链接>`
+</Highlight>
 
-## 重点三：离线期间的链接不再丢
+<Highlight label="重点 03" title="离线期间的链接不再丢">
 
 以前 bot 离线时你连发了几个链接，重启后只有最新那条会被处理，前面的会被 Telegram 的更新队列丢掉。
 
 原因是默认轮询在启动时用了 `offset: -1`，而负数 offset 对 Telegram 来说是一个「丢弃旧更新」的破坏性操作。现在 save_it 用自己的轮询器：启动后的第一次 `getUpdates` 不带 offset，把队列里最早的未确认更新全部取回并逐条处理，处理完再用 `max(update_id) + 1` 确认。
 
-<!-- 演示视频：停止 bot → 连发 3 个链接 → 启动 bot → 三条都被保存 -->
+<Demo
+  caption="停止 bot、连发三个链接、再启动 bot，三条都会被保存"
+  todo="待录制：停止 bot → 连发 3 个链接 → 启动 bot → 三条都被保存。"
+/>
 
-`<在此粘贴演示视频链接>`
+</Highlight>
 
 ## 更小的改进
 
@@ -54,5 +66,5 @@
 
 自托管用户拉取最新镜像后重启即可，本版本没有配置项变更，也不需要新的 Typesense 迁移。
 
-- 完整变更：[CHANGELOG.md](../../../CHANGELOG.md)
+- 完整变更：[CHANGELOG.md](https://github.com/ThaddeusJiang/save_it/blob/main/CHANGELOG.md)
 - Playground：[@save_it_playground](https://t.me/save_it_playground)

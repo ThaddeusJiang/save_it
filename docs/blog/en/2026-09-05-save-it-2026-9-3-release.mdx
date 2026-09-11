@@ -1,43 +1,55 @@
-# save_it Weekly: 2026.9.3
+---
+title: "save_it 2026.9.3: GIFs play, links no longer vanish"
+date: 2026-09-03
+kind: release
+version: 2026.9.3
+previousVersion: 2026.7.2
+summary: No new commands in this release — it fixes the things you already use. GIFs play inline in Telegram, /detail is now /info, and links sent while the bot was offline are all saved after a restart.
+---
 
-Released 2026-09-03 · Version 2026.9.3 · Previous stable 2026.7.2
+import Demo from "@components/Demo.astro";
+import Highlight from "@components/Highlight.astro";
 
-## Notes from the roadmap
+If you use save_it in a group chat to keep images and videos, you should feel all three of these immediately.
 
-This release adds no new commands. It fixes the things you already use: GIFs now play inline in Telegram, `/detail` is now `/info`, and links you send while the bot is offline are all saved after a restart instead of only the last one.
-
-If you use save_it in a group chat to keep images and videos, you should feel all three immediately.
-
-## Highlight 1: Saved GIFs arrive as playable animations
+<Highlight label="Highlight 01" title="Saved GIFs arrive as playable animations">
 
 Saving a GIF — for example a GIF post from X — used to produce a downloadable file attachment: no animation in the chat, and GIFs above the upload limit were never delivered at all.
 
 save_it now transcodes GIF content locally into a Telegram-friendly mp4 (libx264 / yuv420p / faststart, with probed width, height, and duration) and sends it as an animation. A useful side effect: transcoding usually shrinks a large GIF by an order of magnitude, so GIFs that previously failed the size check now go through. When ffmpeg is unavailable or the conversion fails, save_it falls back to the original GIF instead of dropping the message.
 
-<!-- Demo video: save a GIF link from X -> the bot reply loops inline in the chat -->
-<!-- After recording, drop the mp4 into a GitHub PR/issue comment box to upload it, then paste the resulting https://github.com/user-attachments/... link on its own line below -->
+<Demo
+  caption="Save a GIF link from X and the bot reply loops inline in the chat"
+  todo="To record: save a GIF link from X -> the bot reply loops inline. Then set src to the uploaded video link."
+/>
 
-`<paste demo video link here>`
+</Highlight>
 
-## Highlight 2: `/detail` is now `/info`
+<Highlight label="Highlight 02" title="/detail is now /info">
 
 Reply to any saved photo or video with `/info` and the bot returns that item's provenance: source message URL, original URL, caption, title, description, keywords, and saved-at time. Missing fields are omitted.
 
 The behavior and output are unchanged — the name is just shorter and more obvious. `/detail` is no longer supported; use `/info`.
 
-<!-- Demo video: reply to a saved photo with /info -> the bot returns its provenance -->
+<Demo
+  caption="Reply to a saved photo with /info and the bot returns its provenance"
+  todo="To record: reply to a saved photo with /info -> the bot returns its provenance."
+/>
 
-`<paste demo video link here>`
+</Highlight>
 
-## Highlight 3: Links sent while offline are no longer lost
+<Highlight label="Highlight 03" title="Links sent while offline are no longer lost">
 
 If the bot was offline while you sent several links, only the newest one was processed after a restart; the earlier ones were discarded by Telegram's update queue.
 
 The cause was the default polling worker starting with `offset: -1`, and a negative offset is a destructive queue operation for the Bot API. save_it now runs its own polling worker: the first `getUpdates` after startup omits the offset, so Telegram returns the earliest unconfirmed updates, each is dispatched, and the batch is acknowledged with `max(update_id) + 1`.
 
-<!-- Demo video: stop the bot -> send 3 links -> start the bot -> all three are saved -->
+<Demo
+  caption="Stop the bot, send three links, start the bot — all three are saved"
+  todo="To record: stop the bot -> send 3 links -> start the bot -> all three are saved."
+/>
 
-`<paste demo video link here>`
+</Highlight>
 
 ## Smaller improvements
 
@@ -54,5 +66,5 @@ The cause was the default polling worker starting with `offset: -1`, and a negat
 
 Self-hosted deployments only need to pull the latest image and restart. This release changes no configuration and requires no new Typesense migration.
 
-- Full changes: [CHANGELOG.md](../../../CHANGELOG.md)
+- Full changes: [CHANGELOG.md](https://github.com/ThaddeusJiang/save_it/blob/main/CHANGELOG.md)
 - Playground: [@save_it_playground](https://t.me/save_it_playground)

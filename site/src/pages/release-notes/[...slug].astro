@@ -1,0 +1,18 @@
+---
+import type { GetStaticPaths } from "astro";
+import { getCollection, render } from "astro:content";
+import Post from "../../layouts/Post.astro";
+
+export const getStaticPaths: GetStaticPaths = async () => {
+  const posts = await getCollection("zh");
+
+  return posts.map((post) => ({ params: { slug: post.id }, props: { post } }));
+};
+
+const { post } = Astro.props;
+const { Content } = await render(post);
+---
+
+<Post {...post.data} lang="zh">
+  <Content />
+</Post>

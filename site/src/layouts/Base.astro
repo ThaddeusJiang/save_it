@@ -1,0 +1,44 @@
+---
+import "../styles/global.css";
+
+interface Props {
+  title: string;
+  description?: string;
+  lang: "zh" | "en";
+}
+
+const { title, description, lang } = Astro.props;
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+const home = lang === "zh" ? `${base}/` : `${base}/en/`;
+const other = lang === "zh" ? `${base}/en/` : `${base}/`;
+const tagline = lang === "zh" ? "新功能 · 每次发布" : "New features · Every release";
+---
+
+<!doctype html>
+<html lang={lang === "zh" ? "zh-Hans" : "en"}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    {description && <meta name="description" content={description} />}
+    <link rel="icon" href={`${base}/favicon.svg`} />
+  </head>
+  <body>
+    <header class="masthead">
+      <div class="masthead-inner">
+        <a class="wordmark" href={home} style="text-decoration: none">
+          save_it <em>Weekly</em>
+        </a>
+        <div class="meta">
+          <span>{tagline}</span>
+          <a class="lang-switch" href={other}>{lang === "zh" ? "English" : "中文"}</a>
+          <a class="lang-switch" href="https://github.com/ThaddeusJiang/save_it">GitHub</a>
+        </div>
+      </div>
+    </header>
+    <main>
+      <slot />
+    </main>
+    <footer class="footer">save_it · GPL-3.0 · ThaddeusJiang</footer>
+  </body>
+</html>

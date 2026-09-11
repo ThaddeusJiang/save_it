@@ -1,0 +1,59 @@
+---
+interface Props {
+  src?: string;
+  poster?: string;
+  caption?: string;
+  todo?: string;
+}
+
+const { src, poster, caption, todo } = Astro.props;
+---
+
+<figure class="demo">
+  {
+    src ? (
+      <video src={src} poster={poster} controls muted loop playsinline preload="metadata"></video>
+    ) : (
+      <div class="demo-placeholder">{todo ?? "Demo video pending"}</div>
+    )
+  }
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<style>
+  .demo {
+    margin: 1.75rem 0;
+  }
+
+  .demo video {
+    background: #000;
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    display: block;
+    width: 100%;
+  }
+
+  .demo-placeholder {
+    align-items: center;
+    border: 2px dashed var(--rule);
+    border-radius: 8px;
+    color: var(--muted);
+    display: flex;
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    justify-content: center;
+    min-height: 12rem;
+    padding: 1.5rem;
+    text-align: center;
+  }
+
+  figcaption {
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    margin-top: 0.6rem;
+    text-align: center;
+    text-transform: uppercase;
+  }
+</style>

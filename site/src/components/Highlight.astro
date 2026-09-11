@@ -1,0 +1,37 @@
+---
+interface Props {
+  label?: string;
+  title: string;
+}
+
+const { label, title } = Astro.props;
+---
+
+<section class="highlight">
+  {label && <p class="highlight-label">{label}</p>}
+  <h2>{title}</h2>
+  <slot />
+</section>
+
+<style>
+  .highlight h2 {
+    border-top: none;
+    margin-top: 0.25rem;
+    padding-top: 0;
+  }
+
+  .highlight {
+    border-top: 1px solid var(--rule);
+    margin-top: 2.75rem;
+    padding-top: 1.5rem;
+  }
+
+  .highlight-label {
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.16em;
+    margin: 0;
+    text-transform: uppercase;
+  }
+</style>
