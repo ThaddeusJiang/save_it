@@ -13,6 +13,7 @@ defmodule SaveIt.Bot.MediaSender do
   alias SaveIt.Bot.ThumbnailDownload
   alias SaveIt.DownloadedFile
   alias SaveIt.FileHelper
+  alias SaveIt.IndexImage
   alias SaveIt.Telegram
   alias SaveIt.VideoUpload
   alias SmallSdk.Telegram, as: TelegramClient
@@ -206,16 +207,23 @@ defmodule SaveIt.Bot.MediaSender do
   defp index_media_group_file(file, msg, chat_id, source_chat, caption, url_metadata_opts) do
     {content, source_fields} = media_group_file_fields(file)
 
-    %{
-      image: encode_file_content(content),
-      caption: caption,
-      file_id: MessageInfo.file_id(msg),
-      belongs_to_id: chat_id
-    }
-    |> Map.merge(source_fields)
-    |> PhotoIndex.put_url_metadata_fields(url_metadata_opts)
-    |> Map.merge(MessageInfo.source_message_fields(source_chat, msg))
-    |> PhotoIndex.create_photo()
+    case encode_index_image(content) do
+      {:ok, image} ->
+        %{
+          image: image,
+          caption: caption,
+          file_id: MessageInfo.file_id(msg),
+          belongs_to_id: chat_id
+        }
+        |> Map.merge(source_fields)
+        |> PhotoIndex.put_url_metadata_fields(url_metadata_opts)
+        |> Map.merge(MessageInfo.source_message_fields(source_chat, msg))
+        |> PhotoIndex.create_photo()
+
+      {:error, _reason} ->
+        Logger.warning("Skipping Typesense indexing: unsupported image")
+        :error
+    end
   end
 
   defp resend_media_group_file(file, chat_id, opts) do
@@ -373,18 +381,25 @@ defmodule SaveIt.Bot.MediaSender do
     {:ok, msg} =
       ExGram.send_photo(chat_id, content, telegram_send_opts(caption, message_thread_id))
 
-    %{
-      image: encode_file_content(content),
-      caption: caption,
-      file_id: MessageInfo.file_id(msg),
-      url: Keyword.get(opts, :source_url),
-      belongs_to_id: chat_id
-    }
-    |> put_optional(:download_url, Keyword.get(opts, :download_url))
-    |> put_optional(:thumbnail_url, Keyword.get(opts, :thumbnail_url))
-    |> PhotoIndex.put_url_metadata_fields(PhotoIndex.url_metadata_opts(opts))
-    |> Map.merge(MessageInfo.source_message_fields(Keyword.fetch!(opts, :source_chat), msg))
-    |> PhotoIndex.index_photo()
+    case encode_index_image(content) do
+      {:ok, image} ->
+        %{
+          image: image,
+          caption: caption,
+          file_id: MessageInfo.file_id(msg),
+          url: Keyword.get(opts, :source_url),
+          belongs_to_id: chat_id
+        }
+        |> put_optional(:download_url, Keyword.get(opts, :download_url))
+        |> put_optional(:thumbnail_url, Keyword.get(opts, :thumbnail_url))
+        |> PhotoIndex.put_url_metadata_fields(PhotoIndex.url_metadata_opts(opts))
+        |> Map.merge(MessageInfo.source_message_fields(Keyword.fetch!(opts, :source_chat), msg))
+        |> PhotoIndex.index_photo()
+
+      {:error, _reason} ->
+        Logger.warning("Skipping Typesense indexing: unsupported image")
+        :error
+    end
   end
 
   defp send_video(chat_id, content, caption, message_thread_id, opts) do
@@ -603,11 +618,14 @@ defmodule SaveIt.Bot.MediaSender do
     end
   end
 
-  defp encode_file_content({:file, file}) do
-    File.read!(file) |> Base.encode64()
+  defp encode_index_image({:file, file}) do
+    encode_index_image({:file_content, File.read!(file), Path.basename(file)})
   end
 
-  defp encode_file_content({:file_content, file_content, _file_name}) do
-    Base.encode64(file_content)
+  defp encode_index_image({:file_content, file_content, file_name}) do
+    case IndexImage.jpeg_bytes(file_name, file_content) do
+      {:ok, jpeg} -> {:ok, Base.encode64(jpeg)}
+      {:error, reason} -> {:error, reason}
+    end
   end
 end
