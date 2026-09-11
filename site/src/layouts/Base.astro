@@ -5,12 +5,13 @@ interface Props {
   title: string;
   description?: string;
   lang: "zh" | "en";
+  altPath?: string;
 }
 
-const { title, description, lang } = Astro.props;
+const { title, description, lang, altPath } = Astro.props;
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 const home = lang === "zh" ? `${base}/` : `${base}/en/`;
-const other = lang === "zh" ? `${base}/en/` : `${base}/`;
+const other = altPath ? `${base}${altPath}` : lang === "zh" ? `${base}/en/` : `${base}/`;
 const tagline = lang === "zh" ? "新功能 · 每次发布" : "New features · Every release";
 ---
 

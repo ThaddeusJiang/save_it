@@ -11,8 +11,10 @@ export const getStaticPaths: GetStaticPaths = async () => {
 
 const { post } = Astro.props;
 const { Content } = await render(post);
+const hasEnglish = (await getCollection("en")).some((entry) => entry.id === post.id);
+const altPath = hasEnglish ? `/en/release-notes/${post.id}` : undefined;
 ---
 
-<Post {...post.data} lang="zh">
+<Post {...post.data} lang="zh" altPath={altPath}>
   <Content />
 </Post>

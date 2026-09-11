@@ -9,9 +9,10 @@ interface Props {
   version?: string;
   previousVersion?: string;
   lang: "zh" | "en";
+  altPath?: string;
 }
 
-const { title, subtitle, summary, date, version, previousVersion, lang } = Astro.props;
+const { title, subtitle, summary, date, version, previousVersion, lang, altPath } = Astro.props;
 const locale = lang === "zh" ? "zh-Hans" : "en-US";
 const formattedDate = date.toLocaleDateString(locale, {
   year: "numeric",
@@ -26,7 +27,7 @@ const subtitleLine =
     .join(" · ");
 ---
 
-<Base title={`${title} · save_it`} description={summary} lang={lang}>
+<Base title={`${title} · save_it`} description={summary} lang={lang} altPath={altPath}>
   <article class="page">
     <div class="meta">
       <span>{formattedDate}</span>
