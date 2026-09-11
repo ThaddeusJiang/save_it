@@ -1,6 +1,8 @@
+@import "@fontsource-variable/fraunces/index.css";
 @import "@fontsource-variable/geist/index.css";
 @import "@fontsource-variable/geist-mono/index.css";
 @import "@fontsource-variable/noto-sans-sc/index.css";
+@import "@fontsource-variable/noto-serif-sc/index.css";
 
 :root {
   --paper: #f6f4ef;
@@ -8,8 +10,7 @@
   --muted: #6d6a63;
   --rule: #d8d4c8;
   --accent: #c2410c;
-  --display: "Geist Variable", "Noto Sans SC Variable", "PingFang SC", "Microsoft YaHei",
-    system-ui, sans-serif;
+  --display: "Fraunces Variable", "Noto Serif SC Variable", "Songti SC", Georgia, serif;
   --sans: "Geist Variable", "Noto Sans SC Variable", "PingFang SC", "Microsoft YaHei", system-ui,
     sans-serif;
   --mono: "Geist Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -57,7 +58,7 @@ a {
   font-family: var(--display);
   font-size: clamp(1.9rem, 6vw, 2.6rem);
   font-weight: 600;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.02em;
 }
 
 .wordmark em {
@@ -88,21 +89,30 @@ a {
 
 .page h1 {
   font-family: var(--display);
-  font-size: clamp(2.1rem, 6vw, 3rem);
+  font-size: clamp(2.2rem, 6.5vw, 3.2rem);
   font-weight: 600;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.02em;
   line-height: 1.14;
-  margin: 0 0 0.75rem;
+  margin: 0 0 0.5rem;
 }
 
 .page h2 {
   border-top: 1px solid var(--rule);
   font-family: var(--display);
-  font-size: 1.55rem;
+  font-size: 1.6rem;
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.015em;
   margin: 2.75rem 0 0.75rem;
   padding-top: 1.5rem;
+}
+
+.subtitle {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  margin: 0 0 1.75rem;
+  text-transform: uppercase;
 }
 
 .lede {
@@ -147,9 +157,9 @@ a {
 
 .index-list h3 {
   font-family: var(--display);
-  font-size: 1.35rem;
+  font-size: 1.4rem;
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.015em;
   margin: 0.35rem 0;
 }
 

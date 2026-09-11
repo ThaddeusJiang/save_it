@@ -3,6 +3,7 @@ import Base from "./Base.astro";
 
 interface Props {
   title: string;
+  subtitle?: string;
   summary: string;
   date: Date;
   version?: string;
@@ -10,25 +11,28 @@ interface Props {
   lang: "zh" | "en";
 }
 
-const { title, summary, date, version, previousVersion, lang } = Astro.props;
+const { title, subtitle, summary, date, version, previousVersion, lang } = Astro.props;
 const locale = lang === "zh" ? "zh-Hans" : "en-US";
 const formattedDate = date.toLocaleDateString(locale, {
   year: "numeric",
   month: "long",
   day: "numeric",
 });
-const versionLabel = lang === "zh" ? "版本" : "Version";
-const previousLabel = lang === "zh" ? "上一个稳定版" : "Previous stable";
+const previousLabel = lang === "zh" ? "上一个稳定版" : "previously";
+const subtitleLine =
+  subtitle ??
+  [version && `save_it ${version}`, previousVersion && `${previousLabel} ${previousVersion}`]
+    .filter(Boolean)
+    .join(" · ");
 ---
 
 <Base title={`${title} · save_it`} description={summary} lang={lang}>
   <article class="page">
     <div class="meta">
       <span>{formattedDate}</span>
-      {version && <span>{versionLabel} {version}</span>}
-      {previousVersion && <span>{previousLabel} {previousVersion}</span>}
     </div>
     <h1>{title}</h1>
+    {subtitleLine && <p class="subtitle">{subtitleLine}</p>}
     <p class="lede">{summary}</p>
     <slot />
   </article>
