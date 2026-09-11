@@ -8,6 +8,13 @@ Releases from the earlier CalVer period retain their original version labels.
 
 ## [Unreleased]
 
+### Fixed
+
+- Show saved media info for `/info` replies when Telegram's `file_id` has changed, by falling back to the indexed message URL in groups and channels, or a private-chat message key in DMs.
+- Index saved GIFs so `/info` can show their details, and send GIF search results as animations.
+- Delete Typesense records for video and GIF replies, not only photos.
+- Index directly uploaded GIFs, send WebP/WebM/MOV downloads as photo or video instead of documents, and fall back to sending a photo when a stored video `file_id` is actually a preview image.
+
 ## [2026.9.3] - 2026-09-03
 
 ### Changed

@@ -61,6 +61,12 @@ defmodule SaveIt.Bot.MessageInfo do
     |> map_get(:file_id)
   end
 
+  def animation_file_id(msg) do
+    msg
+    |> map_get(:animation)
+    |> map_get(:file_id)
+  end
+
   def thumbnail(nil), do: nil
 
   def thumbnail(message) do
@@ -107,7 +113,7 @@ defmodule SaveIt.Bot.MessageInfo do
 
     cond do
       chat_type == "private" ->
-        nil
+        private_chat_message_key(chat_id, message_id)
 
       is_binary(username) and username != "" ->
         "https://t.me/#{username}/#{message_id}"
@@ -122,6 +128,12 @@ defmodule SaveIt.Bot.MessageInfo do
         nil
     end
   end
+
+  defp private_chat_message_key(chat_id, message_id) when not is_nil(chat_id) do
+    "telegram:private:#{chat_id}/#{message_id}"
+  end
+
+  defp private_chat_message_key(_chat_id, _message_id), do: nil
 
   defp telegram_private_channel_id(chat_id) do
     chat_id = to_string(chat_id)
