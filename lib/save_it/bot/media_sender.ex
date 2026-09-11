@@ -273,7 +273,8 @@ defmodule SaveIt.Bot.MediaSender do
           chat_id,
           content,
           Keyword.fetch!(opts, :caption),
-          Keyword.get(opts, :message_thread_id)
+          Keyword.get(opts, :message_thread_id),
+          opts
         )
 
       _extension ->
@@ -361,7 +362,7 @@ defmodule SaveIt.Bot.MediaSender do
         send_video(chat_id, content, caption, message_thread_id, opts)
 
       ".gif" ->
-        send_gif_animation(chat_id, content, caption, message_thread_id)
+        send_gif_animation(chat_id, content, caption, message_thread_id, opts)
 
       _extension ->
         ExGram.send_document(chat_id, content, telegram_send_opts(caption, message_thread_id))
@@ -409,18 +410,25 @@ defmodule SaveIt.Bot.MediaSender do
     end
   end
 
-  defp send_gif_animation(chat_id, content, caption, message_thread_id) do
+  defp send_gif_animation(chat_id, content, caption, message_thread_id, opts) do
     {prepared_content, metadata} = AnimationUpload.prepare(content)
 
     if upload_too_large?(prepared_content) do
       Telegram.send_message(chat_id, @telegram_file_too_large_message)
       {:error, :telegram_file_too_large}
     else
-      ExGram.send_animation(
-        chat_id,
-        prepared_content,
-        animation_send_opts(caption, metadata, message_thread_id)
-      )
+      case ExGram.send_animation(
+             chat_id,
+             prepared_content,
+             animation_send_opts(caption, metadata, message_thread_id)
+           ) do
+        {:ok, msg} = response ->
+          index_sent_animation(chat_id, msg, opts)
+          response
+
+        {:error, _reason} = error ->
+          error
+      end
     end
   end
 
@@ -517,6 +525,47 @@ defmodule SaveIt.Bot.MediaSender do
       {:error, _reason} ->
         Logger.warning("Skipping video preview indexing")
         :error
+    end
+  end
+
+  defp index_sent_animation(chat_id, msg, opts) do
+    caption = Keyword.fetch!(opts, :caption)
+    source_url = Keyword.get(opts, :source_url)
+    download_url = Keyword.get(opts, :download_url)
+    thumbnail_url = Keyword.get(opts, :thumbnail_url)
+    source_chat = Keyword.fetch!(opts, :source_chat)
+    url_metadata_opts = PhotoIndex.url_metadata_opts(opts)
+
+    with file_id when is_binary(file_id) <- MessageInfo.animation_file_id(msg),
+         {:ok, %DownloadedFile{} = file} <- animation_preview(msg, thumbnail_url, source_url) do
+      %{
+        image: Base.encode64(file.file_content),
+        caption: caption,
+        file_id: file_id,
+        media_type: "gif",
+        url: source_url,
+        belongs_to_id: chat_id
+      }
+      |> put_optional(:download_url, download_url)
+      |> put_optional(:thumbnail_url, thumbnail_url)
+      |> PhotoIndex.put_url_metadata_fields(url_metadata_opts)
+      |> Map.merge(MessageInfo.source_message_fields(source_chat, msg))
+      |> PhotoIndex.index_photo()
+    else
+      nil ->
+        Logger.warning("Skipping gif indexing: missing sent animation file_id")
+        :error
+
+      {:error, _reason} ->
+        Logger.warning("Skipping gif indexing")
+        :error
+    end
+  end
+
+  defp animation_preview(msg, thumbnail_url, source_url) do
+    case ThumbnailDownload.from_message(msg) do
+      {:ok, %DownloadedFile{} = file} -> {:ok, file}
+      {:error, _reason} -> ThumbnailDownload.preview_image(thumbnail_url, source_url)
     end
   end
 

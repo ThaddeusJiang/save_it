@@ -70,6 +70,10 @@ defmodule SaveIt.Bot.MediaAnswer do
     )
   end
 
+  defp send_saved_media(chat_id, %{"media_type" => "gif"} = media) do
+    ExGram.send_animation(chat_id, media["file_id"], caption: media["caption"])
+  end
+
   defp send_saved_media(chat_id, media) do
     ExGram.send_photo(chat_id, media["file_id"], caption: media["caption"])
   end
@@ -80,6 +84,14 @@ defmodule SaveIt.Bot.MediaAnswer do
       media: media["file_id"],
       caption: media["caption"],
       supports_streaming: true
+    }
+  end
+
+  defp saved_media_group_input(%{"media_type" => "gif"} = media) do
+    %ExGram.Model.InputMediaAnimation{
+      type: "animation",
+      media: media["file_id"],
+      caption: media["caption"]
     }
   end
 

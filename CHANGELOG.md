@@ -8,6 +8,10 @@ Releases from the earlier CalVer period retain their original version labels.
 
 ## [Unreleased]
 
+### Fixed
+
+- Index saved GIFs so `/info` can show their details, and send GIF search results as animations.
+
 ## [2026.9.3] - 2026-09-03
 
 ### Changed

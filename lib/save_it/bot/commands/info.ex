@@ -5,7 +5,7 @@ defmodule SaveIt.Bot.Commands.Info do
   alias SaveIt.Bot.TextHelper
   alias SaveIt.Telegram
 
-  @usage_message "reply a photo or video with /info command."
+  @usage_message "reply a photo, video, or gif with /info command."
 
   def handle(chat, nil) do
     Telegram.send_message(chat.id, @usage_message)
@@ -36,6 +36,7 @@ defmodule SaveIt.Bot.Commands.Info do
   end
 
   defp media_file_id(%{video: %{file_id: file_id}}), do: file_id
+  defp media_file_id(%{animation: %{file_id: file_id}}), do: file_id
   defp media_file_id(_reply_to_message), do: nil
 
   defp message(reply_to_message, photo) do
