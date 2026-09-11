@@ -47,8 +47,9 @@ If the bot was offline while you sent several links, only the newest one was pro
 The cause was the default polling worker starting with `offset: -1`, and a negative offset is a destructive queue operation for the Bot API. save_it now runs its own polling worker: the first `getUpdates` after startup omits the offset, so Telegram returns the earliest unconfirmed updates, each is dispatched, and the batch is acknowledged with `max(update_id) + 1`.
 
 <Demo
-  caption="Stop the bot, send three links, start the bot — all three are saved"
-  todo="To record: stop the bot -> send 3 links -> start the bot -> all three are saved."
+  src="/videos/offline-backfill.mp4"
+  poster="/videos/offline-backfill.jpg"
+  caption="Three links sent while the bot was down, all processed and saved after restart (waits sped up)"
 />
 
 </Highlight>

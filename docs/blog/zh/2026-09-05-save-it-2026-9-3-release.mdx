@@ -47,8 +47,9 @@ import Highlight from "@components/Highlight.astro";
 原因是默认轮询在启动时用了 `offset: -1`，而负数 offset 对 Telegram 来说是一个「丢弃旧更新」的破坏性操作。现在 save_it 用自己的轮询器：启动后的第一次 `getUpdates` 不带 offset，把队列里最早的未确认更新全部取回并逐条处理，处理完再用 `max(update_id) + 1` 确认。
 
 <Demo
-  caption="停止 bot、连发三个链接、再启动 bot，三条都会被保存"
-  todo="待录制：停止 bot → 连发 3 个链接 → 启动 bot → 三条都被保存。"
+  src="/videos/offline-backfill.mp4"
+  poster="/videos/offline-backfill.jpg"
+  caption="bot 停止时连发三个链接，重启后三条全部被处理并保存（等待部分已加速）"
 />
 
 </Highlight>
