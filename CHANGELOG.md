@@ -8,6 +8,8 @@ Releases from the earlier CalVer period retain their original version labels.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.2] - 2026-09-11
+
 ### Fixed
 
 - Convert WebP preview images to JPEG before Typesense indexing so CLIP ingest no longer returns 400.
