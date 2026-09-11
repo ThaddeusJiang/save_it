@@ -38,13 +38,20 @@ defmodule SaveIt.Bot.Commands.Info do
   end
 
   defp get_photo_by_source_message_url(chat, reply_to_message) do
-    case Map.get(MessageInfo.source_message_fields(chat, reply_to_message), :source_message_url) do
-      url when is_binary(url) and url != "" ->
-        PhotoIndex.get_photo_by_source_message_url(url, chat.id)
+    reply_to_message
+    |> source_message_urls(chat)
+    |> Enum.find_value(&PhotoIndex.get_photo_by_source_message_url(&1, chat.id))
+  end
 
-      _ ->
-        nil
-    end
+  defp source_message_urls(reply_to_message, chat) do
+    message_id = MessageInfo.message_id(reply_to_message)
+
+    [
+      Map.get(MessageInfo.source_message_fields(chat, reply_to_message), :source_message_url),
+      Map.get(MessageInfo.source_message_fields(chat, message_id, nil), :source_message_url)
+    ]
+    |> Enum.filter(&(is_binary(&1) and &1 != ""))
+    |> Enum.uniq()
   end
 
   defp media_file_id(%{photo: [_ | _] = photos}) do
@@ -53,6 +60,7 @@ defmodule SaveIt.Bot.Commands.Info do
 
   defp media_file_id(%{video: %{file_id: file_id}}), do: file_id
   defp media_file_id(%{animation: %{file_id: file_id}}), do: file_id
+  defp media_file_id(%{document: %{file_id: file_id}}), do: file_id
   defp media_file_id(_reply_to_message), do: nil
 
   defp message(reply_to_message, photo) do

@@ -1274,6 +1274,36 @@ defmodule SaveIt.BotTest do
     assert_storage_file_content_with_uuidv7_extension(".jpg", test_og_jpeg())
   end
 
+  test "indexes a sent URL video even when cover and preview images are unavailable",
+       %{base_url: base_url} do
+    original_url = base_url <> "/bare-video-page"
+
+    Application.put_env(:ex_gram, :adapter, __MODULE__.UrlVideoWithoutThumbnailAdapter)
+    Application.put_env(:save_it, :video_cover_generator, __MODULE__.FailingVideoCoverGenerator)
+
+    message = %{
+      chat: %{id: 12_345, username: "save_it_test_chat"},
+      date: 1_717_170_000,
+      message_id: 111,
+      text: original_url,
+      link_preview_options: %{url: original_url}
+    }
+
+    log =
+      capture_log(fn ->
+        assert {:ok, true} = Bot.handle({:text, original_url, message}, nil)
+      end)
+
+    assert log =~ "Indexing video with fallback JPEG preview"
+    assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
+    document = Jason.decode!(typesense_body)
+
+    assert document["file_id"] == "sent-video-file-id"
+    assert document["media_type"] == "video"
+    assert document["url"] == original_url
+    assert document["image"] == Base.encode64(SaveIt.IndexImage.fallback_jpeg())
+  end
+
   test "stores the webpage preview for a downloaded HLS URL video", %{base_url: base_url} do
     original_url = base_url <> "/hls-video-page"
 
@@ -2075,6 +2105,39 @@ defmodule SaveIt.BotTest do
                ],
                "\n"
              )
+  end
+
+  test "returns video info from a topic reply when the stored message URL has no thread id",
+       _context do
+    ExGramTestAdapter.backdoor_request(:send_message, %{message_id: 30})
+
+    chat_id = -1_001_234_567_890
+
+    message = %{
+      chat: %{id: chat_id, type: "supergroup"},
+      reply_to_message: %{
+        message_id: 77,
+        message_thread_id: 42,
+        date: 1_717_200_000,
+        video: %{file_id: "rotated-topic-video-file-id"}
+      }
+    }
+
+    assert {:ok, %{message_id: 30}} = Bot.handle({:command, :info, message}, nil)
+
+    assert_receive {:test_http_request, :get, file_id_search_path, ""}
+    assert file_id_search_path =~ "file_id%3A%3Drotated-topic-video-file-id"
+
+    assert_receive {:test_http_request, :get, threaded_url_search_path, ""}
+    assert threaded_url_search_path =~ "1234567890%2F42%2F77"
+
+    assert_receive {:test_http_request, :get, plain_url_search_path, ""}
+    assert plain_url_search_path =~ "1234567890%2F77"
+    refute plain_url_search_path =~ "1234567890%2F42%2F77"
+
+    request_body = sent_message_body()
+    assert request_body.chat_id == chat_id
+    assert request_body.text =~ "Original URL: https://www.youtube.com/shorts/clip123"
   end
 
   test "returns info for a replied gif animation", _context do
@@ -3474,6 +3537,19 @@ defmodule SaveIt.BotTest do
         public_message_url_query?(query) ->
           search_hit(photo_info_document(port))
 
+        threaded_topic_url_query?(query) ->
+          %{"hits" => []}
+
+        plain_topic_url_query?(query) ->
+          search_hit(video_info_document(port))
+
+        true ->
+          known_file_id_hit(query, port)
+      end
+    end
+
+    defp known_file_id_hit(query, port) do
+      cond do
         query =~ "file_id%3A%3Dold-photo-file-id" ->
           search_hit(old_photo_info_document())
 
@@ -3491,6 +3567,7 @@ defmodule SaveIt.BotTest do
     defp missing_photo_file_id?(query) do
       query =~ "file_id%3A%3Drotated-photo-file-id" or
         query =~ "file_id%3A%3Drotated-private-photo-file-id" or
+        query =~ "file_id%3A%3Drotated-topic-video-file-id" or
         query =~ "file_id%3A%3Dunknown-photo-file-id"
     end
 
@@ -3500,6 +3577,14 @@ defmodule SaveIt.BotTest do
 
     defp public_message_url_query?(query) do
       query =~ "source_message_url" and query =~ "save_it_test_chat%2F20"
+    end
+
+    defp threaded_topic_url_query?(query) do
+      query =~ "source_message_url" and query =~ "1234567890%2F42%2F77"
+    end
+
+    defp plain_topic_url_query?(query) do
+      query =~ "source_message_url" and query =~ "1234567890%2F77"
     end
 
     defp search_hit(document), do: %{"hits" => [%{"document" => document}]}
@@ -3603,6 +3688,9 @@ defmodule SaveIt.BotTest do
 
         String.contains?(url, "/article-page") ->
           json_response(%{"url" => "http://127.0.0.1:#{port}/downloaded/article.html"})
+
+        String.contains?(url, "/bare-video-page") ->
+          json_response(%{"url" => "http://127.0.0.1:#{port}/downloaded/video.mp4"})
 
         String.contains?(url, "/video-page") ->
           json_response(%{"url" => "http://127.0.0.1:#{port}/downloaded/video.mp4"})

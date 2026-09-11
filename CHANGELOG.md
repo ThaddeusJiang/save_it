@@ -8,6 +8,10 @@ Releases from the earlier CalVer period retain their original version labels.
 
 ## [Unreleased]
 
+### Fixed
+
+- Keep indexing a sent URL video when cover/thumbnail/preview images are missing, and look up `/info` by the topic message URL with or without the thread id.
+
 ## [v0.5.0-rc.2] - 2026-09-11
 
 ### Fixed
