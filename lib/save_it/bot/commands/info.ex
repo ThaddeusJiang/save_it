@@ -56,7 +56,7 @@ defmodule SaveIt.Bot.Commands.Info do
 
   defp message(reply_to_message, photo) do
     [
-      line("Message URL", Map.get(photo, "source_message_url")),
+      line("Message URL", public_source_message_url(Map.get(photo, "source_message_url"))),
       line("Original URL", Map.get(photo, "url")),
       line("Caption", Map.get(photo, "caption")),
       line("Title", Map.get(photo, "title")),
@@ -67,6 +67,9 @@ defmodule SaveIt.Bot.Commands.Info do
     |> Enum.reject(&is_nil/1)
     |> Enum.join("\n")
   end
+
+  defp public_source_message_url("https://t.me/" <> _ = url), do: url
+  defp public_source_message_url(_url), do: nil
 
   defp line(_label, nil), do: nil
   defp line(_label, ""), do: nil

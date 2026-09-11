@@ -326,7 +326,7 @@ defmodule SaveIt.BotTest do
            end)
   end
 
-  test "does not store a source message URL for private DM saves", %{base_url: base_url} do
+  test "stores a private message key for private DM saves", %{base_url: base_url} do
     original_url = "https://x.com/example/status/1?utm_source=telegram"
     message_text = "dm reference #{original_url}"
     download_url = base_url <> "/downloaded/photo.jpg"
@@ -359,7 +359,7 @@ defmodule SaveIt.BotTest do
     assert document["download_url"] == download_url
     assert document["caption"] == "dm reference"
     refute Map.has_key?(document, "source_message_id")
-    refute Map.has_key?(document, "source_message_url")
+    assert document["source_message_url"] == "telegram:private:12345/20"
   end
 
   test "stores URL metadata separately when user text only contains the URL", %{
@@ -2071,6 +2071,57 @@ defmodule SaveIt.BotTest do
              )
   end
 
+  test "returns info for a private chat reply when file_id changed but the message key still matches",
+       _context do
+    ExGramTestAdapter.backdoor_request(:send_message, %{message_id: 30})
+
+    chat_id = 12_345
+    original_url = "https://x.com/example/status/1?utm_source=telegram"
+
+    message = %{
+      chat: %{id: chat_id, type: "private"},
+      reply_to_message: %{
+        message_id: 20,
+        date: 1_717_200_000,
+        photo: [
+          %{file_id: "small-rotated-private-photo-file-id"},
+          %{file_id: "rotated-private-photo-file-id"}
+        ]
+      }
+    }
+
+    assert {:ok, %{message_id: 30}} = Bot.handle({:command, :info, message}, nil)
+
+    assert_receive {:test_http_request, :get, file_id_search_path, ""}
+    assert file_id_search_path =~ "file_id%3A%3Drotated-private-photo-file-id"
+    refute file_id_search_path =~ "source_message_url"
+
+    assert_receive {:test_http_request, :get, key_search_path, ""}
+    assert key_search_path =~ "source_message_url"
+    assert key_search_path =~ "telegram%3Aprivate%3A12345%2F20"
+    assert key_search_path =~ "belongs_to_id%3A%3D12345"
+
+    request_body = sent_message_body()
+
+    assert request_body.chat_id == chat_id
+
+    assert request_body.text ==
+             Enum.join(
+               [
+                 "Original URL: #{original_url}",
+                 "Caption: saved by user",
+                 "Title: X Page OG Title",
+                 "Description: X Page OG Description",
+                 "Keywords: x, twitter, clip",
+                 "Saved at: 2024-06-01 00:00:00 UTC"
+               ],
+               "\n"
+             )
+
+    refute request_body.text =~ "Message URL:"
+    refute request_body.text =~ "telegram:private:"
+  end
+
   test "returns not found when replied media is missing from Typesense", _context do
     ExGramTestAdapter.backdoor_request(:send_message, %{message_id: 30})
 
@@ -2898,54 +2949,7 @@ defmodule SaveIt.BotTest do
     end
 
     defp response_for("/collections/photos/documents/search?" <> query, port, _body) do
-      cond do
-        query =~ "file_id%3A%3Drotated-photo-file-id" or
-            query =~ "file_id%3A%3Dunknown-photo-file-id" ->
-          json_response(%{"hits" => []})
-
-        query =~ "source_message_url" and query =~ "save_it_test_chat%2F20" ->
-          json_response(%{"hits" => [%{"document" => photo_info_document(port)}]})
-
-        query =~ "file_id%3A%3Dold-photo-file-id" ->
-          json_response(%{
-            "hits" => [
-              %{
-                "document" => %{
-                  "id" => "old-typesense-photo-id",
-                  "caption" => "",
-                  "file_id" => "old-photo-file-id",
-                  "belongs_to_id" => "12345",
-                  "inserted_at" => 1_717_200_000
-                }
-              }
-            ]
-          })
-
-        query =~ "file_id%3A%3Dsent-video-file-id" ->
-          json_response(%{
-            "hits" => [
-              %{
-                "document" => %{
-                  "id" => "typesense-video-id",
-                  "file_id" => "sent-video-file-id",
-                  "caption" => "video saved by user",
-                  "title" => "Video Page OG Title",
-                  "description" => "Video Page OG Description",
-                  "keywords" => ["video", "preview", "clip"],
-                  "url" => "https://www.youtube.com/shorts/clip123",
-                  "download_url" => "http://127.0.0.1:#{port}/downloaded/video.mp4",
-                  "source_message_url" => "https://t.me/save_it_test_chat/70",
-                  "media_type" => "video",
-                  "belongs_to_id" => "12345",
-                  "inserted_at" => 1_717_200_000
-                }
-              }
-            ]
-          })
-
-        true ->
-          json_response(%{"hits" => [%{"document" => photo_info_document(port)}]})
-      end
+      json_response(photos_search_body(query, port))
     end
 
     defp response_for("/collections/photos/documents", _port, _body) do
@@ -3255,6 +3259,44 @@ defmodule SaveIt.BotTest do
       """
     end
 
+    defp photos_search_body(query, port) do
+      cond do
+        missing_photo_file_id?(query) ->
+          %{"hits" => []}
+
+        private_message_key_query?(query) ->
+          search_hit(private_photo_info_document(port))
+
+        public_message_url_query?(query) ->
+          search_hit(photo_info_document(port))
+
+        query =~ "file_id%3A%3Dold-photo-file-id" ->
+          search_hit(old_photo_info_document())
+
+        query =~ "file_id%3A%3Dsent-video-file-id" ->
+          search_hit(video_info_document(port))
+
+        true ->
+          search_hit(photo_info_document(port))
+      end
+    end
+
+    defp missing_photo_file_id?(query) do
+      query =~ "file_id%3A%3Drotated-photo-file-id" or
+        query =~ "file_id%3A%3Drotated-private-photo-file-id" or
+        query =~ "file_id%3A%3Dunknown-photo-file-id"
+    end
+
+    defp private_message_key_query?(query) do
+      query =~ "source_message_url" and query =~ "telegram%3Aprivate%3A12345%2F20"
+    end
+
+    defp public_message_url_query?(query) do
+      query =~ "source_message_url" and query =~ "save_it_test_chat%2F20"
+    end
+
+    defp search_hit(document), do: %{"hits" => [%{"document" => document}]}
+
     defp photo_info_document(port) do
       %{
         "id" => "typesense-photo-id",
@@ -3266,6 +3308,37 @@ defmodule SaveIt.BotTest do
         "url" => "https://x.com/example/status/1?utm_source=telegram",
         "download_url" => "http://127.0.0.1:#{port}/downloaded/photo.jpg",
         "source_message_url" => "https://t.me/save_it_test_chat/20",
+        "belongs_to_id" => "12345",
+        "inserted_at" => 1_717_200_000
+      }
+    end
+
+    defp private_photo_info_document(port) do
+      Map.put(photo_info_document(port), "source_message_url", "telegram:private:12345/20")
+    end
+
+    defp old_photo_info_document do
+      %{
+        "id" => "old-typesense-photo-id",
+        "caption" => "",
+        "file_id" => "old-photo-file-id",
+        "belongs_to_id" => "12345",
+        "inserted_at" => 1_717_200_000
+      }
+    end
+
+    defp video_info_document(port) do
+      %{
+        "id" => "typesense-video-id",
+        "file_id" => "sent-video-file-id",
+        "caption" => "video saved by user",
+        "title" => "Video Page OG Title",
+        "description" => "Video Page OG Description",
+        "keywords" => ["video", "preview", "clip"],
+        "url" => "https://www.youtube.com/shorts/clip123",
+        "download_url" => "http://127.0.0.1:#{port}/downloaded/video.mp4",
+        "source_message_url" => "https://t.me/save_it_test_chat/70",
+        "media_type" => "video",
         "belongs_to_id" => "12345",
         "inserted_at" => 1_717_200_000
       }
