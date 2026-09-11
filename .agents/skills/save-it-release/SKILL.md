@@ -12,7 +12,7 @@ This repository uses:
 - `v`-prefixed SemVer Git tags for stable releases, for example `v0.5.0`
 - `-rc.N` prerelease tags, for example `v0.5.0-rc.1`
 - dated changelog headings, for example `## [v0.5.0] - 2026-09-04`
-- dated GitHub Release titles, for example `save_it v0.5.0 - 2026-09-04`
+- GitHub Release titles that are exactly the release tag, for example `v0.5.0`
 - GitHub Release publication to trigger `.github/workflows/release.yml`
 - `.github/workflows/release-manual.yml` for manual prereleases
 
@@ -23,7 +23,7 @@ Historical CalVer tags and changelog headings remain unchanged.
 - Change `mix.exs` `version` only while checked out on `main`. A version bump commit that contains only version and release metadata is this repository's only direct-to-`main` exception.
 - Require an explicit target version or bump level; do not derive a SemVer version from the date.
 - Keep the `v` prefix in Git tags and release-note headings, but omit it from `mix.exs`.
-- Keep release dates outside tags and use the same ISO `YYYY-MM-DD` date in the changelog and GitHub Release title.
+- Keep release dates outside tags and release titles; record the ISO `YYYY-MM-DD` date in the changelog heading only.
 - The bump version commit message must be exactly the target release tag, for example `v0.5.0` or `v0.5.0-rc.1`.
 - Create the release tag on the bump version commit.
 - Maintain `CHANGELOG.md` only for product-focused user-facing features, behavior changes, fixes, removals, security changes, or breaking changes.
@@ -106,14 +106,14 @@ git push origin main
 git push origin refs/tags/v0.5.0
 ```
 
-5. Publish the GitHub Release with the changelog date after the tag. Prefer generated notes unless the user already prepared custom notes:
+5. Publish the GitHub Release titled with the tag alone, after confirming the changelog heading is dated. Prefer generated notes unless the user already prepared custom notes:
 
 ```bash
 release_date="YYYY-MM-DD" # Use the date from the matching changelog heading.
 rg -n -F "## [v0.5.0] - $release_date" CHANGELOG.md
 gh release create v0.5.0 \
   --verify-tag \
-  --title "save_it v0.5.0 - $release_date" \
+  --title "v0.5.0" \
   --generate-notes
 ```
 
@@ -137,7 +137,7 @@ When the user asks for a prerelease:
 gh workflow run "Release (manual)" -f tag=v0.5.0-rc.1
 ```
 
-4. This workflow validates the tag, reads the release date from its changelog heading, publishes a GitHub prerelease with the same date in its title, strips `v` from the Docker image version, and triggers Docker publication with prerelease semantics.
+4. This workflow validates the tag, requires a dated changelog heading for it, publishes a GitHub prerelease titled with the tag, strips `v` from the Docker image version, and triggers Docker publication with prerelease semantics.
 
 ## Guardrails
 

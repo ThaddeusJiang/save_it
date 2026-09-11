@@ -58,11 +58,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_BRANCH: ${{ github.ref_name }}
           INPUT_TAG: ${{ inputs.tag }}
-          RELEASE_DATE: ${{ steps.prepare.outputs.release_date }}
         run: |
           gh release create "$INPUT_TAG" \
             --target "$RELEASE_BRANCH" \
-            --title "save_it $INPUT_TAG - $RELEASE_DATE" \
+            --title "$INPUT_TAG" \
             --generate-notes \
             --prerelease
 
