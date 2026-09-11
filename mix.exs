@@ -6,7 +6,7 @@ defmodule SaveIt.MixProject do
   def project do
     [
       app: :save_it,
-      version: "2026.9.3",
+      version: "0.5.0-rc.1",
       elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
       deps: deps(),

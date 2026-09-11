@@ -8,6 +8,8 @@ Releases from the earlier CalVer period retain their original version labels.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.1] - 2026-09-11
+
 ### Fixed
 
 - Show saved media info for `/info` replies when Telegram's `file_id` has changed, by falling back to the indexed message URL in groups and channels, or a private-chat message key in DMs.
