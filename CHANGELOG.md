@@ -8,6 +8,8 @@ Releases from the earlier CalVer period retain their original version labels.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.3] - 2026-09-11
+
 ### Fixed
 
 - Index sent URL videos from Telegram thumbnail, then the generated cover, then an ffmpeg first frame, then webpage `og:image`, and still store a placeholder JPEG so `/info` can look the message up.
