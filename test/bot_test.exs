@@ -972,7 +972,11 @@ defmodule SaveIt.BotTest do
     assert multipart_part(parts, "cover") == :file_content
     assert multipart_file_content(parts, "cover") == test_video_cover()
 
-    refute_receive {:telegram_download_request, _telegram_env}
+    assert_receive {:telegram_download_request, telegram_env}
+
+    assert telegram_env.url
+           |> URI.to_string()
+           |> String.ends_with?("/file/bottest-token/video_thumbnails/sent.jpg")
 
     assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
 
@@ -984,16 +988,14 @@ defmodule SaveIt.BotTest do
     assert document["caption"] == "clip notes"
     assert document["file_id"] == "sent-video-file-id"
     assert document["media_type"] == "video"
-    assert document["image"] == Base.encode64(test_video_cover())
+    assert document["image"] == Base.encode64(test_jpeg())
     refute Map.has_key?(document, "source_message_id")
     assert document["source_message_url"] == "https://t.me/save_it_test_chat/70"
 
-    assert_receive {:test_http_request, :get, "/video-page-with-telegram-thumbnail", ""}
     refute_receive {:test_http_request, :get, "/video-preview.jpg", ""}
     refute_receive {:test_http_request, :get, "/preview.jpg", ""}
 
     assert_storage_file_with_uuidv7_extension(".mp4")
-    assert_storage_file_content_with_uuidv7_extension(".jpg", test_video_cover())
   end
 
   test "sends a thumbnail and indexes Typesense when downloaded URL video is too large for Telegram",
@@ -1274,12 +1276,14 @@ defmodule SaveIt.BotTest do
     assert_storage_file_content_with_uuidv7_extension(".jpg", test_og_jpeg())
   end
 
-  test "indexes a sent URL video even when cover and preview images are unavailable",
+  test "indexes a sent URL video from the generated cover when Telegram has no thumbnail",
        %{base_url: base_url} do
     original_url = base_url <> "/bare-video-page"
 
     Application.put_env(:ex_gram, :adapter, __MODULE__.UrlVideoWithoutThumbnailAdapter)
-    Application.put_env(:save_it, :video_cover_generator, __MODULE__.FailingVideoCoverGenerator)
+    Application.put_env(:save_it, :video_upload_preparer, __MODULE__.VideoUploadPreparer)
+    Application.put_env(:save_it, :video_metadata_probe, __MODULE__.VideoMetadataProbe)
+    Application.put_env(:save_it, :video_cover_generator, __MODULE__.VideoCoverGenerator)
 
     message = %{
       chat: %{id: 12_345, username: "save_it_test_chat"},
@@ -1289,19 +1293,16 @@ defmodule SaveIt.BotTest do
       link_preview_options: %{url: original_url}
     }
 
-    log =
-      capture_log(fn ->
-        assert {:ok, true} = Bot.handle({:text, original_url, message}, nil)
-      end)
+    assert {:ok, true} = Bot.handle({:text, original_url, message}, nil)
 
-    assert log =~ "Indexing video with fallback JPEG preview"
     assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
     document = Jason.decode!(typesense_body)
 
     assert document["file_id"] == "sent-video-file-id"
     assert document["media_type"] == "video"
     assert document["url"] == original_url
-    assert document["image"] == Base.encode64(SaveIt.IndexImage.fallback_jpeg())
+    assert document["image"] == Base.encode64(test_video_cover())
+    refute_receive {:test_http_request, :get, "/preview.jpg", ""}
   end
 
   test "stores the webpage preview for a downloaded HLS URL video", %{base_url: base_url} do

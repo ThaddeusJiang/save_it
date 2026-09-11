@@ -1,12 +1,6 @@
 defmodule SaveIt.IndexImage do
   @moduledoc false
 
-  @fallback_jpeg Base.decode64!(
-                   "/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wAALCAABAAEBAREA/8QAJgABAAAAAAAAAAAAAAAAAAAAAxABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQAAPwBH/9k="
-                 )
-
-  def fallback_jpeg, do: @fallback_jpeg
-
   def jpeg_bytes(file_name, file_content)
       when is_binary(file_name) and is_binary(file_content) do
     case String.downcase(Path.extname(file_name)) do
