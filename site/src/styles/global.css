@@ -1,11 +1,21 @@
+@import "@fontsource-variable/newsreader/index.css";
+@import "@fontsource-variable/newsreader/standard-italic.css";
+@import "@fontsource-variable/inter/index.css";
+@import "@fontsource-variable/jetbrains-mono/index.css";
+
 :root {
   --paper: #f6f4ef;
   --ink: #1b1a18;
   --muted: #6d6a63;
   --rule: #d8d4c8;
   --accent: #c2410c;
-  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Songti SC", serif;
-  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  --display: "Newsreader Variable", "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC",
+    SimSun, Georgia, serif;
+  --serif: "Newsreader Variable", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC",
+    "Microsoft YaHei", Georgia, serif;
+  --sans: "Inter Variable", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC",
+    "Microsoft YaHei", system-ui, sans-serif;
+  --mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 * {
@@ -16,7 +26,9 @@ html {
   background: var(--paper);
   color: var(--ink);
   font-family: var(--serif);
-  line-height: 1.7;
+  font-size: 17px;
+  line-height: 1.75;
+  text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -45,8 +57,9 @@ a {
   display: flex;
   align-items: baseline;
   gap: 0.5rem;
+  font-family: var(--display);
   font-size: clamp(2rem, 7vw, 3rem);
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -0.02em;
 }
 
@@ -76,20 +89,27 @@ a {
 }
 
 .page h1 {
-  font-size: clamp(2rem, 6vw, 3rem);
+  font-family: var(--display);
+  font-size: clamp(2.1rem, 6vw, 3.1rem);
+  font-weight: 600;
+  letter-spacing: -0.01em;
   line-height: 1.15;
   margin: 0 0 0.75rem;
 }
 
 .page h2 {
   border-top: 1px solid var(--rule);
-  font-size: 1.5rem;
+  font-family: var(--display);
+  font-size: 1.6rem;
+  font-weight: 600;
   margin: 2.75rem 0 0.75rem;
   padding-top: 1.5rem;
 }
 
 .lede {
-  font-size: 1.15rem;
+  font-family: var(--sans);
+  font-size: 1.1rem;
+  line-height: 1.65;
   color: var(--muted);
   margin: 0 0 2rem;
 }
@@ -127,7 +147,9 @@ a {
 }
 
 .index-list h3 {
-  font-size: 1.35rem;
+  font-family: var(--display);
+  font-size: 1.4rem;
+  font-weight: 600;
   margin: 0.35rem 0;
 }
 
