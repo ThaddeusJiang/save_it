@@ -1,7 +1,6 @@
-@import "@fontsource/instrument-serif/index.css";
-@import "@fontsource/instrument-serif/400-italic.css";
-@import "@fontsource-variable/instrument-sans/index.css";
+@import "@fontsource-variable/geist/index.css";
 @import "@fontsource-variable/geist-mono/index.css";
+@import "@fontsource-variable/noto-sans-sc/index.css";
 
 :root {
   --paper: #f6f4ef;
@@ -9,10 +8,10 @@
   --muted: #6d6a63;
   --rule: #d8d4c8;
   --accent: #c2410c;
-  --display: "Instrument Serif", "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", SimSun,
-    Georgia, serif;
-  --sans: "Instrument Sans Variable", "PingFang SC", "HarmonyOS Sans SC", "Source Han Sans SC",
-    "Noto Sans CJK SC", "Microsoft YaHei", system-ui, sans-serif;
+  --display: "Geist Variable", "Noto Sans SC Variable", "PingFang SC", "Microsoft YaHei",
+    system-ui, sans-serif;
+  --sans: "Geist Variable", "Noto Sans SC Variable", "PingFang SC", "Microsoft YaHei", system-ui,
+    sans-serif;
   --mono: "Geist Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
@@ -56,13 +55,14 @@ a {
   align-items: baseline;
   gap: 0.5rem;
   font-family: var(--display);
-  font-size: clamp(2.1rem, 7vw, 3.2rem);
-  font-weight: 400;
-  letter-spacing: -0.02em;
+  font-size: clamp(1.9rem, 6vw, 2.6rem);
+  font-weight: 600;
+  letter-spacing: -0.035em;
 }
 
 .wordmark em {
-  font-style: italic;
+  color: var(--muted);
+  font-style: normal;
   font-weight: 400;
 }
 
@@ -88,18 +88,19 @@ a {
 
 .page h1 {
   font-family: var(--display);
-  font-size: clamp(2.3rem, 6.5vw, 3.5rem);
-  font-weight: 400;
-  letter-spacing: -0.015em;
-  line-height: 1.12;
+  font-size: clamp(2.1rem, 6vw, 3rem);
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1.14;
   margin: 0 0 0.75rem;
 }
 
 .page h2 {
   border-top: 1px solid var(--rule);
   font-family: var(--display);
-  font-size: 1.75rem;
-  font-weight: 400;
+  font-size: 1.55rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
   margin: 2.75rem 0 0.75rem;
   padding-top: 1.5rem;
 }
@@ -146,8 +147,9 @@ a {
 
 .index-list h3 {
   font-family: var(--display);
-  font-size: 1.5rem;
-  font-weight: 400;
+  font-size: 1.35rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
   margin: 0.35rem 0;
 }
 
