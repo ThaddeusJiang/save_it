@@ -1,6 +1,7 @@
 defmodule SaveIt.Bot.Commands.Info do
   @moduledoc false
 
+  alias SaveIt.Bot.MessageInfo
   alias SaveIt.Bot.PhotoIndex
   alias SaveIt.Bot.TextHelper
   alias SaveIt.Telegram
@@ -14,20 +15,35 @@ defmodule SaveIt.Bot.Commands.Info do
   def handle(chat, reply_to_message) do
     case media_file_id(reply_to_message) do
       file_id when is_binary(file_id) ->
-        send_info(chat.id, reply_to_message, file_id)
+        send_info(chat, reply_to_message, file_id)
 
       _ ->
         Telegram.send_message(chat.id, @usage_message)
     end
   end
 
-  defp send_info(chat_id, reply_to_message, file_id) do
-    case PhotoIndex.get_photo(file_id, chat_id) do
+  defp send_info(chat, reply_to_message, file_id) do
+    case find_photo(chat, reply_to_message, file_id) do
       nil ->
-        Telegram.send_message(chat_id, "Media info not found.")
+        Telegram.send_message(chat.id, "Media info not found.")
 
       photo ->
-        Telegram.send_message(chat_id, message(reply_to_message, photo))
+        Telegram.send_message(chat.id, message(reply_to_message, photo))
+    end
+  end
+
+  defp find_photo(chat, reply_to_message, file_id) do
+    PhotoIndex.get_photo(file_id, chat.id) ||
+      get_photo_by_source_message_url(chat, reply_to_message)
+  end
+
+  defp get_photo_by_source_message_url(chat, reply_to_message) do
+    case Map.get(MessageInfo.source_message_fields(chat, reply_to_message), :source_message_url) do
+      url when is_binary(url) and url != "" ->
+        PhotoIndex.get_photo_by_source_message_url(url, chat.id)
+
+      _ ->
+        nil
     end
   end
 

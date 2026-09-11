@@ -83,6 +83,21 @@ defmodule SaveIt.Bot.PhotoIndex do
       nil
   end
 
+  def get_photo_by_source_message_url(url, belongs_to_id) do
+    PhotoService.get_photo_by_source_message_url(url, belongs_to_id)
+  rescue
+    error ->
+      Logger.error(
+        "Typesense get_photo_by_source_message_url failed: #{Exception.message(error)}"
+      )
+
+      nil
+  catch
+    kind, _reason ->
+      Logger.error("Typesense get_photo_by_source_message_url failed", kind: kind)
+      nil
+  end
+
   defp include_created_photo_metadata(photo, photo_params) when is_map(photo) do
     Enum.reduce([:file_id, :media_type], photo, fn key, acc ->
       case Map.fetch(photo_params, key) do

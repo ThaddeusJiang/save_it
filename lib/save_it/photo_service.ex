@@ -53,9 +53,22 @@ defmodule SaveIt.PhotoService do
   end
 
   def get_photo(file_id, belongs_to_id) do
+    get_photo_by_filter("file_id:=#{file_id} && belongs_to_id:=#{belongs_to_id}")
+  end
+
+  def get_photo_by_source_message_url(url, belongs_to_id)
+      when is_binary(url) and url != "" do
+    escaped_url = String.replace(url, "`", "")
+
+    get_photo_by_filter("source_message_url:=`#{escaped_url}` && belongs_to_id:=#{belongs_to_id}")
+  end
+
+  def get_photo_by_source_message_url(_url, _belongs_to_id), do: nil
+
+  defp get_photo_by_filter(filter_by) do
     case Typesense.search_documents!("photos",
            q: "*",
-           filter_by: "file_id:=#{file_id} && belongs_to_id:=#{belongs_to_id}"
+           filter_by: filter_by
          ) do
       [photo | _] -> photo
       [] -> nil
