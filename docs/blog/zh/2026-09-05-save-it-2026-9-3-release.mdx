@@ -19,8 +19,9 @@ import Highlight from "@components/Highlight.astro";
 现在 save_it 会在上传前把 GIF 本地转成 Telegram 友好的 mp4（libx264 / yuv420p / faststart，并读出宽高时长），再作为 animation 发送。副作用很实际：大 GIF 转码后体积通常小一个数量级，原本「文件过大」发不出去的 GIF 现在也能发出来。ffmpeg 不可用或转码失败时，会退回发送原始 GIF，不会因此丢消息。
 
 <Demo
+  src="/videos/gif-playback.mp4"
+  poster="/videos/gif-playback.jpg"
   caption="保存一个 X 的 GIF 链接，bot 回复直接在聊天里循环播放"
-  todo="待录制：保存 X 的 GIF 链接 → bot 回复直接在聊天里循环播放。录好后把视频链接填进 src。"
 />
 
 </Highlight>

@@ -7,12 +7,14 @@ interface Props {
 }
 
 const { src, poster, caption, todo } = Astro.props;
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+const withBase = (path?: string) => (path?.startsWith("/") ? `${base}${path}` : path);
 ---
 
 <figure class="demo">
   {
     src ? (
-      <video src={src} poster={poster} controls muted loop playsinline preload="metadata"></video>
+      <video src={withBase(src)} poster={withBase(poster)} controls muted loop playsinline preload="metadata"></video>
     ) : (
       <div class="demo-placeholder">{todo ?? "Demo video pending"}</div>
     )
@@ -30,7 +32,9 @@ const { src, poster, caption, todo } = Astro.props;
     border: 1px solid var(--rule);
     border-radius: 8px;
     display: block;
-    width: 100%;
+    margin: 0 auto;
+    max-height: 70vh;
+    max-width: 100%;
   }
 
   .demo-placeholder {

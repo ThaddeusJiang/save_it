@@ -19,8 +19,9 @@ Saving a GIF — for example a GIF post from X — used to produce a downloadabl
 save_it now transcodes GIF content locally into a Telegram-friendly mp4 (libx264 / yuv420p / faststart, with probed width, height, and duration) and sends it as an animation. A useful side effect: transcoding usually shrinks a large GIF by an order of magnitude, so GIFs that previously failed the size check now go through. When ffmpeg is unavailable or the conversion fails, save_it falls back to the original GIF instead of dropping the message.
 
 <Demo
+  src="/videos/gif-playback.mp4"
+  poster="/videos/gif-playback.jpg"
   caption="Save a GIF link from X and the bot reply loops inline in the chat"
-  todo="To record: save a GIF link from X -> the bot reply loops inline. Then set src to the uploaded video link."
 />
 
 </Highlight>
