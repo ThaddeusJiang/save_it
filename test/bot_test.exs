@@ -1305,6 +1305,71 @@ defmodule SaveIt.BotTest do
     refute_receive {:test_http_request, :get, "/preview.jpg", ""}
   end
 
+  test "indexes a sent URL video from ffmpeg first frame when cover generation fails",
+       %{base_url: base_url} do
+    original_url = base_url <> "/bare-video-page"
+
+    Application.put_env(:ex_gram, :adapter, __MODULE__.UrlVideoWithoutThumbnailAdapter)
+    Application.put_env(:save_it, :video_cover_generator, __MODULE__.FailingVideoCoverGenerator)
+
+    Application.put_env(
+      :save_it,
+      :video_first_frame_extractor,
+      __MODULE__.VideoFirstFrameExtractor
+    )
+
+    message = %{
+      chat: %{id: 12_345, username: "save_it_test_chat"},
+      date: 1_717_170_000,
+      message_id: 112,
+      text: original_url,
+      link_preview_options: %{url: original_url}
+    }
+
+    assert {:ok, true} = Bot.handle({:text, original_url, message}, nil)
+
+    assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
+    document = Jason.decode!(typesense_body)
+
+    assert document["file_id"] == "sent-video-file-id"
+    assert document["image"] == Base.encode64(test_video_thumbnail())
+  end
+
+  test "indexes a sent URL video with a placeholder JPEG when ffmpeg is unavailable",
+       %{base_url: base_url} do
+    original_url = base_url <> "/bare-video-page"
+
+    Application.put_env(:ex_gram, :adapter, __MODULE__.UrlVideoWithoutThumbnailAdapter)
+    Application.put_env(:save_it, :video_cover_generator, __MODULE__.FailingVideoCoverGenerator)
+
+    Application.put_env(
+      :save_it,
+      :video_first_frame_extractor,
+      __MODULE__.FailingVideoFirstFrameExtractor
+    )
+
+    message = %{
+      chat: %{id: 12_345, username: "save_it_test_chat"},
+      date: 1_717_170_000,
+      message_id: 113,
+      text: original_url,
+      link_preview_options: %{url: original_url}
+    }
+
+    log =
+      capture_log(fn ->
+        assert {:ok, true} = Bot.handle({:text, original_url, message}, nil)
+      end)
+
+    assert log =~ "ffmpeg is unavailable for video first-frame extraction"
+    assert log =~ "Indexing video with placeholder JPEG after preview extraction failed"
+    assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
+    document = Jason.decode!(typesense_body)
+
+    assert document["file_id"] == "sent-video-file-id"
+    assert document["image"] == Base.encode64(SaveIt.IndexImage.fallback_jpeg())
+  end
+
   test "stores the webpage preview for a downloaded HLS URL video", %{base_url: base_url} do
     original_url = base_url <> "/hls-video-page"
 
@@ -2947,6 +3012,18 @@ defmodule SaveIt.BotTest do
     def cover_file_content(_file_content, file_name, _dimensions)
         when is_binary(file_name) do
       {:error, :cover_unavailable}
+    end
+  end
+
+  defmodule VideoFirstFrameExtractor do
+    def extract(_file_content, file_name) when is_binary(file_name) do
+      {:ok, SaveIt.BotTest.test_video_thumbnail()}
+    end
+  end
+
+  defmodule FailingVideoFirstFrameExtractor do
+    def extract(_file_content, file_name) when is_binary(file_name) do
+      {:error, {:ffmpeg_unavailable, :enoent}}
     end
   end
 

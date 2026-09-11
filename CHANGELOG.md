@@ -10,7 +10,7 @@ Releases from the earlier CalVer period retain their original version labels.
 
 ### Fixed
 
-- Index sent URL videos using Telegram thumbnail, then the generated video cover, then webpage `og:image`, and look up `/info` by the topic message URL with or without the thread id.
+- Index sent URL videos from Telegram thumbnail, then the generated cover, then an ffmpeg first frame, then webpage `og:image`, and still store a placeholder JPEG so `/info` can look the message up.
 
 ## [v0.5.0-rc.2] - 2026-09-11
 
