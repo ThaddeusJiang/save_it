@@ -972,7 +972,11 @@ defmodule SaveIt.BotTest do
     assert multipart_part(parts, "cover") == :file_content
     assert multipart_file_content(parts, "cover") == test_video_cover()
 
-    refute_receive {:telegram_download_request, _telegram_env}
+    assert_receive {:telegram_download_request, telegram_env}
+
+    assert telegram_env.url
+           |> URI.to_string()
+           |> String.ends_with?("/file/bottest-token/video_thumbnails/sent.jpg")
 
     assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
 
@@ -984,16 +988,14 @@ defmodule SaveIt.BotTest do
     assert document["caption"] == "clip notes"
     assert document["file_id"] == "sent-video-file-id"
     assert document["media_type"] == "video"
-    assert document["image"] == Base.encode64(test_video_cover())
+    assert document["image"] == Base.encode64(test_jpeg())
     refute Map.has_key?(document, "source_message_id")
     assert document["source_message_url"] == "https://t.me/save_it_test_chat/70"
 
-    assert_receive {:test_http_request, :get, "/video-page-with-telegram-thumbnail", ""}
     refute_receive {:test_http_request, :get, "/video-preview.jpg", ""}
     refute_receive {:test_http_request, :get, "/preview.jpg", ""}
 
     assert_storage_file_with_uuidv7_extension(".mp4")
-    assert_storage_file_content_with_uuidv7_extension(".jpg", test_video_cover())
   end
 
   test "sends a thumbnail and indexes Typesense when downloaded URL video is too large for Telegram",
@@ -1272,6 +1274,100 @@ defmodule SaveIt.BotTest do
     assert document["source_message_url"] == "https://t.me/save_it_test_chat/71"
 
     assert_storage_file_content_with_uuidv7_extension(".jpg", test_og_jpeg())
+  end
+
+  test "indexes a sent URL video from the generated cover when Telegram has no thumbnail",
+       %{base_url: base_url} do
+    original_url = base_url <> "/bare-video-page"
+
+    Application.put_env(:ex_gram, :adapter, __MODULE__.UrlVideoWithoutThumbnailAdapter)
+    Application.put_env(:save_it, :video_upload_preparer, __MODULE__.VideoUploadPreparer)
+    Application.put_env(:save_it, :video_metadata_probe, __MODULE__.VideoMetadataProbe)
+    Application.put_env(:save_it, :video_cover_generator, __MODULE__.VideoCoverGenerator)
+
+    message = %{
+      chat: %{id: 12_345, username: "save_it_test_chat"},
+      date: 1_717_170_000,
+      message_id: 111,
+      text: original_url,
+      link_preview_options: %{url: original_url}
+    }
+
+    assert {:ok, true} = Bot.handle({:text, original_url, message}, nil)
+
+    assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
+    document = Jason.decode!(typesense_body)
+
+    assert document["file_id"] == "sent-video-file-id"
+    assert document["media_type"] == "video"
+    assert document["url"] == original_url
+    assert document["image"] == Base.encode64(test_video_cover())
+    refute_receive {:test_http_request, :get, "/preview.jpg", ""}
+  end
+
+  test "indexes a sent URL video from ffmpeg first frame when cover generation fails",
+       %{base_url: base_url} do
+    original_url = base_url <> "/bare-video-page"
+
+    Application.put_env(:ex_gram, :adapter, __MODULE__.UrlVideoWithoutThumbnailAdapter)
+    Application.put_env(:save_it, :video_cover_generator, __MODULE__.FailingVideoCoverGenerator)
+
+    Application.put_env(
+      :save_it,
+      :video_first_frame_extractor,
+      __MODULE__.VideoFirstFrameExtractor
+    )
+
+    message = %{
+      chat: %{id: 12_345, username: "save_it_test_chat"},
+      date: 1_717_170_000,
+      message_id: 112,
+      text: original_url,
+      link_preview_options: %{url: original_url}
+    }
+
+    assert {:ok, true} = Bot.handle({:text, original_url, message}, nil)
+
+    assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
+    document = Jason.decode!(typesense_body)
+
+    assert document["file_id"] == "sent-video-file-id"
+    assert document["image"] == Base.encode64(test_video_thumbnail())
+  end
+
+  test "indexes a sent URL video with a placeholder JPEG when ffmpeg is unavailable",
+       %{base_url: base_url} do
+    original_url = base_url <> "/bare-video-page"
+
+    Application.put_env(:ex_gram, :adapter, __MODULE__.UrlVideoWithoutThumbnailAdapter)
+    Application.put_env(:save_it, :video_cover_generator, __MODULE__.FailingVideoCoverGenerator)
+
+    Application.put_env(
+      :save_it,
+      :video_first_frame_extractor,
+      __MODULE__.FailingVideoFirstFrameExtractor
+    )
+
+    message = %{
+      chat: %{id: 12_345, username: "save_it_test_chat"},
+      date: 1_717_170_000,
+      message_id: 113,
+      text: original_url,
+      link_preview_options: %{url: original_url}
+    }
+
+    log =
+      capture_log(fn ->
+        assert {:ok, true} = Bot.handle({:text, original_url, message}, nil)
+      end)
+
+    assert log =~ "ffmpeg is unavailable for video first-frame extraction"
+    assert log =~ "Indexing video with placeholder JPEG after preview extraction failed"
+    assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
+    document = Jason.decode!(typesense_body)
+
+    assert document["file_id"] == "sent-video-file-id"
+    assert document["image"] == Base.encode64(SaveIt.IndexImage.fallback_jpeg())
   end
 
   test "stores the webpage preview for a downloaded HLS URL video", %{base_url: base_url} do
@@ -2075,6 +2171,39 @@ defmodule SaveIt.BotTest do
                ],
                "\n"
              )
+  end
+
+  test "returns video info from a topic reply when the stored message URL has no thread id",
+       _context do
+    ExGramTestAdapter.backdoor_request(:send_message, %{message_id: 30})
+
+    chat_id = -1_001_234_567_890
+
+    message = %{
+      chat: %{id: chat_id, type: "supergroup"},
+      reply_to_message: %{
+        message_id: 77,
+        message_thread_id: 42,
+        date: 1_717_200_000,
+        video: %{file_id: "rotated-topic-video-file-id"}
+      }
+    }
+
+    assert {:ok, %{message_id: 30}} = Bot.handle({:command, :info, message}, nil)
+
+    assert_receive {:test_http_request, :get, file_id_search_path, ""}
+    assert file_id_search_path =~ "file_id%3A%3Drotated-topic-video-file-id"
+
+    assert_receive {:test_http_request, :get, threaded_url_search_path, ""}
+    assert threaded_url_search_path =~ "1234567890%2F42%2F77"
+
+    assert_receive {:test_http_request, :get, plain_url_search_path, ""}
+    assert plain_url_search_path =~ "1234567890%2F77"
+    refute plain_url_search_path =~ "1234567890%2F42%2F77"
+
+    request_body = sent_message_body()
+    assert request_body.chat_id == chat_id
+    assert request_body.text =~ "Original URL: https://www.youtube.com/shorts/clip123"
   end
 
   test "returns info for a replied gif animation", _context do
@@ -2886,6 +3015,18 @@ defmodule SaveIt.BotTest do
     end
   end
 
+  defmodule VideoFirstFrameExtractor do
+    def extract(_file_content, file_name) when is_binary(file_name) do
+      {:ok, SaveIt.BotTest.test_video_thumbnail()}
+    end
+  end
+
+  defmodule FailingVideoFirstFrameExtractor do
+    def extract(_file_content, file_name) when is_binary(file_name) do
+      {:error, {:ffmpeg_unavailable, :enoent}}
+    end
+  end
+
   defmodule TelegramDirectMediaAdapter do
     def request(%Req.Request{method: :get, url: url} = request) do
       url = URI.to_string(url)
@@ -3474,6 +3615,19 @@ defmodule SaveIt.BotTest do
         public_message_url_query?(query) ->
           search_hit(photo_info_document(port))
 
+        threaded_topic_url_query?(query) ->
+          %{"hits" => []}
+
+        plain_topic_url_query?(query) ->
+          search_hit(video_info_document(port))
+
+        true ->
+          known_file_id_hit(query, port)
+      end
+    end
+
+    defp known_file_id_hit(query, port) do
+      cond do
         query =~ "file_id%3A%3Dold-photo-file-id" ->
           search_hit(old_photo_info_document())
 
@@ -3491,6 +3645,7 @@ defmodule SaveIt.BotTest do
     defp missing_photo_file_id?(query) do
       query =~ "file_id%3A%3Drotated-photo-file-id" or
         query =~ "file_id%3A%3Drotated-private-photo-file-id" or
+        query =~ "file_id%3A%3Drotated-topic-video-file-id" or
         query =~ "file_id%3A%3Dunknown-photo-file-id"
     end
 
@@ -3500,6 +3655,14 @@ defmodule SaveIt.BotTest do
 
     defp public_message_url_query?(query) do
       query =~ "source_message_url" and query =~ "save_it_test_chat%2F20"
+    end
+
+    defp threaded_topic_url_query?(query) do
+      query =~ "source_message_url" and query =~ "1234567890%2F42%2F77"
+    end
+
+    defp plain_topic_url_query?(query) do
+      query =~ "source_message_url" and query =~ "1234567890%2F77"
     end
 
     defp search_hit(document), do: %{"hits" => [%{"document" => document}]}
@@ -3603,6 +3766,9 @@ defmodule SaveIt.BotTest do
 
         String.contains?(url, "/article-page") ->
           json_response(%{"url" => "http://127.0.0.1:#{port}/downloaded/article.html"})
+
+        String.contains?(url, "/bare-video-page") ->
+          json_response(%{"url" => "http://127.0.0.1:#{port}/downloaded/video.mp4"})
 
         String.contains?(url, "/video-page") ->
           json_response(%{"url" => "http://127.0.0.1:#{port}/downloaded/video.mp4"})

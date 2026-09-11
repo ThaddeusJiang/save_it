@@ -25,6 +25,13 @@ defmodule SaveIt.IndexImageTest do
     assert {:ok, "converted-jpeg"} = IndexImage.jpeg_bytes("preview.webp", "webp-bytes")
   end
 
+  test "exposes a placeholder JPEG for required Typesense image fields" do
+    jpeg = IndexImage.fallback_jpeg()
+
+    assert is_binary(jpeg)
+    assert jpeg != ""
+  end
+
   defp restore_env(nil), do: Application.delete_env(:save_it, :index_image_converter)
   defp restore_env(value), do: Application.put_env(:save_it, :index_image_converter, value)
 

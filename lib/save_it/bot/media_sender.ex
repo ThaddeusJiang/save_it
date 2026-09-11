@@ -415,7 +415,9 @@ defmodule SaveIt.Bot.MediaSender do
         index_sent_video_preview(
           chat_id,
           msg,
-          Keyword.put(opts, :video_cover, video_cover)
+          opts
+          |> Keyword.put(:video_cover, video_cover)
+          |> Keyword.put(:prepared_content, prepared_content)
         )
 
         response
@@ -438,7 +440,14 @@ defmodule SaveIt.Bot.MediaSender do
              animation_send_opts(caption, metadata, message_thread_id)
            ) do
         {:ok, msg} = response ->
-          index_sent_animation(chat_id, msg, opts)
+          index_sent_animation(
+            chat_id,
+            msg,
+            opts
+            |> Keyword.put(:prepared_content, prepared_content)
+            |> Keyword.put(:video_metadata, metadata)
+          )
+
           response
 
         {:error, _reason} = error ->
@@ -509,37 +518,57 @@ defmodule SaveIt.Bot.MediaSender do
     thumbnail_url = Keyword.get(opts, :thumbnail_url)
     source_chat = Keyword.fetch!(opts, :source_chat)
     video_cover = Keyword.get(opts, :video_cover)
+    prepared_content = Keyword.get(opts, :prepared_content)
     url_metadata_opts = PhotoIndex.url_metadata_opts(opts)
 
     indexed_thumbnail_url =
       if match?({:ok, _cover}, video_cover), do: nil, else: thumbnail_url
 
-    with file_id when is_binary(file_id) <- MessageInfo.video_file_id(msg),
-         {:ok, %DownloadedFile{} = file} <-
-           sent_video_preview(msg, source_url, thumbnail_url, video_cover) do
-      %{
-        image: Base.encode64(file.file_content),
-        caption: caption,
-        file_id: file_id,
-        media_type: "video",
-        url: source_url,
-        belongs_to_id: chat_id
-      }
-      |> put_optional(:download_url, download_url)
-      |> put_optional(:thumbnail_url, indexed_thumbnail_url)
-      |> PhotoIndex.put_url_metadata_fields(url_metadata_opts)
-      |> Map.merge(MessageInfo.source_message_fields(source_chat, msg))
-      |> PhotoIndex.index_photo()
+    case MessageInfo.sent_media_file_id(msg) do
+      file_id when is_binary(file_id) ->
+        {:ok, %DownloadedFile{} = file} =
+          video_index_image(msg, source_url, thumbnail_url, video_cover, prepared_content)
 
-      store_sent_video_preview(file, source_url)
-    else
-      nil ->
+        %{
+          image: Base.encode64(file.file_content),
+          caption: caption,
+          file_id: file_id,
+          media_type: "video",
+          url: source_url,
+          belongs_to_id: chat_id
+        }
+        |> put_optional(:download_url, download_url)
+        |> put_optional(:thumbnail_url, indexed_thumbnail_url)
+        |> PhotoIndex.put_url_metadata_fields(url_metadata_opts)
+        |> Map.merge(MessageInfo.source_message_fields(source_chat, msg))
+        |> PhotoIndex.index_photo()
+
+        store_sent_video_preview(file, source_url)
+
+      _ ->
         Logger.warning("Skipping video preview indexing: missing sent video file_id")
         :error
+    end
+  end
 
-      {:error, _reason} ->
-        Logger.warning("Skipping video preview indexing")
-        :error
+  defp video_index_image(msg, source_url, thumbnail_url, video_cover, prepared_content) do
+    case first_preview([
+           fn -> ThumbnailDownload.from_message(msg) end,
+           fn -> video_cover_file(video_cover) end,
+           fn -> first_frame_file(prepared_content) end,
+           fn -> ThumbnailDownload.preview_image(thumbnail_url, source_url) end
+         ]) do
+      {:ok, %DownloadedFile{} = file} ->
+        {:ok, file}
+
+      :error ->
+        Logger.error("Indexing video with placeholder JPEG after preview extraction failed")
+
+        {:ok,
+         %DownloadedFile{
+           file_name: "fallback.jpg",
+           file_content: IndexImage.fallback_jpeg()
+         }}
     end
   end
 
@@ -551,53 +580,87 @@ defmodule SaveIt.Bot.MediaSender do
     source_chat = Keyword.fetch!(opts, :source_chat)
     url_metadata_opts = PhotoIndex.url_metadata_opts(opts)
 
-    with file_id when is_binary(file_id) <- MessageInfo.animation_file_id(msg),
-         {:ok, %DownloadedFile{} = file} <- animation_preview(msg, thumbnail_url, source_url) do
-      %{
-        image: Base.encode64(file.file_content),
-        caption: caption,
-        file_id: file_id,
-        media_type: "gif",
-        url: source_url,
-        belongs_to_id: chat_id
-      }
-      |> put_optional(:download_url, download_url)
-      |> put_optional(:thumbnail_url, thumbnail_url)
-      |> PhotoIndex.put_url_metadata_fields(url_metadata_opts)
-      |> Map.merge(MessageInfo.source_message_fields(source_chat, msg))
-      |> PhotoIndex.index_photo()
-    else
-      nil ->
+    case MessageInfo.sent_media_file_id(msg) do
+      file_id when is_binary(file_id) ->
+        {:ok, %DownloadedFile{} = file} =
+          animation_index_image(msg, opts, thumbnail_url, source_url)
+
+        %{
+          image: Base.encode64(file.file_content),
+          caption: caption,
+          file_id: file_id,
+          media_type: "gif",
+          url: source_url,
+          belongs_to_id: chat_id
+        }
+        |> put_optional(:download_url, download_url)
+        |> put_optional(:thumbnail_url, thumbnail_url)
+        |> PhotoIndex.put_url_metadata_fields(url_metadata_opts)
+        |> Map.merge(MessageInfo.source_message_fields(source_chat, msg))
+        |> PhotoIndex.index_photo()
+
+      _ ->
         Logger.warning("Skipping gif indexing: missing sent animation file_id")
         :error
+    end
+  end
+
+  defp animation_index_image(msg, opts, thumbnail_url, source_url) do
+    prepared_content = Keyword.get(opts, :prepared_content)
+    video_metadata = Keyword.get(opts, :video_metadata, %{})
+
+    case first_preview([
+           fn -> ThumbnailDownload.from_message(msg) end,
+           fn -> video_cover_file(maybe_video_cover(prepared_content, video_metadata)) end,
+           fn -> first_frame_file(prepared_content) end,
+           fn -> ThumbnailDownload.preview_image(thumbnail_url, source_url) end
+         ]) do
+      {:ok, %DownloadedFile{} = file} ->
+        {:ok, file}
+
+      :error ->
+        Logger.error("Indexing gif with placeholder JPEG after preview extraction failed")
+
+        {:ok,
+         %DownloadedFile{
+           file_name: "fallback.jpg",
+           file_content: IndexImage.fallback_jpeg()
+         }}
+    end
+  end
+
+  defp first_frame_file(prepared_content) do
+    case VideoUpload.first_frame(prepared_content) do
+      {:ok, jpeg} when is_binary(jpeg) ->
+        {:ok, %DownloadedFile{file_name: "first-frame.jpg", file_content: jpeg}}
 
       {:error, _reason} ->
-        Logger.warning("Skipping gif indexing")
         :error
     end
   end
 
-  defp animation_preview(msg, thumbnail_url, source_url) do
-    case ThumbnailDownload.from_message(msg) do
-      {:ok, %DownloadedFile{} = file} -> {:ok, file}
-      {:error, _reason} -> ThumbnailDownload.preview_image(thumbnail_url, source_url)
-    end
+  defp first_preview(funs) do
+    Enum.find_value(funs, :error, fn fun ->
+      case fun.() do
+        {:ok, %DownloadedFile{} = file} -> {:ok, file}
+        _ -> nil
+      end
+    end)
   end
 
-  defp sent_video_preview(_msg, _source_url, _thumbnail_url, {:ok, video_cover}) do
-    {:ok,
-     %DownloadedFile{
-       file_name: video_cover.file_name,
-       file_content: video_cover.file_content
-     }}
+  defp maybe_video_cover(prepared_content, video_metadata)
+       when not is_nil(prepared_content) and is_map(video_metadata) do
+    VideoUpload.cover(prepared_content, video_metadata)
   end
 
-  defp sent_video_preview(msg, source_url, thumbnail_url, _video_cover) do
-    case ThumbnailDownload.from_message(msg) do
-      {:ok, %DownloadedFile{} = file} -> {:ok, file}
-      {:error, _reason} -> ThumbnailDownload.preview_image(thumbnail_url, source_url)
-    end
+  defp maybe_video_cover(_prepared_content, _video_metadata), do: :error
+
+  defp video_cover_file({:ok, %{file_content: file_content, file_name: file_name}})
+       when is_binary(file_content) and is_binary(file_name) do
+    {:ok, %DownloadedFile{file_name: file_name, file_content: file_content}}
   end
+
+  defp video_cover_file(_video_cover), do: :error
 
   defp store_sent_video_preview(%DownloadedFile{} = file, source_url) do
     cache_url = file.download_url || source_url
