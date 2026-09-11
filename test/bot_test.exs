@@ -1053,6 +1053,17 @@ defmodule SaveIt.BotTest do
     assert multipart_part(parts, "height") == "270"
     assert multipart_part(parts, "duration") == "3"
 
+    assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
+    document = Jason.decode!(typesense_body)
+
+    assert document["caption"] == "funny clip"
+    assert document["file_id"] == "sent-animation-file-id"
+    assert document["media_type"] == "gif"
+    assert document["url"] == original_url
+    assert document["belongs_to_id"] == "12345"
+    assert document["source_message_url"] == "https://t.me/save_it_test_chat/76"
+    assert document["image"] == Base.encode64(<<255, 216, 255, 224, 0, 16, 74, 70, 73, 70>>)
+
     assert_storage_file_with_uuidv7_extension(".gif")
   end
 
@@ -1989,6 +2000,43 @@ defmodule SaveIt.BotTest do
              )
   end
 
+  test "returns info for a replied gif animation", _context do
+    ExGramTestAdapter.backdoor_request(:send_message, %{message_id: 30})
+
+    chat_id = 12_345
+
+    message = %{
+      chat: %{id: chat_id},
+      reply_to_message: %{
+        date: 1_717_200_000,
+        animation: %{file_id: "sent-animation-file-id"}
+      }
+    }
+
+    assert {:ok, %{message_id: 30}} = Bot.handle({:command, :info, message}, nil)
+
+    assert_receive {:test_http_request, :get, search_path, ""}
+    assert String.starts_with?(search_path, "/collections/photos/documents/search?")
+    assert search_path =~ "file_id%3A%3Dsent-animation-file-id"
+    assert search_path =~ "belongs_to_id%3A%3D12345"
+
+    request_body = sent_message_body()
+
+    assert request_body.chat_id == chat_id
+
+    assert request_body.text ==
+             Enum.join(
+               [
+                 "Message URL: https://t.me/save_it_test_chat/76",
+                 "Original URL: http://example.test/gif-page",
+                 "Caption: funny clip",
+                 "Title: GIF Page OG Title",
+                 "Saved at: 2024-06-01 00:00:00 UTC"
+               ],
+               "\n"
+             )
+  end
+
   test "omits missing values from photo info", _context do
     ExGramTestAdapter.backdoor_request(:send_message, %{message_id: 30})
 
@@ -2597,7 +2645,17 @@ defmodule SaveIt.BotTest do
            %{
              message_id: 76,
              chat: %{id: chat_id},
-             animation: %{file_id: "sent-animation-file-id"}
+             animation: %{
+               file_id: "sent-animation-file-id",
+               thumbnail: %{file_id: "sent-animation-thumbnail-id"}
+             }
+           }}
+
+        {:get, "/bottest-token/getFile", %{file_id: "sent-animation-thumbnail-id"}} ->
+          {:ok,
+           %{
+             file_id: "sent-animation-thumbnail-id",
+             file_path: "thumbnails/animation.jpg"
            }}
 
         _ ->
@@ -3276,6 +3334,9 @@ defmodule SaveIt.BotTest do
         query =~ "file_id%3A%3Dsent-video-file-id" ->
           search_hit(video_info_document(port))
 
+        query =~ "file_id%3A%3Dsent-animation-file-id" ->
+          search_hit(gif_info_document())
+
         true ->
           search_hit(photo_info_document(port))
       end
@@ -3339,6 +3400,20 @@ defmodule SaveIt.BotTest do
         "download_url" => "http://127.0.0.1:#{port}/downloaded/video.mp4",
         "source_message_url" => "https://t.me/save_it_test_chat/70",
         "media_type" => "video",
+        "belongs_to_id" => "12345",
+        "inserted_at" => 1_717_200_000
+      }
+    end
+
+    defp gif_info_document do
+      %{
+        "id" => "typesense-gif-id",
+        "file_id" => "sent-animation-file-id",
+        "caption" => "funny clip",
+        "title" => "GIF Page OG Title",
+        "url" => "http://example.test/gif-page",
+        "source_message_url" => "https://t.me/save_it_test_chat/76",
+        "media_type" => "gif",
         "belongs_to_id" => "12345",
         "inserted_at" => 1_717_200_000
       }

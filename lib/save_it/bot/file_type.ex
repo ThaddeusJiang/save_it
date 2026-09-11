@@ -31,6 +31,7 @@ defmodule SaveIt.Bot.FileType do
   def media_type(file_name) do
     case extension(file_name) do
       ".mp4" -> "video"
+      ".gif" -> "gif"
       ext when ext in @image_extensions -> "photo"
       _extension -> "file"
     end

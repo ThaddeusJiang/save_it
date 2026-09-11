@@ -61,6 +61,12 @@ defmodule SaveIt.Bot.MessageInfo do
     |> map_get(:file_id)
   end
 
+  def animation_file_id(msg) do
+    msg
+    |> map_get(:animation)
+    |> map_get(:file_id)
+  end
+
   def thumbnail(nil), do: nil
 
   def thumbnail(message) do
