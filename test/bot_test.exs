@@ -847,6 +847,42 @@ defmodule SaveIt.BotTest do
            end)
   end
 
+  test "converts a WebP webpage preview to JPEG before Typesense indexing", %{
+    base_url: base_url
+  } do
+    original_url = base_url <> "/webp-preview-page"
+
+    Application.put_env(:save_it, :index_image_converter, __MODULE__.IndexImageConverter)
+
+    message = %{
+      chat: %{id: 12_345, username: "save_it_test_chat"},
+      date: 1_717_170_000,
+      message_id: 110,
+      text: original_url,
+      entities: [%{offset: 0, type: "url", length: String.length(original_url)}],
+      link_preview_options: %{url: original_url}
+    }
+
+    log =
+      capture_log(fn ->
+        assert {:ok, true} = Bot.handle({:text, original_url, message}, nil)
+      end)
+
+    assert log =~ "Saved webpage preview fallback after link download failed"
+    refute log =~ "Typesense create_photo failed"
+
+    assert_receive {:test_http_request, :get, "/webp-preview-page", ""}
+    assert_receive {:test_http_request, :get, "/preview.webp", ""}
+    assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
+
+    document = Jason.decode!(typesense_body)
+
+    assert document["url"] == original_url
+    assert document["thumbnail_url"] == base_url <> "/preview.webp"
+    assert document["image"] == Base.encode64(test_jpeg())
+    assert document["file_id"] == "telegram-photo-file-id"
+  end
+
   test "stores og image when the resolved URL resource is not image or video", %{
     base_url: base_url
   } do
@@ -2825,6 +2861,12 @@ defmodule SaveIt.BotTest do
     end
   end
 
+  defmodule IndexImageConverter do
+    def convert_file_content(_file_content, file_name) when is_binary(file_name) do
+      {:ok, SaveIt.BotTest.test_jpeg()}
+    end
+  end
+
   defmodule VideoCoverGenerator do
     def cover_file_content(_file_content, file_name, %{width: 1080, height: 1920, jpeg_quality: 2})
         when is_binary(file_name) do
@@ -3156,6 +3198,28 @@ defmodule SaveIt.BotTest do
       """
     end
 
+    defp response_for("/webp-preview-page", port, _body) do
+      html = """
+      <!doctype html>
+      <html>
+        <head>
+          <meta property="og:title" content="WebP Preview OG Title">
+          <meta property="og:image" content="http://127.0.0.1:#{port}/preview.webp">
+        </head>
+        <body>webp preview</body>
+      </html>
+      """
+
+      """
+      HTTP/1.1 200 OK\r
+      content-type: text/html\r
+      content-length: #{byte_size(html)}\r
+      connection: close\r
+      \r
+      #{html}
+      """
+    end
+
     defp response_for("/preview-page", port, _body) do
       html = """
       <!doctype html>
@@ -3362,6 +3426,19 @@ defmodule SaveIt.BotTest do
 
     defp response_for("/collections/photos/documents?" <> _query, _port, _body) do
       json_response(%{"num_deleted" => 1})
+    end
+
+    defp response_for("/preview.webp", _port, _body) do
+      webp = "webp-bytes"
+
+      """
+      HTTP/1.1 200 OK\r
+      content-type: image/webp\r
+      content-length: #{byte_size(webp)}\r
+      connection: close\r
+      \r
+      #{webp}
+      """
     end
 
     defp response_for("/preview.jpg", _port, _body) do
