@@ -265,7 +265,7 @@ defmodule SaveIt.Bot.MediaSender do
 
   defp handle_upload_too_large(chat_id, file_name, content, opts) do
     case FileType.extension(file_name) do
-      ".mp4" ->
+      ext when ext in [".mp4", ".webm", ".mov", ".m4v", ".mkv"] ->
         send_oversized_video_preview(chat_id, content, opts)
 
       ".gif" ->
@@ -307,7 +307,7 @@ defmodule SaveIt.Bot.MediaSender do
         image: Base.encode64(preview_file.file_content),
         caption: caption,
         file_id: file_id,
-        media_type: "video",
+        media_type: "photo",
         url: source_url,
         belongs_to_id: chat_id
       }
@@ -355,10 +355,10 @@ defmodule SaveIt.Bot.MediaSender do
     message_thread_id = Keyword.get(opts, :message_thread_id)
 
     case FileType.extension(file_name) do
-      ext when ext in [".png", ".jpg", ".jpeg"] ->
+      ext when ext in [".png", ".jpg", ".jpeg", ".webp"] ->
         send_photo(chat_id, content, caption, message_thread_id, opts)
 
-      ".mp4" ->
+      ext when ext in [".mp4", ".webm", ".mov", ".m4v", ".mkv"] ->
         send_video(chat_id, content, caption, message_thread_id, opts)
 
       ".gif" ->

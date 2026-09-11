@@ -21,21 +21,38 @@ defmodule SaveIt.Bot.Commands.Delete do
   end
 
   defp delete(chat_id, message_id, reply_to_message) do
-    case reply_to_message do
-      %{photo: nil} ->
-        Telegram.delete_message(chat_id, reply_to_message.message_id)
+    reply_to_message
+    |> indexed_file_ids()
+    |> delete_indexed_media()
 
-      %{photo: photo} ->
-        photo
-        |> Enum.map(& &1.file_id)
-        |> PhotoService.delete_photos()
-
-        Telegram.delete_message(chat_id, reply_to_message.message_id)
-
-      _ ->
-        Telegram.send_message(chat_id, @usage_message)
-    end
-
+    Telegram.delete_message(chat_id, reply_to_message.message_id)
     Telegram.delete_message(chat_id, message_id)
+  end
+
+  defp delete_indexed_media([]), do: :ok
+  defp delete_indexed_media(file_ids), do: PhotoService.delete_photos(file_ids)
+
+  defp indexed_file_ids(message) do
+    photo_file_ids(message) ++ media_file_ids(message)
+  end
+
+  defp photo_file_ids(%{photo: photos}) when is_list(photos) do
+    Enum.flat_map(photos, fn photo ->
+      case Map.get(photo, :file_id) || Map.get(photo, "file_id") do
+        file_id when is_binary(file_id) and file_id != "" -> [file_id]
+        _ -> []
+      end
+    end)
+  end
+
+  defp photo_file_ids(_message), do: []
+
+  defp media_file_ids(message) do
+    Enum.flat_map([:video, :animation], fn key ->
+      case get_in(message, [key, :file_id]) || get_in(message, [key, "file_id"]) do
+        file_id when is_binary(file_id) and file_id != "" -> [file_id]
+        _ -> []
+      end
+    end)
   end
 end

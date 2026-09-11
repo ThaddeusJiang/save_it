@@ -85,6 +85,13 @@ defmodule SaveIt.Bot do
     MediaUpload.handle_video(message, chat, Map.get(message, :caption), video)
   end
 
+  def handle(
+        {:message, %{chat: chat, animation: %{file_id: _file_id} = animation} = message},
+        _ctx
+      ) do
+    MediaUpload.handle_animation(message, chat, Map.get(message, :caption), animation)
+  end
+
   def handle({:text, text, %{chat: chat, photo: [_ | _] = photos} = message}, _context)
       when is_binary(text) do
     case TextHelper.extract_urls(text) do

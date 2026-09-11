@@ -35,16 +35,27 @@ defmodule SaveIt.Bot.MediaUpload do
   def handle_video(message, chat, caption, video) do
     typesense_photo =
       video
-      |> video_thumbnail()
-      |> create_video_thumbnail_index(chat, message, caption, video.file_id)
+      |> media_thumbnail()
+      |> create_media_thumbnail_index(chat, message, caption, video.file_id, "video")
 
     store_video_file(chat.id, video)
     answer_similar_media(typesense_photo, chat.id, caption)
   end
 
-  defp create_video_thumbnail_index(nil, _chat, _message, _caption, _file_id), do: nil
+  def handle_animation(message, chat, caption, animation) do
+    typesense_photo =
+      animation
+      |> media_thumbnail()
+      |> create_media_thumbnail_index(chat, message, caption, animation.file_id, "gif")
 
-  defp create_video_thumbnail_index(thumbnail, chat, message, caption, file_id) do
+    store_video_file(chat.id, animation)
+    answer_similar_media(typesense_photo, chat.id, caption)
+  end
+
+  defp create_media_thumbnail_index(nil, _chat, _message, _caption, _file_id, _media_type),
+    do: nil
+
+  defp create_media_thumbnail_index(thumbnail, chat, message, caption, file_id, media_type) do
     thumbnail_file = ExGram.get_file!(thumbnail.file_id)
     thumbnail_content = TelegramClient.download_file_content!(thumbnail_file.file_path)
 
@@ -52,7 +63,7 @@ defmodule SaveIt.Bot.MediaUpload do
       image: Base.encode64(thumbnail_content),
       caption: TextHelper.searchable_caption(caption),
       file_id: file_id,
-      media_type: "video",
+      media_type: media_type,
       belongs_to_id: chat.id
     }
     |> Map.merge(MessageInfo.source_message_fields(chat, message))
@@ -98,8 +109,8 @@ defmodule SaveIt.Bot.MediaUpload do
     end
   end
 
-  defp video_thumbnail(video) do
-    Map.get(video, :thumbnail) || Map.get(video, :thumb)
+  defp media_thumbnail(media) do
+    Map.get(media, :thumbnail) || Map.get(media, :thumb)
   end
 
   defp telegram_cache_key(media_type, file_id) do

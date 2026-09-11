@@ -3,8 +3,9 @@ defmodule SaveIt.Bot.FileType do
 
   alias SaveIt.DownloadedFile
 
-  @image_extensions [".png", ".jpg", ".jpeg"]
-  @url_download_media_extensions @image_extensions ++ [".mp4", ".gif"]
+  @image_extensions [".png", ".jpg", ".jpeg", ".webp"]
+  @video_extensions [".mp4", ".webm", ".mov", ".m4v", ".mkv"]
+  @url_download_media_extensions @image_extensions ++ @video_extensions ++ [".gif"]
 
   def extension(file_name), do: Path.extname(file_name)
 
@@ -30,7 +31,7 @@ defmodule SaveIt.Bot.FileType do
 
   def media_type(file_name) do
     case extension(file_name) do
-      ".mp4" -> "video"
+      ext when ext in @video_extensions -> "video"
       ".gif" -> "gif"
       ext when ext in @image_extensions -> "photo"
       _extension -> "file"

@@ -1006,7 +1006,7 @@ defmodule SaveIt.BotTest do
     assert document["description"] == "Video Page OG Description"
     assert document["keywords"] == ["video", "preview", "clip"]
     assert document["file_id"] == "telegram-photo-file-id"
-    assert document["media_type"] == "video"
+    assert document["media_type"] == "photo"
     assert document["image"] == Base.encode64(test_video_cover())
     refute Map.has_key?(document, "source_message_id")
     assert document["source_message_url"] == "https://t.me/save_it_test_chat/72"
@@ -1817,6 +1817,47 @@ defmodule SaveIt.BotTest do
                     }}
   end
 
+  test "stores a directly uploaded gif using its thumbnail for Typesense", _context do
+    chat_id = 12_348
+    stored_file_path = storage_file_path("direct-animation.mp4")
+
+    File.rm(stored_file_path)
+    Application.put_env(:ex_gram, :adapter, __MODULE__.BodyAwareExGramAdapter)
+
+    Application.put_env(:save_it, :telegram_req_options,
+      adapter: &__MODULE__.TelegramDirectMediaAdapter.request/1
+    )
+
+    on_exit(fn ->
+      File.rm(stored_file_path)
+    end)
+
+    message = %{
+      chat: %{id: chat_id, username: "save_it_directs"},
+      message_id: 324,
+      caption: "loop",
+      animation: %{
+        file_id: "uploaded-animation-file-id",
+        file_name: "direct-animation.mp4",
+        thumbnail: %{file_id: "uploaded-video-thumbnail-id"}
+      }
+    }
+
+    Bot.handle({:message, message}, nil)
+
+    assert_receive {:test_http_request, :post, "/collections/photos/documents", typesense_body}
+
+    document = Jason.decode!(typesense_body)
+
+    assert document["caption"] == "loop"
+    assert document["file_id"] == "uploaded-animation-file-id"
+    assert document["belongs_to_id"] == Integer.to_string(chat_id)
+    assert document["media_type"] == "gif"
+    assert document["image"] == Base.encode64(test_jpeg())
+    assert document["source_message_url"] == "https://t.me/save_it_directs/324"
+    assert File.read(stored_file_path) == {:ok, test_mp4()}
+  end
+
   test "indexes a directly uploaded video thumbnail when Telegram refuses to download the large original video",
        _context do
     chat_id = 12_349
@@ -2035,6 +2076,27 @@ defmodule SaveIt.BotTest do
                ],
                "\n"
              )
+  end
+
+  test "deletes Typesense records for a replied video", _context do
+    ExGramTestAdapter.backdoor_request(:get_me, %{id: 99, username: "save_it_bot"})
+
+    message = %{
+      chat: %{id: 12_345},
+      message_id: 50,
+      from: %{id: 1},
+      reply_to_message: %{
+        message_id: 40,
+        from: %{id: 99},
+        video: %{file_id: "sent-video-file-id"}
+      }
+    }
+
+    assert {:ok, true} = Bot.handle({:command, :delete, message}, nil)
+
+    assert_receive {:test_http_request, :delete, delete_path, _body}
+    assert delete_path =~ "/collections/photos/documents"
+    assert delete_path =~ "sent-video-file-id"
   end
 
   test "omits missing values from photo info", _context do
@@ -2423,6 +2485,9 @@ defmodule SaveIt.BotTest do
 
         {:get, "/bottest-token/getFile", %{file_id: "uploaded-video-file-id"}} ->
           {:ok, %{file_id: "uploaded-video-file-id", file_path: "videos/direct-video.mp4"}}
+
+        {:get, "/bottest-token/getFile", %{file_id: "uploaded-animation-file-id"}} ->
+          {:ok, %{file_id: "uploaded-animation-file-id", file_path: "videos/direct-video.mp4"}}
 
         {:get, "/bottest-token/getFile", %{file_id: "timeout-video-file-id"}} ->
           {:ok, %{file_id: "timeout-video-file-id", file_path: "videos/timeout-video.mp4"}}
@@ -3293,6 +3358,10 @@ defmodule SaveIt.BotTest do
       \r
       #{jpeg}
       """
+    end
+
+    defp response_for("/collections/photos/documents?" <> _query, _port, _body) do
+      json_response(%{"num_deleted" => 1})
     end
 
     defp response_for("/preview.jpg", _port, _body) do
